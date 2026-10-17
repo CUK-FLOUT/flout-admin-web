@@ -1,75 +1,46 @@
-# React + TypeScript + Vite
+# FLOUT Admin Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+FLOUT은 반지하 주택의 침수 위험을 확인하고,
+현장점검부터 예방시설 지원 및 시공까지 연결하는 침수 예방 플랫폼입니다.
 
-Currently, two official plugins are available:
+이 저장소는 FLOUT의 운영자용 웹 프론트엔드입니다.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech Stack
 
-## React Compiler
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- Axios
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Getting Started
 
-## Expanding the ESLint configuration
+### 1. 저장소 클론
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+git clone https://github.com/CUK-FLOUT/flout-admin-web.git
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 2. 프로젝트 이동
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+cd flout-admin-web
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 3. 패키지 설치
 
-```
+npm install
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+### 4. 환경변수 설정
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+.env.example을 참고하여 .env.local 파일을 생성합니다.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 5. 개발 서버 실행
 
-```
+npm run dev
+
+## Branch Strategy
+
+- main: 배포용 브랜치
+- develop: 개발 통합 브랜치
+- feat/\*: 기능 개발
+- fix/\*: 버그 수정
+- chore/\*: 환경 설정
+- docs/\*: 문서 작업
