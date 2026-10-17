@@ -1,0 +1,50 @@
+name: Add FLOUT issue prefix
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  add-prefix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add FLOUT number to issue title
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const currentIssue = context.payload.issue;
+
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'all',
+                per_page: 100,
+              }
+            );
+
+            const previousIssues = issues.filter(
+              (item) =>
+                !item.pull_request &&
+                item.number < currentIssue.number
+            );
+
+            const floutNumber = previousIssues.length + 1;
+            const prefix = `[FLOUT-${floutNumber}]`;
+
+            const cleanTitle = currentIssue.title.replace(
+              /^\[FLOUT-\d+\]\s*/,
+              ''
+            );
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: currentIssue.number,
+              title: `${prefix} ${cleanTitle}`,
+            });

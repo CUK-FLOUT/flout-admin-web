@@ -1,0 +1,15 @@
+name: "🔧 Chore"
+description: "개발 환경 설정, 패키지 관리, 프로젝트 구조 등 기타 작업을 진행합니다."
+title: "[CHORE] "
+labels:
+  - "🔧 CHORE"
+
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: "🔧 변경 내용"
+      value: |
+        - [ ]
+    validations:
+      required: true

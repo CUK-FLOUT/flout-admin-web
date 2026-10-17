@@ -1,0 +1,25 @@
+name: "✨ Feature"
+description: "FLOUT 운영자용 웹의 새로운 기능을 구현합니다."
+title: "[FEAT] "
+labels:
+  - "✨ FEAT"
+
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: "🎯 구현 내용"
+      placeholder: |
+        - [ ] 작업 1
+        - [ ] 작업 2
+        - [ ] 작업 3
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: "🔗 참고"
+      description: "관련 Figma, API 명세서, 기능 명세서 등의 링크를 첨부해주세요."

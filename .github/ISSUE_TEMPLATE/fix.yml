@@ -1,0 +1,27 @@
+name: "🐛 Fix"
+description: "FLOUT 운영자용 웹에서 발생한 버그 및 오류를 수정합니다."
+title: "[FIX] "
+labels:
+  - "🐛 FIX"
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "🐛 문제 상황"
+      description: "발생한 오류와 재현 상황을 작성해주세요."
+      placeholder: |
+        예시:
+        - 현장점검 상태 변경 후 목록에 반영되지 않음
+        - 특정 화면 크기에서 테이블이 잘림
+    validations:
+      required: true
+
+  - type: textarea
+    id: changes
+    attributes:
+      label: "🔧 수정 내용"
+      value: |
+        - [ ]
+    validations:
+      required: true
