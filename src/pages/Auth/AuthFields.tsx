@@ -9,6 +9,9 @@ type Props = InputHTMLAttributes<HTMLInputElement> & {
 const inputClass =
   "h-[52px] w-full min-w-0 rounded-md border border-[#cbd5e1] bg-white px-4 text-sm text-[#202b36] placeholder:text-[#64748b] focus:border-[#234f73] focus:outline-2 focus:outline-offset-2 focus:outline-[#75a7cd]";
 
+/**
+ * 라벨이 포함된 공용 텍스트 입력 필드입니다.
+ */
 export function AuthField({ label, id, ...props }: Props) {
   return (
     <div className="flex min-w-0 flex-col gap-[10px]">
@@ -20,6 +23,9 @@ export function AuthField({ label, id, ...props }: Props) {
   );
 }
 
+/**
+ * 보기/숨기기 토글이 가능한 비밀번호 입력 필드입니다.
+ */
 export function PasswordField({ label, id, ...props }: Omit<Props, "type">) {
   const [visible, setVisible] = useState(false);
   return (

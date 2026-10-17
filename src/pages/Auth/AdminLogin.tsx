@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "../../components/layout/AuthLayout";
 import { loginAdmin, startGoogleLogin } from "../../api/auth";
+import { setAccessToken } from "../../lib/authToken";
 import {
   AuthField,
   PasswordField,
@@ -10,6 +11,12 @@ import {
   linkClass,
 } from "./AuthFields";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * 운영자 로그인 페이지입니다.
+ * 이메일/비밀번호 형식을 검증하고 로그인 성공 시 토큰을 저장한 뒤 대시보드로 이동합니다.
+ */
 export default function AdminLogin() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -17,17 +24,25 @@ export default function AdminLogin() {
   const [error, setError] = useState("");
   const registered = location.state?.registered === true;
 
+  /**
+   * 로그인 폼 제출을 처리합니다. 형식 검증 후 로그인 API를 호출하고
+   * 성공 시 액세스 토큰을 저장한 뒤 대시보드로 이동합니다.
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const data = new FormData(event.currentTarget);
-    setBusy(true);
     setError("");
+    const data = new FormData(event.currentTarget);
+    const email = String(data.get("email")).trim();
+    const password = String(data.get("password"));
+    if (!EMAIL_PATTERN.test(email)) {
+      setError("올바른 이메일 형식을 입력해 주세요.");
+      return;
+    }
+    setBusy(true);
     try {
-      await loginAdmin({
-        email: String(data.get("email")).trim(),
-        password: String(data.get("password")),
-      });
+      const { accessToken } = await loginAdmin({ email, password });
+      setAccessToken(accessToken);
       navigate("/", { replace: true });
     } catch (cause) {
       setError(

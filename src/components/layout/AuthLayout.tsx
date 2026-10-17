@@ -6,6 +6,10 @@ import featureDot from "../../assets/login/feature-dot.png";
 
 type Props = { children: ReactNode; variant?: "login" | "signup" };
 
+/**
+ * 로그인/회원가입 페이지 공통 레이아웃입니다.
+ * variant에 따라 좌측 소개 영역의 문구를 다르게 보여줍니다.
+ */
 export default function AuthLayout({ children, variant = "login" }: Props) {
   const signup = variant === "signup";
   return (

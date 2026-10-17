@@ -10,6 +10,14 @@ import {
   linkClass,
 } from "./AuthFields";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_PATTERN =
+  /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]{8,}$/;
+
+/**
+ * 운영자 회원가입 페이지입니다.
+ * 이메일/비밀번호 형식, 비밀번호 확인, 필수 약관 동의를 검증한 뒤 회원가입 API를 호출합니다.
+ */
 export default function AdminSignup() {
   const navigate = useNavigate();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -19,17 +27,33 @@ export default function AdminSignup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * 약관/개인정보 처리방침 다이얼로그를 엽니다.
+   */
   function openDocument(type: "terms" | "privacy") {
     setDocument(type);
     dialog.current?.showModal();
   }
 
+  /**
+   * 회원가입 폼 제출을 처리합니다. 이메일/비밀번호 형식, 비밀번호 확인,
+   * 이름, 필수 약관 동의를 검증한 뒤 회원가입 API를 호출합니다.
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setError("");
     const data = new FormData(event.currentTarget);
+    const email = String(data.get("email")).trim();
+    if (!EMAIL_PATTERN.test(email)) {
+      setError("올바른 이메일 형식을 입력해 주세요.");
+      return;
+    }
     const password = String(data.get("password"));
+    if (!PASSWORD_PATTERN.test(password)) {
+      setError("비밀번호는 영문과 숫자를 포함해 8자 이상이어야 합니다.");
+      return;
+    }
     if (password !== String(data.get("confirmPassword"))) {
       setError("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       event.currentTarget
@@ -49,7 +73,7 @@ export default function AdminSignup() {
     setBusy(true);
     try {
       await signupAdmin({
-        email: String(data.get("email")).trim(),
+        email,
         password,
         name,
         termsAgreed: terms,

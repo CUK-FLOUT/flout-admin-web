@@ -7,6 +7,9 @@ const menus = [
   { name: "시공 관리", path: "/construction" },
 ];
 
+/**
+ * 운영자 어드민 좌측 내비게이션 사이드바입니다.
+ */
 export default function Sidebar() {
   return (
     <aside className="w-60 shrink-0 bg-slate-900 p-6 text-white">
