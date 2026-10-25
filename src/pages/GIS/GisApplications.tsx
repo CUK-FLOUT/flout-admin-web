@@ -25,13 +25,26 @@ const riskClass = {
 };
 
 type FilterFormProps = {
+  filterKey: string;
   initialFilters: Filters;
   onSearch: (filters: Filters) => void;
   onReset: () => void;
 };
 
-function FilterForm({ initialFilters, onSearch, onReset }: FilterFormProps) {
+function FilterForm({
+  filterKey,
+  initialFilters,
+  onSearch,
+  onReset,
+}: FilterFormProps) {
   const [draft, setDraft] = useState<Filters>(initialFilters);
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+
+  // URL이 변경된 경우에만 필터 입력값 동기화
+  if (lastFilterKey !== filterKey) {
+    setLastFilterKey(filterKey);
+    setDraft(initialFilters);
+  }
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -111,6 +124,7 @@ function FilterForm({ initialFilters, onSearch, onReset }: FilterFormProps) {
           height={16}
           className="pointer-events-none absolute left-3 top-[15px]"
         />
+
         <input
           aria-label="주소 또는 접수번호 검색"
           value={draft.search}
@@ -149,7 +163,6 @@ export default function GisApplications() {
   const [params, setParams] = useSearchParams();
 
   const [applications, setApplications] = useState(initialApplications);
-
   const [showMarkers, setShowMarkers] = useState(true);
   const [mapRevision, setMapRevision] = useState(0);
   const [message, setMessage] = useState("");
@@ -264,7 +277,7 @@ export default function GisApplications() {
       </div>
 
       <FilterForm
-        key={filterKey}
+        filterKey={filterKey}
         initialFilters={initialFilters}
         onSearch={search}
         onReset={reset}
@@ -288,7 +301,6 @@ export default function GisApplications() {
 
             <div>
               <p className="text-[15px] leading-[21px]">{label}</p>
-
               <p className="text-[26px] font-bold leading-[30px]">{count}건</p>
             </div>
           </div>
