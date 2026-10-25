@@ -40,7 +40,6 @@ function FilterForm({
   const [draft, setDraft] = useState<Filters>(initialFilters);
   const [lastFilterKey, setLastFilterKey] = useState(filterKey);
 
-  // URL이 변경된 경우에만 필터 입력값 동기화
   if (lastFilterKey !== filterKey) {
     setLastFilterKey(filterKey);
     setDraft(initialFilters);
@@ -57,7 +56,10 @@ function FilterForm({
   }
 
   return (
-    <form onSubmit={search} className="mb-[14px] flex flex-wrap gap-2.5">
+    <form
+      onSubmit={search}
+      className="mb-[14px] flex shrink-0 flex-wrap gap-2.5"
+    >
       <select
         aria-label="지역"
         value={draft.district}
@@ -267,8 +269,8 @@ export default function GisApplications() {
   ] as const;
 
   return (
-    <div className="mx-auto w-full text-[#202b36]">
-      <div className="mb-[14px] flex min-h-11 items-center justify-between gap-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col text-[#202b36]">
+      <div className="mb-[14px] flex min-h-11 shrink-0 items-center justify-between gap-4">
         <h1 className="text-[30px] font-bold leading-9 tracking-[-.54px]">
           GIS 신청 관리
         </h1>
@@ -283,7 +285,7 @@ export default function GisApplications() {
         onReset={reset}
       />
 
-      <div className="mb-[14px] grid grid-cols-2 gap-[14px] lg:grid-cols-4">
+      <div className="mb-[14px] grid shrink-0 grid-cols-2 gap-[14px] lg:grid-cols-4">
         {summary.map(([icon, label, count], i) => (
           <div
             key={label}
@@ -301,6 +303,7 @@ export default function GisApplications() {
 
             <div>
               <p className="text-[15px] leading-[21px]">{label}</p>
+
               <p className="text-[26px] font-bold leading-[30px]">{count}건</p>
             </div>
           </div>
@@ -313,7 +316,7 @@ export default function GisApplications() {
         </p>
       )}
 
-      <div className="grid items-start gap-[14px] xl:grid-cols-[minmax(0,678fr)_minmax(390px,490fr)]">
+      <div className="grid min-h-[500px] flex-1 items-stretch gap-[14px] lg:min-h-[500px] lg:grid-cols-[minmax(0,678fr)_minmax(390px,490fr)]">
         <ApplicationMap
           key={mapRevision}
           applications={filtered}
@@ -345,7 +348,7 @@ export default function GisApplications() {
         ) : (
           <section
             aria-label="신청 목록"
-            className="flex h-[568px] min-w-0 flex-col rounded-lg border border-[#c8d0d7] bg-white p-[14px]"
+            className="flex h-full min-h-[500px] min-w-0 flex-col rounded-lg border border-[#c8d0d7] bg-white p-[14px] lg:min-h-0"
           >
             <h2 className="mb-4 flex min-h-11 items-center gap-2 border-b border-[#f4f5f6] pb-3 text-[22px] font-bold">
               <img src={listHeading} alt="" width={32} height={32} />

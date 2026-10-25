@@ -1,12 +1,7 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import GisApplications from "./pages/GIS/GisApplications";
 import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
-import AdminSignup from "./pages/Auth/AdminSignup";
-
-function Dashboard() {
-  return <h1>대시보드</h1>;
-}
 
 function Inspection() {
   return <h1>현장점검 관리</h1>;
@@ -25,12 +20,31 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<AdminLogin />} />
-        <Route path="/signup" element={<AdminSignup />} />
+        <Route path="/signup" element={<Navigate to="/login" replace />} />
 
         <Route element={<AdminLayout />}>
+          <Route path="/" element={<Navigate to="/gis" replace />} />
           <Route path="/gis" element={<GisApplications />} />
           <Route path="/gis/:requestId" element={<GisApplications />} />
-          <Route path="/" element={<Dashboard />} />
+
+          <Route
+            path="/priority"
+            element={
+              <p className="text-sm text-[#596672]">
+                우선점검 관리 화면은 아직 연결하지 않았습니다.
+              </p>
+            }
+          />
+
+          <Route
+            path="/infrastructure"
+            element={
+              <p className="text-sm text-[#596672]">
+                공공 인프라 화면은 아직 연결하지 않았습니다.
+              </p>
+            }
+          />
+
           <Route path="/inspection" element={<Inspection />} />
           <Route path="/support" element={<Support />} />
           <Route path="/construction" element={<Construction />} />

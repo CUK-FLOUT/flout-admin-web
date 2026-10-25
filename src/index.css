@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 :root {
   font-family:
     Pretendard,
@@ -6,15 +7,46 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   color: #202b36;
   background: #f4f5f6;
 }
+
 body {
   margin: 0;
   min-width: 320px;
 }
+
 #root {
   min-height: 100dvh;
+}
+
+/* 운영자 화면은 창 전체 폭과 높이를 사용합니다. */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  border: 0;
+}
+
+.admin-shell {
+  font-family:
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color-scheme: light;
 }
