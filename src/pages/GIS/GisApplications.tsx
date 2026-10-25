@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+
 import ApplicationMap from "../../components/gis/ApplicationMap";
 import ApplicationDetail from "../../components/gis/ApplicationDetail";
 import { emptyFilters, initialApplications } from "./mockData";
 import type { Filters } from "./types";
+
 import searchIcon from "../../assets/gis/imgSearch1.svg";
 import listIcon from "../../assets/gis/imgList.svg";
 import listHeading from "../../assets/gis/imgListIcon.svg";
@@ -22,6 +24,125 @@ const riskClass = {
   낮음: "border-[#27654d] bg-[#edf5f0] text-[#27654d]",
 };
 
+type FilterFormProps = {
+  initialFilters: Filters;
+  onSearch: (filters: Filters) => void;
+  onReset: () => void;
+};
+
+function FilterForm({ initialFilters, onSearch, onReset }: FilterFormProps) {
+  const [draft, setDraft] = useState<Filters>(initialFilters);
+
+  function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSearch(draft);
+  }
+
+  function reset() {
+    setDraft(emptyFilters);
+    onReset();
+  }
+
+  return (
+    <form onSubmit={search} className="mb-[14px] flex flex-wrap gap-2.5">
+      <select
+        aria-label="지역"
+        value={draft.district}
+        onChange={(e) =>
+          setDraft((d) => ({
+            ...d,
+            district: e.target.value,
+          }))
+        }
+        className={`${control} w-[176px]`}
+      >
+        <option value="">지역 전체</option>
+        {["중동", "상동", "원미동"].map((x) => (
+          <option key={x}>{x}</option>
+        ))}
+      </select>
+
+      <select
+        aria-label="취약도"
+        value={draft.risk}
+        onChange={(e) =>
+          setDraft((d) => ({
+            ...d,
+            risk: e.target.value,
+          }))
+        }
+        className={`${control} w-[166px]`}
+      >
+        <option value="">취약도 전체</option>
+        {["높음", "주의", "낮음"].map((x) => (
+          <option key={x}>{x}</option>
+        ))}
+      </select>
+
+      <select
+        aria-label="처리 상태"
+        value={draft.status}
+        onChange={(e) =>
+          setDraft((d) => ({
+            ...d,
+            status: e.target.value,
+          }))
+        }
+        className={`${control} w-[192px]`}
+      >
+        <option value="">처리 상태 전체</option>
+        {[
+          "접수",
+          "배정 대기",
+          "지원 검토 중",
+          "시공 진행",
+          "지원 미승인",
+          "점검 완료",
+        ].map((x) => (
+          <option key={x}>{x}</option>
+        ))}
+      </select>
+
+      <div className="relative min-w-[160px] flex-1">
+        <img
+          src={searchIcon}
+          alt=""
+          width={16}
+          height={16}
+          className="pointer-events-none absolute left-3 top-[15px]"
+        />
+        <input
+          aria-label="주소 또는 접수번호 검색"
+          value={draft.search}
+          onChange={(e) =>
+            setDraft((d) => ({
+              ...d,
+              search: e.target.value,
+            }))
+          }
+          placeholder="주소·접수번호 검색"
+          className={`${control} w-full pl-9 text-sm`}
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="h-[46px] w-[101px] cursor-pointer rounded-md bg-[#234f73] text-[15px] font-medium text-white"
+      >
+        검색
+      </button>
+
+      <button
+        type="button"
+        onClick={reset}
+        className={`${control} w-[118px] cursor-pointer`}
+      >
+        초기화
+      </button>
+    </form>
+  );
+}
+
 export default function GisApplications() {
   const navigate = useNavigate();
   const { requestId } = useParams();
@@ -29,16 +150,18 @@ export default function GisApplications() {
 
   const [applications, setApplications] = useState(initialApplications);
 
-  const [draft, setDraft] = useState<Filters>(() => ({
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [mapRevision, setMapRevision] = useState(0);
+  const [message, setMessage] = useState("");
+
+  const filterKey = params.toString();
+
+  const initialFilters: Filters = {
     district: params.get("district") || "",
     risk: params.get("risk") || "",
     status: params.get("status") || "",
     search: params.get("q") || "",
-  }));
-
-  const [showMarkers, setShowMarkers] = useState(true);
-  const [mapRevision, setMapRevision] = useState(0);
-  const [message, setMessage] = useState("");
+  };
 
   const filtered = applications.filter(
     (a) =>
@@ -57,6 +180,7 @@ export default function GisApplications() {
 
   function select(id: string) {
     setMessage("");
+
     navigate({
       pathname: `/gis/${id}`,
       search: params.toString() ? `?${params}` : "",
@@ -70,21 +194,29 @@ export default function GisApplications() {
     });
   }
 
-  function search(event: FormEvent) {
-    event.preventDefault();
-
+  function search(filters: Filters) {
     const p = new URLSearchParams();
-    if (draft.district) p.set("district", draft.district);
-    if (draft.risk) p.set("risk", draft.risk);
-    if (draft.status) p.set("status", draft.status);
-    if (draft.search.trim()) {
-      p.set("q", draft.search.trim());
+
+    if (filters.district) {
+      p.set("district", filters.district);
     }
+
+    if (filters.risk) {
+      p.set("risk", filters.risk);
+    }
+
+    if (filters.status) {
+      p.set("status", filters.status);
+    }
+
+    if (filters.search.trim()) {
+      p.set("q", filters.search.trim());
+    }
+
     setParams(p);
   }
 
   function reset() {
-    setDraft(emptyFilters);
     setParams({});
     setMapRevision((r) => r + 1);
     setShowMarkers(true);
@@ -127,102 +259,16 @@ export default function GisApplications() {
         <h1 className="text-[30px] font-bold leading-9 tracking-[-.54px]">
           GIS 신청 관리
         </h1>
+
         <span className="text-xs text-[#596672]">샘플 데이터</span>
       </div>
 
-      <form onSubmit={search} className="mb-[14px] flex flex-wrap gap-2.5">
-        <select
-          aria-label="지역"
-          value={draft.district}
-          onChange={(e) =>
-            setDraft((d) => ({
-              ...d,
-              district: e.target.value,
-            }))
-          }
-          className={`${control} w-[176px]`}
-        >
-          <option value="">지역 전체</option>
-          {["중동", "상동", "원미동"].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-
-        <select
-          aria-label="취약도"
-          value={draft.risk}
-          onChange={(e) =>
-            setDraft((d) => ({
-              ...d,
-              risk: e.target.value,
-            }))
-          }
-          className={`${control} w-[166px]`}
-        >
-          <option value="">취약도 전체</option>
-          {["높음", "주의", "낮음"].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-
-        <select
-          aria-label="처리 상태"
-          value={draft.status}
-          onChange={(e) =>
-            setDraft((d) => ({
-              ...d,
-              status: e.target.value,
-            }))
-          }
-          className={`${control} w-[192px]`}
-        >
-          <option value="">처리 상태 전체</option>
-          {[
-            "접수",
-            "배정 대기",
-            "지원 검토 중",
-            "시공 진행",
-            "지원 미승인",
-            "점검 완료",
-          ].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-
-        <div className="relative min-w-[160px] flex-1">
-          <img
-            src={searchIcon}
-            alt=""
-            width={16}
-            height={16}
-            className="pointer-events-none absolute left-3 top-[15px]"
-          />
-          <input
-            aria-label="주소 또는 접수번호 검색"
-            value={draft.search}
-            onChange={(e) =>
-              setDraft((d) => ({
-                ...d,
-                search: e.target.value,
-              }))
-            }
-            placeholder="주소·접수번호 검색"
-            className={`${control} w-full pl-9 text-sm`}
-          />
-        </div>
-
-        <button className="h-[46px] w-[101px] cursor-pointer rounded-md bg-[#234f73] text-[15px] font-medium text-white">
-          검색
-        </button>
-
-        <button
-          type="button"
-          onClick={reset}
-          className={`${control} w-[118px] cursor-pointer`}
-        >
-          초기화
-        </button>
-      </form>
+      <FilterForm
+        key={filterKey}
+        initialFilters={initialFilters}
+        onSearch={search}
+        onReset={reset}
+      />
 
       <div className="mb-[14px] grid grid-cols-2 gap-[14px] lg:grid-cols-4">
         {summary.map(([icon, label, count], i) => (
@@ -239,8 +285,10 @@ export default function GisApplications() {
               height={21}
               className="m-2 shrink-0"
             />
+
             <div>
               <p className="text-[15px] leading-[21px]">{label}</p>
+
               <p className="text-[26px] font-bold leading-[30px]">{count}건</p>
             </div>
           </div>
@@ -265,6 +313,7 @@ export default function GisApplications() {
         {requestId ? (
           selected ? (
             <ApplicationDetail
+              key={selected.id}
               application={selected}
               onClose={close}
               onAccept={accept}
@@ -272,6 +321,7 @@ export default function GisApplications() {
           ) : (
             <section className="rounded-lg border border-[#c8d0d7] bg-white p-6">
               <h2 className="font-bold">신청을 찾을 수 없습니다.</h2>
+
               <button
                 onClick={close}
                 className="mt-4 cursor-pointer text-[#234f73] underline"
@@ -314,16 +364,20 @@ export default function GisApplications() {
                       <strong className="block text-base leading-[21px]">
                         {a.number}. {a.address}
                       </strong>
+
                       <span className="mt-[3px] block text-sm leading-[19px]">
                         {a.id} · {a.resident} · {a.status}
                       </span>
                     </span>
 
                     <span
-                      className={`shrink-0 rounded-lg border px-3 py-1 text-[13px] font-bold ${riskClass[a.risk]}`}
+                      className={`shrink-0 rounded-lg border px-3 py-1 text-[13px] font-bold ${
+                        riskClass[a.risk]
+                      }`}
                     >
                       {a.risk}
                     </span>
+
                     <span className="shrink-0 text-sm">상세 &gt;</span>
                   </button>
                 </li>
