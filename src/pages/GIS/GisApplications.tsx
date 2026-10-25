@@ -316,7 +316,7 @@ export default function GisApplications() {
         </p>
       )}
 
-      <div className="grid min-h-[500px] flex-1 items-stretch gap-[14px] lg:min-h-0 lg:grid-cols-[minmax(0,678fr)_minmax(390px,490fr)]">
+      <div className="grid min-h-[500px] flex-1 items-stretch gap-[14px] lg:min-h-[500px] lg:grid-cols-[minmax(0,678fr)_minmax(390px,490fr)]">
         <ApplicationMap
           key={mapRevision}
           applications={filtered}
