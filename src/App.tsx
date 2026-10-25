@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import GisApplications from "./pages/GIS/GisApplications";
 import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
 import AdminSignup from "./pages/Auth/AdminSignup";
@@ -27,6 +28,8 @@ function App() {
         <Route path="/signup" element={<AdminSignup />} />
 
         <Route element={<AdminLayout />}>
+          <Route path="/gis" element={<GisApplications />} />
+          <Route path="/gis/:requestId" element={<GisApplications />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/inspection" element={<Inspection />} />
           <Route path="/support" element={<Support />} />

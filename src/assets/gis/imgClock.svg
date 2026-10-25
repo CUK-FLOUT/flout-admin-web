@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="21" height="21" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="clock" clip-path="url(#clip0_0_69)">
+<path id="Vector" d="M10.4997 5.24951V10.4999L14 12.2501M19.2504 10.4999C19.2504 15.3328 15.3326 19.2506 10.4997 19.2506C5.66687 19.2506 1.74905 15.3328 1.74905 10.4999C1.74905 5.66706 5.66687 1.74923 10.4997 1.74923C15.3326 1.74923 19.2504 5.66706 19.2504 10.4999Z" stroke-width="2.1" stroke-linecap="round" stroke="#596672"/>
+</g>
+<defs>
+<clipPath id="clip0_0_69">
+<rect width="21" height="21" fill="white"/>
+</clipPath>
+</defs>
+</svg>
