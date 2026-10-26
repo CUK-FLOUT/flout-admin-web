@@ -1,9 +1,32 @@
-export default function Header() {
-  return (
-    <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8">
-      <h2 className="text-lg font-semibold">FLOUT 운영자 시스템</h2>
+import profile from "../../assets/layout/profile.png";
 
-      <span className="text-sm text-gray-500">관리자</span>
+export default function Header() {
+  const date = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  return (
+    <header className="flex min-h-[68px] shrink-0 flex-wrap items-center justify-end gap-3 border-b border-[#c8d0d7] bg-white px-6 py-3 text-[15px] leading-5">
+      <span className="max-sm:hidden">업무일자: {date}</span>
+
+      <span
+        aria-hidden="true"
+        className="h-4 w-px bg-[#f4f5f6] max-sm:hidden"
+      />
+
+      <span>관할 부천시</span>
+
+      <span aria-hidden="true" className="h-4 w-px bg-[#f4f5f6]" />
+
+      <span className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f5f6]">
+          <img src={profile} alt="" width={24} height={24} />
+        </span>
+        고담당
+      </span>
     </header>
   );
 }
