@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import PriorityManagement from "./pages/Priority/PriorityManagement";
 import GisApplications from "./pages/GIS/GisApplications";
 import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
@@ -27,14 +28,8 @@ function App() {
           <Route path="/gis" element={<GisApplications />} />
           <Route path="/gis/:requestId" element={<GisApplications />} />
 
-          <Route
-            path="/priority"
-            element={
-              <p className="text-sm text-[#596672]">
-                우선점검 관리 화면은 아직 연결하지 않았습니다.
-              </p>
-            }
-          />
+          <Route path="/priority" element={<PriorityManagement />} />
+          <Route path="/priority/:requestId" element={<PriorityManagement />} />
 
           <Route
             path="/infrastructure"
