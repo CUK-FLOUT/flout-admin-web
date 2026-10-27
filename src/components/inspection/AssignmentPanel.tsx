@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { AssignmentDraft, InspectionApplication } from "../../pages/Inspection/mockData";
 import { assignees, formatDate, getAssignmentDraft } from "../../pages/Inspection/mockData";
 import { CalendarIcon, ClockIcon } from "./InspectionIcons";
@@ -74,8 +75,7 @@ export default function AssignmentPanel({ application: a, onSave, onStatus }: Pr
     {error && <p role="alert" className="text-[13px] leading-[19px] text-[#a53632]">{error}</p>}
     <div className="flex shrink-0 flex-col gap-[10px]">
       <button type="button" onClick={save} className="h-[42px] rounded-md bg-[#234f73] text-sm font-bold leading-5 text-white">배정·일정 저장</button>
-      <button type="button" aria-describedby="inspection-result-help" disabled className="h-[42px] cursor-not-allowed rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5" title="05 점검 결과 등록은 현재 프로젝트에 구현되어 있지 않습니다.">점검 결과 등록</button>
-      <span id="inspection-result-help" className="sr-only">05 점검 결과 등록은 이번 구현 범위 밖이며 연결할 기존 경로가 없습니다.</span>
+      <Link to={`/inspection/${a.id}/results`} className="flex h-[42px] items-center justify-center rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5">점검 결과 등록</Link>
     </div>
   </section>;
 }

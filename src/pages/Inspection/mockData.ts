@@ -1,3 +1,4 @@
+import { readPublishedResultIds } from "../InspectionResults/storage";
 export type InspectionStatus = "대기" | "예정" | "진행" | "완료";
 export type EditableStatus = Exclude<InspectionStatus, "대기">;
 export type InspectionApplication = {
@@ -70,20 +71,22 @@ export function getAssignmentDraft(
   };
 }
 export function readInspections(): InspectionApplication[] {
+  const publishedIds = readPublishedResultIds();
+  const defaults = initialInspections.map(a => ({...a, resultPublished: a.resultPublished || publishedIds.has(a.id)}));
   try {
     const data: unknown = JSON.parse(
       localStorage.getItem(inspectionStorageKey) || "null",
     );
-    if (!Array.isArray(data) || data.length !== initialInspections.length)
-      return structuredClone(initialInspections);
-    return initialInspections.map((base) => {
+    if (!Array.isArray(data) || data.length !== defaults.length)
+      return structuredClone(defaults);
+    return defaults.map((base) => {
       const value: unknown = data.find(
         (v: unknown) =>
           typeof v === "object" && v !== null && "id" in v && v.id === base.id,
       );
       if (!value || typeof value !== "object") return { ...base };
       const saved = value as Partial<InspectionApplication>;
-      // Identity and published-result permission come from the fixture, never editable storage.
+      // 신청 기본 정보는 fixture를 유지하고, 결과 공개 여부는 05의 검증된 공개 결과도 반영합니다.
       if (
         typeof saved.assignee !== "string" ||
         ![...assignees, "미배정"].includes(saved.assignee) ||
@@ -108,7 +111,7 @@ export function readInspections(): InspectionApplication[] {
       };
     });
   } catch {
-    return structuredClone(initialInspections);
+    return structuredClone(defaults);
   }
 }
 export function formatDate(value: string) {

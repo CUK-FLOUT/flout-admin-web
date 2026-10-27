@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import InspectionResults from "./pages/InspectionResults/InspectionResults";
 import InspectionManagement from "./pages/Inspection/InspectionManagement";
 import PriorityManagement from "./pages/Priority/PriorityManagement";
 import GisApplications from "./pages/GIS/GisApplications";
@@ -38,7 +39,14 @@ function App() {
           />
 
           <Route path="/inspection" element={<InspectionManagement />} />
-          <Route path="/inspection/:requestId" element={<InspectionManagement />} />
+          <Route
+            path="/inspection/:requestId"
+            element={<InspectionManagement />}
+          />
+          <Route
+            path="/inspection/:requestId/results"
+            element={<InspectionResults />}
+          />
           <Route path="/support" element={<Support />} />
           <Route path="/construction" element={<Construction />} />
         </Route>
