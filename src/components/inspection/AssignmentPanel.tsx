@@ -60,6 +60,10 @@ export default function AssignmentPanel({ application: a, onSave, onStatus }: Pr
         <StatusDropdown value={draft.status} onChange={value => update("status", value)} />
         <button type="button" onClick={() => {
           if (a.assignee === "미배정" || !a.visitDate || !a.visitTime) { setError("담당자와 확정 일정을 먼저 저장해 주세요."); return; }
+          if (draft.assignee !== a.assignee || draft.visitDate !== a.visitDate || draft.visitTime !== a.visitTime
+            || draft.notice !== a.notice || draft.notifyResident !== a.notifyResident) {
+            setError("변경한 배정·일정을 먼저 저장해 주세요."); return;
+          }
           setError(""); onStatus(draft.status);
         }} className="h-10 w-[88px] shrink-0 rounded-md bg-[#234f73] px-3 text-sm font-semibold text-white">상태 저장</button>
       </div>

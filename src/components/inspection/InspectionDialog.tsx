@@ -23,9 +23,8 @@ export default function InspectionDialog({ kind, application: a, targetStatus, o
   const blocked = kind === "confirm" && targetStatus === "완료" && !a.resultPublished;
   const confirmation = kind === "confirm";
   const assignment = kind === "assignment-saved";
-  // 04-C의 실제 제목도 '점검 진행'입니다. 원본 문구 불일치를 문서에 기록했습니다.
   const title = confirmation ? `점검 상태 ${targetStatus}` : assignment ? "방문 일정이 저장되었습니다."
-    : `점검 ${targetStatus === "완료" ? "진행" : targetStatus}으로 저장했습니다.`;
+    : `점검 ${targetStatus}${targetStatus === "완료" ? "로" : "으로"} 저장했습니다.`;
   useEffect(() => {
     const dialog = ref.current;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;

@@ -62,7 +62,7 @@ export function getAssignmentDraft(
   return {
     assignee:
       application.assignee === "미배정" ? "김담당" : application.assignee,
-    visitDate: application.visitDate || "2026-10-12",
+    visitDate: application.visitDate,
     visitTime: application.visitTime || "14:00",
     notice: application.notice,
     notifyResident: application.notifyResident,
