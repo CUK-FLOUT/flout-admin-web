@@ -47,7 +47,7 @@ function SupportReviewScreen() {
       return {...original, constructionRegistered: true};
     })) navigate("/construction?requestId=" + a!.id);
   }
-  return <div className={"w-full shrink-0 pt-0.5 text-[#202b36] " + supportFocus + " [&_button:enabled]:cursor-pointer"}>
+  return <div className={"w-full max-w-[1182px] shrink-0 pt-0.5 text-[#202b36] " + supportFocus + " [&_button:enabled]:cursor-pointer"}>
     <div className="relative min-h-[126px]">
       <h1 className="text-[30px] font-bold leading-9">지원 자격 검토</h1>
       <p className="mt-0.5 pr-[160px] text-sm leading-5 max-sm:pr-0">신청 정보와 제출 서류를 확인하고 지원 자격을 검토합니다.</p>
@@ -55,7 +55,7 @@ function SupportReviewScreen() {
       <Link to={returnTo} className={supportSecondary + " absolute top-[41px] right-0 h-[42px] w-[150px] gap-2 text-sm font-semibold max-sm:static max-sm:mt-3"}><img src={back} alt="" width={18} height={18}/>지원 목록으로</Link>
     </div>
     {error && <p role="alert" className="mb-3 text-sm leading-[21px] text-[#a53632]">{error}</p>}
-    <div className="grid grid-cols-[minmax(0,1fr)_418px] items-start gap-4 pb-[34px] max-[1101px]:grid-cols-1">
+    <div className="grid min-h-[590px] grid-cols-[minmax(0,1fr)_418px] items-stretch gap-4 min-[1102px]:min-h-[max(590px,calc(100dvh_-_310px))] max-[1101px]:grid-cols-1">
       <ReviewInformation application={a} onInspection={() => show("inspection")} onDocument={document => show("document", document)}/>
       <AdministrativeReview application={a} draft={currentDraft} onChange={setDraft} onApprove={() => show(approvalIssue(a, currentDraft) ? "review-check" : "approve")} onReject={() => show("reject")} onSave={saveReview} onCheck={() => show("review-check")}/>
     </div>
