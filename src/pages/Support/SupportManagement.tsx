@@ -16,7 +16,7 @@ import reviewIcon from "../../assets/support/stat-review.svg";
 import clockIcon from "../../assets/support/stat-clock.svg";
 import userIcon from "../../assets/support/stat-user.svg";
 const initialFilters = (p: URLSearchParams): SupportFilters => ({district: p.get("district") || "", status: p.get("status") || "", consent: p.get("consent") || "", q: p.get("q") || ""});
-const panel = "h-[calc(100dvh_-_384px)] min-h-[516px] max-[1101px]:h-[516px]";
+const panel = "h-[calc(var(--support-viewport-height,100dvh)_-_384px)] min-h-[516px] max-[1101px]:h-[516px]";
 export default function SupportManagement() {
   const [params] = useSearchParams();
   const filterKey = JSON.stringify({...initialFilters(params), dataset: params.get("dataset")});
@@ -44,7 +44,7 @@ function SupportManagementScreen() {
   const kind = params.get("dialog") as SupportDialogKind | null;
   const dialog = selected && ["inspection", "document", "approved-view", "rejected-view"].includes(kind || "") ? kind : null;
   const returnQuery = () => { const p = new URLSearchParams(params); p.delete("dialog"); p.delete("document"); return p; };
-  function change(next: URLSearchParams, id?: string) { navigate({pathname: "/support" + (id ? "/" + id : ""), search: next.toString()}, {replace: false}); }
+  function change(next: URLSearchParams, id?: string, replace = false) { navigate({pathname: "/support" + (id ? "/" + id : ""), search: next.toString()}, {replace}); }
   function searchSubmit(e: FormEvent) {
     e.preventDefault();
     const p = returnQuery(); ["district", "status", "consent", "q", "page", "selected"].forEach(k => p.delete(k));
@@ -73,7 +73,7 @@ function SupportManagementScreen() {
     <form onSubmit={searchSubmit} aria-label="지원 신청 검색" className="mt-4 grid h-[46px] grid-cols-[166px_180px_184px_minmax(160px,1fr)_101px_119px] gap-[10px] max-[1101px]:h-auto max-[1101px]:grid-cols-2">
       <SupportSelect label="지역" value={filters.district || "지역 전체"} options={["지역 전체", "원미구", "소사구", "오정구"]} onChange={v => setFilters(f => ({...f, district: v === "지역 전체" ? "" : v}))}/>
       <SupportSelect label="지원 상태" value={filters.status || "지원 상태 전체"} options={["지원 상태 전체", "검토 중", "승인", "미승인"]} onChange={v => setFilters(f => ({...f, status: v === "지원 상태 전체" ? "" : v}))}/>
-      <SupportSelect label="동의 확인" value={filters.consent || "동의 확인 전체"} options={["동의 확인 전체", "불필요", "필요 · 확인 중", "필요 · 확인 완료"]} onChange={v => setFilters(f => ({...f, consent: v === "동의 확인 전체" ? "" : v}))}/>
+      <SupportSelect label="동의 확인" value={filters.consent || "동의 확인 전체"} options={["동의 확인 전체", "불필요", "필요 여부 검토 전", "필요 · 미확인", "필요 · 자료 요청", "필요 · 확인 중", "필요 · 확인 완료", "필요 · 불필요"]} onChange={v => setFilters(f => ({...f, consent: v === "동의 확인 전체" ? "" : v}))}/>
       <label className="flex h-12 min-w-0 items-center gap-[10px] rounded-md border border-[#c8d0d7] bg-white px-[14px]"><img src={search} alt="" width={18} height={18}/><input aria-label="접수번호 · 신청자 검색" value={filters.q} onChange={e => setFilters(f => ({...f, q: e.target.value}))} placeholder="접수번호 · 신청자 검색" className="min-w-0 flex-1 text-sm leading-5 outline-none placeholder:text-[#202b36]"/></label>
       <button type="submit" className={supportPrimary + " h-12"}>검색</button><button type="button" onClick={reset} className={supportSecondary + " h-12"}>초기화</button>
     </form>
@@ -84,7 +84,7 @@ function SupportManagementScreen() {
       </article>)}
     </section>
     {error && <p role="alert" className="mt-3 text-sm text-[#a53632]">{error}</p>}
-    <div className="mt-[22px] grid grid-cols-[minmax(0,1fr)_446px] items-start gap-4 pb-[34px] max-[1101px]:grid-cols-1">
+    <div className="mt-[22px] grid grid-cols-[minmax(0,720fr)_minmax(0,446fr)] items-start gap-4 pb-[34px] max-[1101px]:grid-cols-1">
       <section aria-labelledby="support-list-title" className={"flex min-w-0 flex-col rounded-lg border-[0.75px] border-[#c8d0d7] bg-white px-[15.25px] pt-[17.25px] pb-[13.25px] " + panel}>
         <div className="flex h-6 shrink-0 items-start justify-between gap-2"><h2 id="support-list-title" className="text-base font-bold leading-[23px]">지원 신청 목록</h2><span className="text-xs leading-[18px]">총 {filtered.length}건</span></div>
         {!filtered.length ? <SupportEmpty search={source.length > 0} onReset={reset}/> : <>
@@ -108,6 +108,6 @@ function SupportManagementScreen() {
       </section>
       <SupportDetail application={selected} onReview={review} onDialog={showDialog} className={panel}/>
     </div>
-    {dialog && selected && <SupportDialogs kind={dialog} application={selected} document={params.get("document") || undefined} onClose={() => change(returnQuery(), selected.id)}/>}
+    {dialog && selected && <SupportDialogs kind={dialog} application={selected} document={params.get("document") || undefined} onClose={() => change(returnQuery(), selected.id, true)}/>}
   </div>;
 }

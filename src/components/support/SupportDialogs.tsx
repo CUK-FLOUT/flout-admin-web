@@ -14,7 +14,7 @@ type Props = {
   onClose: () => void; onConfirm?: () => void; onReason?: (value: string) => void; onRegister?: () => void;
 };
 export default function SupportDialogs({kind, application: a, draft = a.review, reason = "", document, error, onClose, onConfirm, onReason, onRegister}: Props) {
-  const isOwner = a.id === "000005";
+  const isOwner = a.ownership === "소유자";
   const issue = approvalIssue(a, draft);
   if (kind === "approve") return <SupportDialog title="지원을 승인할까요?" width="max-w-[480px]" height="min-h-[198px]" onClose={onClose} titleClassName="leading-9">
     <div className="-mt-1 text-sm leading-[21px]"><p>{a.id + " · " + a.resident + "님의 신청"}</p><p>{draft.notify ? "승인 확정 시 주민에게 알림이 전송되며 시공 연계가 시작됩니다." : "승인 확정 시 주민에게 결과가 공개되며 시공 연계가 시작됩니다."}</p></div>
@@ -29,7 +29,7 @@ export default function SupportDialogs({kind, application: a, draft = a.review, 
   </SupportDialog>;
   if (kind === "review-check") return <SupportDialog title={a.id + " · 검토 확인사항"} width="max-w-[680px]" height="min-h-[355px]" onClose={onClose} className="rounded-xl">
     <dl className="flex flex-col gap-3"><Row label="신청">{a.id + " · " + a.resident + " · " + a.ownership}</Row><Row label="주민 신청 조치">{a.request}</Row><Row label="자격·서류">{draft.checks.every(Boolean) ? "☑ 검토 완료" : "확인 필요"}</Row><Row label="동의 출처">{a.documents.find(d => d.includes("동의")) || "제출된 동의 자료 없음"}</Row><Row label="필요 여부 / 확인">{draft.consentRequired + " / " + draft.consentState}</Row><Row label="승인 지원 범위">{draft.scope || "입력 필요"}</Row></dl>
-    <p role={issue ? "alert" : undefined} className={"text-sm leading-[21px] " + (issue ? "text-[#a53632]" : "text-[#64748b]")}>{issue || "자격·서류·주민 제출 동의 자료를 확인한 뒤 승인 결과를 저장합니다."}</p>
+    <p role={error || issue ? "alert" : undefined} className={"text-sm leading-[21px] " + (error || issue ? "text-[#a53632]" : "text-[#64748b]")}>{error || issue || "자격·서류·주민 제출 동의 자료를 확인한 뒤 승인 결과를 저장합니다."}</p>
     <div className="grid grid-cols-2 gap-2"><button onClick={onConfirm} disabled={!!issue} className={supportPrimary}>지원 승인 저장</button><button onClick={onClose} className={supportSecondary}>취소</button></div>
   </SupportDialog>;
   if (kind === "approved") return <SupportDialog title={"지원 승인 저장 후 " + a.id} width="max-w-[680px]" height="min-h-[344px]" onClose={onClose} className="rounded-xl">

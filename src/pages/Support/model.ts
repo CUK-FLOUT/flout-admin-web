@@ -56,7 +56,14 @@ export function approvalIssue(a: SupportApplication, draft: ReviewDraft): string
 export function withReview(a: SupportApplication, review: ReviewDraft): SupportApplication {
   return { ...a, review: structuredClone(review), reviewedAt: new Date().toISOString() };
 }
-export function confirmApproval(a: SupportApplication, review: ReviewDraft): SupportApplication {
+export function confirmApproval(a: SupportApplication, review: ReviewDraft, expectedReview?: ReviewDraft): SupportApplication {
+  if (expectedReview) {
+    const fields = ["consentRequired", "consentState", "scope", "memo", "notify"] as const;
+    if (fields.some(field => a.review[field] !== expectedReview[field])
+      || a.review.checks.some((checked, index) => checked !== expectedReview.checks[index])) {
+      throw new Error("다른 창에서 검토 내용이 변경되었습니다. 새로고침하여 최신 정보를 확인한 뒤 다시 승인해 주세요.");
+    }
+  }
   const issue = approvalIssue(a, review);
   if (issue) throw new Error(issue);
   return { ...withReview(a, review), status: "승인", rejectionReason: "", constructionRegistered: false };

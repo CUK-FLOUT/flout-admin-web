@@ -13,7 +13,7 @@ export function DetailRow({label, children, success = false}: {label: string; ch
 type Props = { application?: SupportApplication; onReview: () => void; onDialog: (kind: SupportDialogKind, document?: string) => void; className: string };
 export default function SupportDetail({application: a, onReview, onDialog, className}: Props) {
   const result = a ? inspectionFor(a) : null;
-  return <aside aria-label="지원 신청 상세" className={"flex w-full max-w-[446px] min-w-0 flex-col gap-4 rounded-md border-[0.75px] border-[#cbd5e1] bg-white p-[19.25px] " + className}>
+  return <aside aria-label="지원 신청 상세" className={"flex w-full min-w-0 flex-col gap-4 rounded-md border-[0.75px] border-[#cbd5e1] bg-white p-[19.25px] " + className}>
     <h2 className="shrink-0 text-lg font-bold leading-[26px]">{a ? a.id + " · 지원신청" : "지원 신청 상세"}</h2>
     {!a ? <SupportEmpty panel/> : <>
       <div className="min-h-0 -mb-[14px] flex-1 overflow-y-auto">

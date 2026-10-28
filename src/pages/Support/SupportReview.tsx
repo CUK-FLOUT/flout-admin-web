@@ -20,6 +20,7 @@ function SupportReviewScreen() {
   const {applications, error, updateApplication} = useSupportData();
   const a = applications.find(a => a.id === requestId);
   const [draft, setDraft] = useState<ReviewDraft | null>(() => a ? structuredClone(a.review) : null);
+  const [savedReview, setSavedReview] = useState(draft);
   const [reason, setReason] = useState(a?.rejectionReason || a?.review.memo || "");
   const kind = dialogKinds.includes(params.get("dialog") as SupportDialogKind) ? params.get("dialog") as SupportDialogKind : null;
   const returnValue = params.get("returnTo");
@@ -28,17 +29,20 @@ function SupportReviewScreen() {
     const p = new URLSearchParams(params); p.delete("dialog"); p.delete("document"); if (kind) p.set("dialog", kind); if (document) p.set("document", document);
     setParams(p, {replace: true});
   }
-  if (!a || !draft) return <section className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center"><h1 className="text-xl font-bold">지원 신청 정보를 찾을 수 없습니다.</h1><Link to="/support" className={supportSecondary}>지원 목록으로</Link></section>;
+  if (!a || !draft || !savedReview) return <section className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center"><h1 className="text-xl font-bold">지원 신청 정보를 찾을 수 없습니다.</h1><Link to="/support" className={supportSecondary}>지원 목록으로</Link></section>;
   const currentDraft = a.status === "검토 중" ? draft : a.review;
   function saveReview() {
-    if (updateApplication(a!.id, original => original.status === "검토 중" ? withReview(original, currentDraft) : original)) show("review-saved");
+    if (updateApplication(a!.id, original => original.status === "검토 중" ? withReview(original, currentDraft) : original)) {
+      setSavedReview(structuredClone(currentDraft));
+      show("review-saved");
+    }
   }
   function confirm() {
     if (a!.status !== "검토 중") return;
     const approved = kind === "approve" || kind === "review-check";
     if (updateApplication(a!.id, original => {
       if (original.status !== "검토 중") throw new Error("이미 검토 결과가 확정된 신청입니다. 목록에서 현재 상태를 확인해 주세요.");
-      return approved ? confirmApproval(original, currentDraft) : confirmRejection(original, currentDraft, reason);
+      return approved ? confirmApproval(original, currentDraft, savedReview!) : confirmRejection(original, currentDraft, reason);
     })) show(approved ? "approved" : "rejected");
   }
   function register() {
@@ -47,7 +51,7 @@ function SupportReviewScreen() {
       return {...original, constructionRegistered: true};
     })) navigate("/construction?requestId=" + a!.id);
   }
-  return <div className={"w-full max-w-[1182px] shrink-0 pt-0.5 text-[#202b36] " + supportFocus + " [&_button:enabled]:cursor-pointer"}>
+  return <div className={"w-full shrink-0 pt-0.5 text-[#202b36] " + supportFocus + " [&_button:enabled]:cursor-pointer"}>
     <div className="relative min-h-[126px]">
       <h1 className="text-[30px] font-bold leading-9">지원 자격 검토</h1>
       <p className="mt-0.5 pr-[160px] text-sm leading-5 max-sm:pr-0">신청 정보와 제출 서류를 확인하고 지원 자격을 검토합니다.</p>
@@ -55,7 +59,7 @@ function SupportReviewScreen() {
       <Link to={returnTo} className={supportSecondary + " absolute top-[41px] right-0 h-[42px] w-[150px] gap-2 text-sm font-semibold max-sm:static max-sm:mt-3"}><img src={back} alt="" width={18} height={18}/>지원 목록으로</Link>
     </div>
     {error && <p role="alert" className="mb-3 text-sm leading-[21px] text-[#a53632]">{error}</p>}
-    <div className="grid min-h-[590px] grid-cols-[minmax(0,1fr)_418px] items-stretch gap-4 min-[1102px]:min-h-[max(590px,calc(100dvh_-_310px))] max-[1101px]:grid-cols-1">
+    <div className={"grid grid-cols-[minmax(0,748fr)_minmax(0,418fr)] items-start gap-4 max-[1101px]:grid-cols-1 " + (a.ownership === "소유자" ? "pb-0" : "pb-[34px]")}>
       <ReviewInformation application={a} onInspection={() => show("inspection")} onDocument={document => show("document", document)}/>
       <AdministrativeReview application={a} draft={currentDraft} onChange={setDraft} onApprove={() => show(approvalIssue(a, currentDraft) ? "review-check" : "approve")} onReject={() => show("reject")} onSave={saveReview} onCheck={() => show("review-check")}/>
     </div>
