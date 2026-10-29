@@ -32,7 +32,10 @@ function SupportReviewScreen() {
   if (!a || !draft || !savedReview) return <section className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center"><h1 className="text-xl font-bold">지원 신청 정보를 찾을 수 없습니다.</h1><Link to="/support" className={supportSecondary}>지원 목록으로</Link></section>;
   const currentDraft = a.status === "검토 중" ? draft : a.review;
   function saveReview() {
-    if (updateApplication(a!.id, original => original.status === "검토 중" ? withReview(original, currentDraft) : original)) {
+    if (updateApplication(a!.id, original => {
+      if (original.status !== "검토 중") throw new Error("이미 검토 결과가 확정된 신청입니다. 목록에서 현재 상태를 확인해 주세요.");
+      return withReview(original, currentDraft);
+    })) {
       setSavedReview(structuredClone(currentDraft));
       show("review-saved");
     }
