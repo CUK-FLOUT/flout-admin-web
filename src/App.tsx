@@ -5,10 +5,9 @@ import PriorityManagement from "./pages/Priority/PriorityManagement";
 import GisApplications from "./pages/GIS/GisApplications";
 import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
+import SupportManagement from "./pages/Support/SupportManagement";
+import SupportReview from "./pages/Support/SupportReview";
 
-function Support() {
-  return <h1>지원 신청 관리</h1>;
-}
 
 function Construction() {
   return <h1>시공 관리</h1>;
@@ -47,7 +46,9 @@ function App() {
             path="/inspection/:requestId/results"
             element={<InspectionResults />}
           />
-          <Route path="/support" element={<Support />} />
+          <Route path="/support" element={<SupportManagement />} />
+          <Route path="/support/:requestId" element={<SupportManagement />} />
+          <Route path="/support/:requestId/review" element={<SupportReview />} />
           <Route path="/construction" element={<Construction />} />
         </Route>
       </Routes>
