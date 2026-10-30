@@ -2,7 +2,7 @@ import completedPhoto from "../../assets/gis/imgJpg.png";
 import type { ConstructionCandidate, ConstructionRecord, ConstructionStatus } from "./types";
 function record(id: string, resident: string, address: string, status: ConstructionStatus): ConstructionRecord {
   const finished = status === "완료" || status === "전체 완료";
-  const scheduled = status !== "예정";
+  const scheduled = status !== "일정 미등록";
   const photos = [{id: "example-" + id, name: "완료사진.jpg", src: completedPhoto}];
   const installation = {completionDate: finished ? "2026-10-21" : "", note: finished ? "출입구 물막이판 설치 · 개폐 및 통행 확인 완료" : "", photos};
   return {

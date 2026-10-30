@@ -32,7 +32,7 @@ export default function ConstructionManagement() {
   const visible = filtered.slice((page - 1) * 5, page * 5);
   const incoming = params.get("requestId");
   const selectedId = requestId || incoming;
-  const selected = selectedId ? filtered.find(a => a.id === selectedId) : visible[0];
+  const selected = params.get("dataset") === "no-results" ? undefined : selectedId ? source.find(a => a.id === selectedId) : visible[0];
   const candidates = constructionCandidates(data.records);
   const incomingCandidate = incoming && !data.records.some(a => a.id === incoming) ? candidates.find(a => a.id === incoming) : undefined;
   const key = [selected?.id || "none", incoming || "", tab, page, params.get("dataset") || ""].join(":");
