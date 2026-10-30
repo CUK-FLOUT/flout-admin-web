@@ -6,7 +6,9 @@ import Header from "./Header";
 
 export default function AdminLayout() {
   const { pathname } = useLocation();
+  const isConstruction = pathname === "/construction" || pathname.startsWith("/construction/");
   const isSupport = pathname === "/support" || pathname.startsWith("/support/");
+  const isScaledManagement = isSupport || isConstruction;
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -16,14 +18,14 @@ export default function AdminLayout() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  // Scale the 1440 × 900 support design as a whole; keep other routes unchanged.
+  // Scale the 1440 × 900 support/construction designs; keep other routes unchanged.
   const supportScale = Math.max(1, Math.min(viewport.width / 1440, viewport.height / 900));
-  const supportStyle = isSupport ? {
+  const supportStyle = isScaledManagement ? {
     "--support-scale": supportScale,
     "--support-viewport-height": String(viewport.height / supportScale) + "px",
   } as CSSProperties : undefined;
   return (
-    <div style={supportStyle} className={"admin-shell flex bg-[#f4f5f6] text-[#202b36] lg:overflow-hidden " + (isSupport
+    <div style={supportStyle} className={"admin-shell flex bg-[#f4f5f6] text-[#202b36] lg:overflow-hidden " + (isScaledManagement
       ? "min-h-[var(--support-viewport-height)] [zoom:var(--support-scale)] lg:h-[var(--support-viewport-height)]"
       : "min-h-dvh lg:h-dvh")}>
       <Sidebar />
@@ -31,7 +33,7 @@ export default function AdminLayout() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Header />
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-4 pb-[14px] pt-[22px] lg:px-6">
+        <main className={"flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-4 pt-[22px] lg:px-6 " + (isConstruction ? "pb-3" : "pb-[14px]")}>
           <Outlet />
         </main>
       </div>

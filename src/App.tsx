@@ -7,11 +7,8 @@ import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
 import SupportManagement from "./pages/Support/SupportManagement";
 import SupportReview from "./pages/Support/SupportReview";
+import ConstructionManagement from "./pages/Construction/ConstructionManagement";
 
-
-function Construction() {
-  return <h1>시공 관리</h1>;
-}
 
 function App() {
   return (
@@ -49,7 +46,8 @@ function App() {
           <Route path="/support" element={<SupportManagement />} />
           <Route path="/support/:requestId" element={<SupportManagement />} />
           <Route path="/support/:requestId/review" element={<SupportReview />} />
-          <Route path="/construction" element={<Construction />} />
+          <Route path="/construction" element={<ConstructionManagement />} />
+          <Route path="/construction/:requestId" element={<ConstructionManagement />} />
         </Route>
       </Routes>
     </BrowserRouter>
