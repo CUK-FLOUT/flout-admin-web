@@ -24,12 +24,17 @@ export function readInfrastructureIssues(): InfrastructureIssue[] {
   } catch {records=initialInfrastructureIssues();}
   // Read the existing 05 flow without writing to its storage or changing its pages.
   for (const issue of readResultsState().issues) {
-    const externalKey=issue.id+":"+issue.applicationId;
-    if (records.some(a=>a.externalKey===externalKey)) continue;
-    const created=createInfrastructureIssue(records,{location:issue.location,postcode:issue.postcode,kind:issue.kind,description:issue.description,findings:issue.findings});
-    created.externalKey=externalKey;created.source=issue.source;
-    created.related=[{id:issue.applicationId,address:issue.location,risk:"미확인",findings:issue.findings}];
-    records=[...records,created];
+    try {
+      const externalKey=issue.id+":"+issue.applicationId;
+      if (records.some(a=>a.externalKey===externalKey)) continue;
+      const created=createInfrastructureIssue(records,{location:issue.location,postcode:issue.postcode,kind:issue.kind,description:issue.description,findings:issue.findings});
+      created.externalKey=externalKey;created.source=issue.source;
+      created.related=[{id:issue.applicationId,address:issue.location,risk:"미확인",findings:issue.findings}];
+      records=[...records,created];
+    } catch {
+      // Skip an invalid imported record without preventing the remaining imports.
+      continue;
+    }
   }
   return records;
 }
