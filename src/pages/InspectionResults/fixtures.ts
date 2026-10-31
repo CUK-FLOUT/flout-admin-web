@@ -1,6 +1,7 @@
 import entrance from "../../assets/gis/imgJpg.png";
 import drain from "../../assets/gis/imgJpg1.png";
 import type { ResultContent, ResultRecord } from "./types";
+
 export const feedbackExamples = {
   출입구: {
     title: "낮은 출입구 높이",
@@ -63,12 +64,14 @@ export function createInitialRecord(published = false): ResultRecord {
         : []),
     ],
   };
+
   return {
     draft: content,
     published: published ? structuredClone(content) : null,
     savedAt: "",
   };
 }
+
 export const addressExamples = [
   {
     postcode: "14547",

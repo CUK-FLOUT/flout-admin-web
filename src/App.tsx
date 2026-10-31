@@ -11,7 +11,6 @@ import ConstructionManagement from "./pages/Construction/ConstructionManagement"
 import InfrastructureManagement from "./pages/Infrastructure/InfrastructureManagement";
 import InfrastructureReview from "./pages/Infrastructure/InfrastructureReview";
 
-
 function App() {
   return (
     <BrowserRouter>
@@ -27,8 +26,14 @@ function App() {
           <Route path="/priority" element={<PriorityManagement />} />
           <Route path="/priority/:requestId" element={<PriorityManagement />} />
 
-          <Route path="/infrastructure" element={<InfrastructureManagement />} />
-          <Route path="/infrastructure/:issueId/review" element={<InfrastructureReview />} />
+          <Route
+            path="/infrastructure"
+            element={<InfrastructureManagement />}
+          />
+          <Route
+            path="/infrastructure/:issueId/review"
+            element={<InfrastructureReview />}
+          />
 
           <Route path="/inspection" element={<InspectionManagement />} />
           <Route
@@ -41,9 +46,15 @@ function App() {
           />
           <Route path="/support" element={<SupportManagement />} />
           <Route path="/support/:requestId" element={<SupportManagement />} />
-          <Route path="/support/:requestId/review" element={<SupportReview />} />
+          <Route
+            path="/support/:requestId/review"
+            element={<SupportReview />}
+          />
           <Route path="/construction" element={<ConstructionManagement />} />
-          <Route path="/construction/:requestId" element={<ConstructionManagement />} />
+          <Route
+            path="/construction/:requestId"
+            element={<ConstructionManagement />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>

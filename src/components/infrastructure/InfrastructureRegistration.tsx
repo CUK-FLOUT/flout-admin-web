@@ -2,26 +2,303 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { addressExamples } from "../../pages/InspectionResults/fixtures";
 import { registrationTypes } from "../../pages/Infrastructure/types";
-import type { InfrastructureDialogKind, RegistrationDraft } from "../../pages/Infrastructure/types";
+import type {
+  InfrastructureDialogKind,
+  RegistrationDraft,
+} from "../../pages/Infrastructure/types";
 import InfrastructureDialog from "./InfrastructureDialog";
-import { infrastructureInput, infrastructurePrimary, infrastructureSecondary } from "./styles";
-type Props={kind:InfrastructureDialogKind;onDialog:(kind:InfrastructureDialogKind)=>void;onClose:()=>void;onRegister:(draft:RegistrationDraft)=>void;error:string};
-export default function InfrastructureRegistration({kind,onDialog,onClose,onRegister,error}:Props){
-  const [draft,setDraft]=useState<RegistrationDraft>({location:"",postcode:"",kind:"반복 침수",description:"",findings:""}),[query,setQuery]=useState(""),[searched,setSearched]=useState(""),[addressError,setAddressError]=useState("");
-  const addressOpen=kind==="address"||kind==="address-results";
-  function update(key:keyof RegistrationDraft,value:string){setDraft(d=>({...d,[key]:value}));}
-  function search(e:FormEvent){e.preventDefault();if(!query.trim()){setAddressError("검색어를 입력해 주세요.");return;}setAddressError("");setSearched(query.trim());onDialog("address-results");}
-  const results=addressExamples.filter(a=>[a.road,a.lot,a.postcode,a.building,...a.keywords].join(" ").includes(searched));
-  if(addressOpen)return <InfrastructureDialog title="주소 검색" width="max-w-[560px]" height="h-[696px]" onClose={()=>onDialog("register")} className="font-[family-name:Pretendard,sans-serif]! [&>div]:gap-5!" titleClassName="flex h-[30px] items-start pr-10 text-[22px]! leading-[33px]!">
-    <button aria-label="주소 검색 닫기" onClick={()=>onDialog("register")} className="absolute top-[23px] right-[23px] text-2xl leading-9 text-[#596672]">×</button><p className="text-sm leading-[22px] text-[#43515e]">도로명·지번으로 검색하세요.</p>
-    <form onSubmit={search} className="flex items-start gap-2"><input aria-label="주소 검색어" placeholder="예) 길주로 210, 중동 1156" value={query} onChange={e=>setQuery(e.target.value)} className={infrastructureInput+" h-11 flex-1 border-[#234f73] text-sm"}/><button className={infrastructurePrimary+" h-10 w-28 shrink-0"}>검색</button></form>{addressError&&<p role="alert" className="text-sm text-[#a53632]">{addressError}</p>}
-    {kind==="address"?<><div className="flex h-[324px] shrink-0 flex-col gap-4 rounded-lg bg-[#f4f5f6] px-6 pt-8 text-sm leading-[22px]"><h3 className="text-lg font-bold leading-[27px]">이렇게 검색해 보세요</h3><strong>도로명 + 건물번호</strong><p className="text-[#596672]">예) 길주로 210</p><strong>지역명 + 지번</strong><p className="text-[#596672]">예) 중동 1156</p><p className="text-[13px] leading-5 text-[#43515e]">정확한 주소를 입력하면 더 쉽게 찾을 수 있어요.</p></div><p className="text-[13px] leading-5 text-[#596672]">주소를 선택하면 우편번호와 도로명주소가 자동 입력됩니다.</p></>:<><p className="text-sm font-bold">검색 결과 {results.length}건</p><div className="flex flex-col gap-2">{results.map(a=><button key={a.postcode} onClick={()=>{setDraft(d=>({...d,location:a.road,postcode:a.postcode}));onDialog("register");}} className="flex min-h-[112px] flex-col gap-2 rounded-md border border-[#c8d0d7] p-[15px] text-left text-sm leading-[22px]"><strong className="text-[#234f73]">{a.postcode}</strong><strong>{a.road}</strong><span className="text-[13px] text-[#596672]">지번 {a.lot} · {a.building}</span></button>)}{!results.length&&<p role="status" className="py-12 text-center text-sm text-[#596672]">검색 결과가 없습니다. 검색어를 변경해 주세요.</p>}</div></>}
-  </InfrastructureDialog>;
-  return <InfrastructureDialog title="지역·공공 문제 등록" width="max-w-[520px]" height="min-h-[534px]" onClose={onClose} className="rounded-xl"><form onSubmit={e=>{e.preventDefault();onRegister(draft);}} className="flex flex-col gap-3">
-    <label htmlFor="infra-location" className="text-sm font-bold leading-[21px]">위치</label><div className="flex gap-2"><input id="infra-location" value={draft.location} onChange={e=>update("location",e.target.value)} className={infrastructureInput+" h-10 flex-1 text-sm"}/><button type="button" onClick={()=>onDialog("address")} className={infrastructureSecondary+" h-10 w-28 text-[#234f73]"}>주소 검색</button></div>
-    <p className="text-sm font-bold leading-[21px]">문제 유형</p><div role="group" aria-label="등록 문제 유형" className="grid grid-cols-2 gap-2">{registrationTypes.map(value=><button key={value} type="button" aria-pressed={draft.kind===value} onClick={()=>update("kind",value)} className={(draft.kind===value?infrastructurePrimary:infrastructureSecondary)+" h-10"}>{value}</button>)}</div>
-    <label htmlFor="infra-description" className="text-sm font-bold leading-[21px]">문제 내용</label><input id="infra-description" value={draft.description} onChange={e=>update("description",e.target.value)} className={infrastructureInput+" h-10 text-sm"}/>
-    <label htmlFor="infra-findings" className="text-sm font-bold leading-[21px]">현장 확인 내용</label><textarea id="infra-findings" value={draft.findings} onChange={e=>update("findings",e.target.value)} className={infrastructureInput+" h-[62px] min-h-[62px] resize-y p-[11px] text-sm leading-[21px]"}/>
-    {error&&<p role="alert" className="text-sm text-[#a53632]">{error}</p>}<div className="grid grid-cols-2 gap-2"><button type="button" onClick={onClose} className={infrastructureSecondary+" h-10"}>취소</button><button type="submit" className={infrastructurePrimary+" h-10"}>지역 문제 등록</button></div>
-  </form></InfrastructureDialog>;
+import {
+  infrastructureInput,
+  infrastructurePrimary,
+  infrastructureSecondary,
+} from "./styles";
+
+type Props = {
+  kind: InfrastructureDialogKind;
+  onDialog: (kind: InfrastructureDialogKind) => void;
+  onClose: () => void;
+  onRegister: (draft: RegistrationDraft) => void;
+  error: string;
+};
+export default function InfrastructureRegistration({
+  kind,
+  onDialog,
+  onClose,
+  onRegister,
+  error,
+}: Props) {
+  const [draft, setDraft] = useState<RegistrationDraft>({
+      location: "",
+      postcode: "",
+      kind: "반복 침수",
+      description: "",
+      findings: "",
+    }),
+    [query, setQuery] = useState(""),
+    [searched, setSearched] = useState(""),
+    [addressError, setAddressError] = useState("");
+  const addressOpen = kind === "address" || kind === "address-results";
+
+  function update(key: keyof RegistrationDraft, value: string) {
+    setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
+  }
+
+  function search(e: FormEvent) {
+    e.preventDefault();
+    if (!query.trim()) {
+      setAddressError("검색어를 입력해 주세요.");
+
+      return;
+    }
+
+    setAddressError("");
+    setSearched(query.trim());
+    onDialog("address-results");
+  }
+
+  const results = addressExamples.filter((address) =>
+    [address.road, address.lot, address.postcode, address.building, ...address.keywords]
+      .join(" ")
+      .includes(searched),
+  );
+
+  function selectAddress(address: (typeof addressExamples)[number]) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      location: address.road,
+      postcode: address.postcode,
+    }));
+    onDialog("register");
+  }
+
+  if (addressOpen)
+    return (
+      <InfrastructureDialog
+        title="주소 검색"
+        width="max-w-[560px]"
+        height="h-[696px]"
+        onClose={() => onDialog("register")}
+        className="font-[family-name:Pretendard,sans-serif]! [&>div]:gap-5!"
+        titleClassName="flex h-[30px] items-start pr-10 text-[22px]! leading-[33px]!"
+      >
+        <AddressSearchContent
+          query={query}
+          error={addressError}
+          results={results}
+          showSearchHelp={kind === "address"}
+          onQueryChange={setQuery}
+          onSearch={search}
+          onClose={() => onDialog("register")}
+          onSelectAddress={selectAddress}
+        />
+      </InfrastructureDialog>
+    );
+
+  return (
+    <InfrastructureDialog
+      title="지역·공공 문제 등록"
+      width="max-w-[520px]"
+      height="min-h-[534px]"
+      onClose={onClose}
+      className="rounded-xl"
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onRegister(draft);
+        }}
+        className="flex flex-col gap-3"
+      >
+        <label
+          htmlFor="infra-location"
+          className="text-sm font-bold leading-[21px]"
+        >
+          위치
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="infra-location"
+            value={draft.location}
+            onChange={(e) => update("location", e.target.value)}
+            className={infrastructureInput + " h-10 flex-1 text-sm"}
+          />
+          <button
+            type="button"
+            onClick={() => onDialog("address")}
+            className={infrastructureSecondary + " h-10 w-28 text-[#234f73]"}
+          >
+            주소 검색
+          </button>
+        </div>
+        <p className="text-sm font-bold leading-[21px]">문제 유형</p>
+        <div
+          role="group"
+          aria-label="등록 문제 유형"
+          className="grid grid-cols-2 gap-2"
+        >
+          {registrationTypes.map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={draft.kind === value}
+              onClick={() => update("kind", value)}
+              className={
+                (draft.kind === value
+                  ? infrastructurePrimary
+                  : infrastructureSecondary) + " h-10"
+              }
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        <label
+          htmlFor="infra-description"
+          className="text-sm font-bold leading-[21px]"
+        >
+          문제 내용
+        </label>
+        <input
+          id="infra-description"
+          value={draft.description}
+          onChange={(e) => update("description", e.target.value)}
+          className={infrastructureInput + " h-10 text-sm"}
+        />
+        <label
+          htmlFor="infra-findings"
+          className="text-sm font-bold leading-[21px]"
+        >
+          현장 확인 내용
+        </label>
+        <textarea
+          id="infra-findings"
+          value={draft.findings}
+          onChange={(e) => update("findings", e.target.value)}
+          className={
+            infrastructureInput +
+            " h-[62px] min-h-[62px] resize-y p-[11px] text-sm leading-[21px]"
+          }
+        />
+        {error && (
+          <p role="alert" className="text-sm text-[#a53632]">
+            {error}
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className={infrastructureSecondary + " h-10"}
+          >
+            취소
+          </button>
+          <button type="submit" className={infrastructurePrimary + " h-10"}>
+            지역 문제 등록
+          </button>
+        </div>
+      </form>
+    </InfrastructureDialog>
+  );
+}
+
+type AddressSearchContentProps = {
+  query: string;
+  error: string;
+  results: typeof addressExamples;
+  showSearchHelp: boolean;
+  onQueryChange: (query: string) => void;
+  onSearch: (event: FormEvent) => void;
+  onClose: () => void;
+  onSelectAddress: (address: (typeof addressExamples)[number]) => void;
+};
+
+function AddressSearchContent({
+  query,
+  error,
+  results,
+  showSearchHelp,
+  onQueryChange,
+  onSearch,
+  onClose,
+  onSelectAddress,
+}: AddressSearchContentProps) {
+  return (
+    <>
+      <button
+        aria-label="주소 검색 닫기"
+        onClick={onClose}
+        className="absolute top-[23px] right-[23px] text-2xl leading-9 text-[#596672]"
+      >
+        ×
+      </button>
+      <p className="text-sm leading-[22px] text-[#43515e]">
+        도로명·지번으로 검색하세요.
+      </p>
+      <form onSubmit={onSearch} className="flex items-start gap-2">
+        <input
+          aria-label="주소 검색어"
+          placeholder="예) 길주로 210, 중동 1156"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          className={
+            infrastructureInput + " h-11 flex-1 border-[#234f73] text-sm"
+          }
+        />
+        <button className={infrastructurePrimary + " h-10 w-28 shrink-0"}>
+          검색
+        </button>
+      </form>
+      {error && (
+        <p role="alert" className="text-sm text-[#a53632]">
+          {error}
+        </p>
+      )}
+      {showSearchHelp ? (
+        <>
+          <div className="flex h-[324px] shrink-0 flex-col gap-4 rounded-lg bg-[#f4f5f6] px-6 pt-8 text-sm leading-[22px]">
+            <h3 className="text-lg font-bold leading-[27px]">
+              이렇게 검색해 보세요
+            </h3>
+            <strong>도로명 + 건물번호</strong>
+            <p className="text-[#596672]">예) 길주로 210</p>
+            <strong>지역명 + 지번</strong>
+            <p className="text-[#596672]">예) 중동 1156</p>
+            <p className="text-[13px] leading-5 text-[#43515e]">
+              정확한 주소를 입력하면 더 쉽게 찾을 수 있어요.
+            </p>
+          </div>
+          <p className="text-[13px] leading-5 text-[#596672]">
+            주소를 선택하면 우편번호와 도로명주소가 자동 입력됩니다.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-bold">검색 결과 {results.length}건</p>
+          <div className="flex flex-col gap-2">
+            {results.map((address) => (
+              <button
+                key={address.postcode}
+                onClick={() => onSelectAddress(address)}
+                className="flex min-h-[112px] flex-col gap-2 rounded-md border border-[#c8d0d7] p-[15px] text-left text-sm leading-[22px]"
+              >
+                <strong className="text-[#234f73]">{address.postcode}</strong>
+                <strong>{address.road}</strong>
+                <span className="text-[13px] text-[#596672]">
+                  지번 {address.lot} · {address.building}
+                </span>
+              </button>
+            ))}
+            {!results.length && (
+              <p
+                role="status"
+                className="py-12 text-center text-sm text-[#596672]"
+              >
+                검색 결과가 없습니다. 검색어를 변경해 주세요.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
 }

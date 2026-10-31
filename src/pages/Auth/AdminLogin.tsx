@@ -2,42 +2,76 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import AuthLayout from "../../components/layout/AuthLayout";
 import { loginAdmin, startGoogleLogin } from "../../api/auth";
+import AuthLayout from "../../components/layout/AuthLayout";
 
 import { AuthField, PasswordField, primaryButtonClass } from "./AuthFields";
+
+const LOGIN_ERROR_MESSAGE = "로그인하지 못했습니다. 다시 시도해 주세요.";
+
+const GOOGLE_ERROR_MESSAGE = "Google 로그인에 실패했습니다.";
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
 
 export default function AdminLogin() {
   const navigate = useNavigate();
 
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (busy) return;
+    if (isSubmitting) return;
 
-    const data = new FormData(event.currentTarget);
+    const formData = new FormData(event.currentTarget);
 
-    setBusy(true);
-    setError("");
+    const email = formData.get("email");
+    const password = formData.get("password");
+
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
+      setErrorMessage("이메일과 비밀번호를 입력해 주세요.");
+
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
 
     try {
       await loginAdmin({
-        email: String(data.get("email")).trim(),
-        password: String(data.get("password")),
+        email: email.trim(),
+        password,
       });
 
       navigate("/", { replace: true });
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "로그인하지 못했습니다. 다시 시도해 주세요.",
-      );
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, LOGIN_ERROR_MESSAGE));
     } finally {
-      setBusy(false);
+      setIsSubmitting(false);
+    }
+  }
+
+  function handleGoogleLogin() {
+    if (isSubmitting) return;
+
+    setErrorMessage("");
+
+    try {
+      startGoogleLogin();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, GOOGLE_ERROR_MESSAGE));
     }
   }
 
@@ -49,7 +83,11 @@ export default function AdminLogin() {
         등록된 운영자 계정으로 로그인해 주세요.
       </p>
 
-      <form onSubmit={submit} className="space-y-5" aria-busy={busy}>
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-5"
+        aria-busy={isSubmitting}
+      >
         <AuthField
           label="이메일"
           id="login-email"
@@ -69,14 +107,18 @@ export default function AdminLogin() {
           required
         />
 
-        {error && (
+        {errorMessage && (
           <p role="alert" className="text-[13px] leading-5 text-[#a53632]">
-            {error}
+            {errorMessage}
           </p>
         )}
 
-        <button type="submit" disabled={busy} className={primaryButtonClass}>
-          {busy ? "로그인 중…" : "로그인"}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className={primaryButtonClass}
+        >
+          {isSubmitting ? "로그인 중…" : "로그인"}
         </button>
       </form>
 
@@ -88,18 +130,8 @@ export default function AdminLogin() {
 
       <button
         type="button"
-        disabled={busy}
-        onClick={() => {
-          try {
-            startGoogleLogin();
-          } catch (cause) {
-            setError(
-              cause instanceof Error
-                ? cause.message
-                : "Google 로그인에 실패했습니다.",
-            );
-          }
-        }}
+        disabled={isSubmitting}
+        onClick={handleGoogleLogin}
         className="flex min-h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-[#cbd5e1] bg-white px-4 text-sm font-medium hover:bg-[#f4f5f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span aria-hidden="true">G</span>

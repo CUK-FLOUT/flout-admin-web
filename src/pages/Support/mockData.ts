@@ -1,9 +1,11 @@
 import type { SupportApplication, SupportStatus } from "./types";
+
 const recommendations = [
   "출입구 물막이판",
   "배수구 배수상태 정비",
   "사전점검 및 대비 준비",
 ];
+
 function application(
   id: string,
   resident: string,
@@ -45,6 +47,7 @@ function application(
     constructionRegistered: status === "승인",
   };
 }
+
 export function createSupportFixtures(): SupportApplication[] {
   const first = [
     application("000002", "이○○", "검토 중", true, false),
@@ -64,6 +67,7 @@ export function createSupportFixtures(): SupportApplication[] {
     },
   ];
   const owner = application("000005", "정○○", "검토 중", false, false);
+
   owner.ownership = "소유자";
   owner.address = "○○로 48";
   owner.documents = [];
@@ -88,9 +92,11 @@ export function createSupportFixtures(): SupportApplication[] {
       i < 7,
       status !== "검토 중",
     );
+
     a.address = "○○로 " + (60 + i);
     a.district = ["원미구", "소사구", "오정구"][i % 3];
     first.push(a);
   }
+
   return first;
 }

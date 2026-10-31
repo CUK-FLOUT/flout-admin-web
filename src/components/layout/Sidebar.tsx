@@ -7,6 +7,7 @@ import clipboard from "../../assets/layout/nav-clipboard.png";
 import heart from "../../assets/layout/nav-heart.png";
 import toolbox from "../../assets/layout/nav-toolbox.png";
 import building from "../../assets/layout/nav-building.png";
+
 const menus = [
   { name: "GIS 신청 관리", path: "/gis", icon: map },
   { name: "우선점검 관리", path: "/priority", icon: search },
