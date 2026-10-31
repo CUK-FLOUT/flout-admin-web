@@ -1,4 +1,8 @@
-export const supportFocus = "[&_:is(button,input,textarea,a):focus-visible]:outline-2 [&_:is(button,input,textarea,a):focus-visible]:outline-offset-2 [&_:is(button,input,textarea,a):focus-visible]:outline-[#234f73]";
-export const supportPrimary = "inline-flex min-h-10 items-center justify-center rounded-lg border border-[#234f73] bg-[#234f73] px-3 text-sm font-bold leading-[21px] text-white disabled:cursor-not-allowed disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]";
-export const supportSecondary = "inline-flex min-h-10 items-center justify-center rounded-md border border-[#c8d0d7] bg-white px-3 text-sm font-bold leading-[21px] text-[#202b36] disabled:cursor-not-allowed disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]";
-export const supportInput = "w-full min-w-0 rounded-md border border-[#c8d0d7] bg-white px-[13px] text-[13px] leading-5 text-[#202b36] placeholder:text-[#596672]";
+export const supportFocus =
+  "[&_:is(button,input,textarea,a):focus-visible]:outline-2 [&_:is(button,input,textarea,a):focus-visible]:outline-offset-2 [&_:is(button,input,textarea,a):focus-visible]:outline-[#234f73]";
+export const supportPrimary =
+  "inline-flex min-h-10 items-center justify-center rounded-lg border border-[#234f73] bg-[#234f73] px-3 text-sm font-bold leading-[21px] text-white disabled:cursor-not-allowed disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]";
+export const supportSecondary =
+  "inline-flex min-h-10 items-center justify-center rounded-md border border-[#c8d0d7] bg-white px-3 text-sm font-bold leading-[21px] text-[#202b36] disabled:cursor-not-allowed disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]";
+export const supportInput =
+  "w-full min-w-0 rounded-md border border-[#c8d0d7] bg-white px-[13px] text-[13px] leading-5 text-[#202b36] placeholder:text-[#596672]";

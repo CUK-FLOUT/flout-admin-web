@@ -28,4 +28,36 @@ import removePhoto from "../../assets/infrastructure/removePhoto.svg";
 import back from "../../assets/support/back.svg";
 import empty from "../../assets/infrastructure/empty.svg";
 import noResults from "../../assets/priority/empty-search.svg";
-export const infrastructureAssets = {chevron, search, metricBackground, metricLocation, metricReview, metricProgress, metricCompleted, mapBackground, mapBlocks, mapWater, mapRiverOuter, mapRiverInner, mapRoads, mapDots, waitingDot, reviewDot, completedDot, waitingPin, reviewPin, completedPin, list, drainPhoto, entrancePhoto, photo, facilityReview, actionComplete, removePhoto, back, empty, noResults};
+
+export const infrastructureAssets = {
+  chevron,
+  search,
+  metricBackground,
+  metricLocation,
+  metricReview,
+  metricProgress,
+  metricCompleted,
+  mapBackground,
+  mapBlocks,
+  mapWater,
+  mapRiverOuter,
+  mapRiverInner,
+  mapRoads,
+  mapDots,
+  waitingDot,
+  reviewDot,
+  completedDot,
+  waitingPin,
+  reviewPin,
+  completedPin,
+  list,
+  drainPhoto,
+  entrancePhoto,
+  photo,
+  facilityReview,
+  actionComplete,
+  removePhoto,
+  back,
+  empty,
+  noResults,
+};

@@ -1,8 +1,78 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import SupportDialog from "../support/SupportDialog";
-export default function InfrastructureDialog({title,width,height,onClose,children,className="",titleClassName=""}:{title:string;width:string;height:string;onClose:()=>void;children:ReactNode;className?:string;titleClassName?:string}){
-  useEffect(()=>{const trap=(e:KeyboardEvent)=>{if(e.key!=="Tab")return;const dialog=document.querySelector('dialog[open]');if(!dialog)return;const nodes=Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not([type="file"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]')).filter(n=>n.getClientRects().length>0);const first=nodes[0],last=nodes[nodes.length-1];if(!first||!last)return;const outside=!dialog.contains(document.activeElement);if(e.shiftKey&&(document.activeElement===first||outside)){e.preventDefault();last.focus();}else if(!e.shiftKey&&(document.activeElement===last||outside)){e.preventDefault();first.focus();}};window.addEventListener("keydown",trap,true);return()=>window.removeEventListener("keydown",trap,true);},[]);
-  useEffect(()=>{const dialog=document.querySelector('dialog[open]');if(dialog&&!dialog.contains(document.activeElement))dialog.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')?.focus();},[title]);
-  return <SupportDialog title={title} width={width} height={height} onClose={onClose} titleClassName={titleClassName} className={"max-h-[calc(var(--support-viewport-height,100dvh)_-_32px)]! "+className}>{children}</SupportDialog>;
+
+export default function InfrastructureDialog({
+  title,
+  width,
+  height,
+  onClose,
+  children,
+  className = "",
+  titleClassName = "",
+}: {
+  title: string;
+  width: string;
+  height: string;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+  titleClassName?: string;
+}) {
+  useEffect(() => {
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const dialog = document.querySelector("dialog[open]");
+
+      if (!dialog) return;
+      const nodes = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not([type="file"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]',
+        ),
+      ).filter((n) => n.getClientRects().length > 0);
+      const first = nodes[0],
+        last = nodes[nodes.length - 1];
+
+      if (!first || !last) return;
+      const outside = !dialog.contains(document.activeElement);
+
+      if (e.shiftKey && (document.activeElement === first || outside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || outside)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", trap, true);
+
+    return () => window.removeEventListener("keydown", trap, true);
+  }, []);
+  useEffect(() => {
+    const dialog = document.querySelector("dialog[open]");
+
+    if (dialog && !dialog.contains(document.activeElement))
+      dialog
+        .querySelector<HTMLElement>(
+          "button:not(:disabled), input:not(:disabled), textarea:not(:disabled)",
+        )
+        ?.focus();
+  }, [title]);
+
+  return (
+    <SupportDialog
+      title={title}
+      width={width}
+      height={height}
+      onClose={onClose}
+      titleClassName={titleClassName}
+      className={
+        "max-h-[calc(var(--support-viewport-height,100dvh)_-_32px)]! " +
+        className
+      }
+    >
+      {children}
+    </SupportDialog>
+  );
 }

@@ -35,6 +35,7 @@ export default function ApplicationMap({
 
   useEffect(() => {
     const el = viewport.current;
+
     if (!el) return;
 
     const observer = new ResizeObserver(([entry]) =>
@@ -42,6 +43,7 @@ export default function ApplicationMap({
     );
 
     observer.observe(el);
+
     return () => observer.disconnect();
   }, []);
 
@@ -57,6 +59,7 @@ export default function ApplicationMap({
       }}
       onPointerMove={(event) => {
         const previous = drag.current;
+
         if (!previous) return;
 
         setPan((p) => ({
