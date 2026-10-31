@@ -8,7 +8,8 @@ export default function AdminLayout() {
   const { pathname } = useLocation();
   const isConstruction = pathname === "/construction" || pathname.startsWith("/construction/");
   const isSupport = pathname === "/support" || pathname.startsWith("/support/");
-  const isScaledManagement = isSupport || isConstruction;
+  const isInfrastructure = pathname === "/infrastructure" || pathname.startsWith("/infrastructure/");
+  const isScaledManagement = isSupport || isConstruction || isInfrastructure;
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -18,7 +19,7 @@ export default function AdminLayout() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  // Scale the 1440 × 900 support/construction designs; keep other routes unchanged.
+  // Scale the 1440 × 900 support/construction/infrastructure designs; keep other routes unchanged.
   const supportScale = Math.max(1, Math.min(viewport.width / 1440, viewport.height / 900));
   const supportStyle = isScaledManagement ? {
     "--support-scale": supportScale,
