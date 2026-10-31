@@ -8,6 +8,8 @@ import AdminLogin from "./pages/Auth/AdminLogin";
 import SupportManagement from "./pages/Support/SupportManagement";
 import SupportReview from "./pages/Support/SupportReview";
 import ConstructionManagement from "./pages/Construction/ConstructionManagement";
+import InfrastructureManagement from "./pages/Infrastructure/InfrastructureManagement";
+import InfrastructureReview from "./pages/Infrastructure/InfrastructureReview";
 
 
 function App() {
@@ -25,14 +27,8 @@ function App() {
           <Route path="/priority" element={<PriorityManagement />} />
           <Route path="/priority/:requestId" element={<PriorityManagement />} />
 
-          <Route
-            path="/infrastructure"
-            element={
-              <p className="text-sm text-[#596672]">
-                공공 인프라 화면은 아직 연결하지 않았습니다.
-              </p>
-            }
-          />
+          <Route path="/infrastructure" element={<InfrastructureManagement />} />
+          <Route path="/infrastructure/:issueId/review" element={<InfrastructureReview />} />
 
           <Route path="/inspection" element={<InspectionManagement />} />
           <Route
