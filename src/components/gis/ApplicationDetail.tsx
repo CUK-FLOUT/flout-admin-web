@@ -26,7 +26,7 @@ function SectionTitle({
   children: ReactNode;
 }) {
   return (
-    <h3 className="mb-2 flex items-center gap-2 text-[15px] font-bold leading-5">
+    <h3 className="mb-[9px] flex items-center gap-2 text-[15px] font-bold leading-5">
       <img src={icon} alt="" width={16} height={16} />
       {children}
     </h3>
@@ -35,7 +35,7 @@ function SectionTitle({
 
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-3 text-[13px] leading-[19px]">
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3 text-[13px] leading-[19px]">
       <dt>{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>
@@ -66,13 +66,13 @@ export default function ApplicationDetail({
   return (
     <section
       aria-label={`${a.id} 신청 상세`}
-      className="flex h-[568px] min-w-0 flex-col overflow-hidden rounded-lg border border-[#c8d0d7] bg-white"
+      className="flex h-[568px] min-w-0 flex-col lg:h-full overflow-hidden rounded-lg border border-[#c8d0d7] bg-white"
     >
-      <header className="flex min-h-12 shrink-0 items-center gap-2 px-4 pt-2">
+      <header className="flex h-[43px] shrink-0 items-center gap-2 px-[15px] pt-[15px]">
         <button
           onClick={onClose}
           aria-label="신청 목록으로 돌아가기"
-          className="grid h-8 w-6 cursor-pointer place-items-center rounded focus-visible:outline-2 focus-visible:outline-[#234f73]"
+          className="grid h-5 w-5 shrink-0 cursor-pointer self-start place-items-center rounded focus-visible:outline-2 focus-visible:outline-[#234f73]"
         >
           <img src={back} alt="" width={20} height={20} />
         </button>
@@ -85,7 +85,7 @@ export default function ApplicationDetail({
       <div
         role="tablist"
         aria-label="신청 상세 정보"
-        className="grid shrink-0 grid-cols-4 gap-1 px-4 py-2"
+        className="grid shrink-0 grid-cols-4 gap-1 px-[15px] pt-2"
       >
         {tabs.map((label, i) => (
           <button
@@ -95,7 +95,7 @@ export default function ApplicationDetail({
             aria-controls="request-tab-panel"
             aria-selected={tab === label}
             onClick={() => setTab(label)}
-            className={`min-h-[35px] cursor-pointer rounded-md border border-[#234f73] px-1 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] ${
+            className={`min-h-[35px] cursor-pointer rounded-md border border-[#234f73] px-4 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] ${
               tab === label
                 ? "bg-[#234f73] text-white"
                 : "bg-white text-[#202b36]"
@@ -110,11 +110,11 @@ export default function ApplicationDetail({
         role="tabpanel"
         id="request-tab-panel"
         aria-labelledby={`request-tab-${tabs.indexOf(tab)}`}
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-2"
+        className="min-h-0 flex-1 overflow-y-auto px-[15px] pb-0 pt-4"
       >
         {tab === "신청 정보" && (
           <>
-            <section className="pb-3">
+            <section className="pb-2">
               <SectionTitle icon={basic}>기본 정보</SectionTitle>
 
               <dl className="space-y-[5px]">
@@ -132,7 +132,7 @@ export default function ApplicationDetail({
               </dl>
             </section>
 
-            <section className="border-t border-[#f4f5f6] py-3">
+            <section className="border-t border-[#f4f5f6] pt-[9px] pb-[6px]">
               <SectionTitle icon={resident}>주민 입력정보</SectionTitle>
 
               <dl className="space-y-[5px]">
@@ -145,11 +145,11 @@ export default function ApplicationDetail({
                 <InfoRow label="점검 요청 사유">{a.reason}</InfoRow>
 
                 <InfoRow label="방문 가능시간">
-                  <div className="flex flex-wrap gap-1">
+                  <div className="grid grid-cols-3 gap-[6px]">
                     {["오전 9~12시", "오후 13~18시", "상관없음"].map((t) => (
                       <span
                         key={t}
-                        className={`rounded-md border bg-[#f4f5f6] px-2 py-1 text-[11px] ${
+                        className={`flex h-7 min-w-0 items-center justify-center rounded-md border bg-[#f4f5f6] px-2 py-1 text-[11px] ${
                           t === a.visitTime
                             ? "border-[#234f73] font-bold"
                             : "border-[#c8d0d7] text-[#43515e]"
@@ -163,7 +163,7 @@ export default function ApplicationDetail({
               </dl>
             </section>
 
-            <section className="border-t border-[#f4f5f6] py-3">
+            <section className="border-t border-[#f4f5f6] pt-[7px] pb-0 [&>h3]:mb-1">
               <SectionTitle icon={attachment}>첨부 자료</SectionTitle>
 
               <div className="flex flex-wrap items-start gap-2">
@@ -182,11 +182,11 @@ export default function ApplicationDetail({
                       className="h-[68px] w-32 rounded-[7px] border border-[#c8d0d7] object-cover"
                     />
 
-                    <span className="mt-1 block text-xs">{title}</span>
+                    <span className="mt-0 block text-xs">{title}</span>
                   </button>
                 ))}
 
-                <span className="pt-1 text-xs">첨부사진 2개</span>
+                <span className="ml-1 pt-[3px] text-xs">첨부사진 2개</span>
               </div>
             </section>
           </>
@@ -222,10 +222,10 @@ export default function ApplicationDetail({
         )}
       </div>
 
-      <footer className="shrink-0 border-t border-[#f4f5f6] bg-white p-4 pt-2">
+      <footer className="shrink-0 border-t border-[#f4f5f6] bg-white px-[15px] pt-[14px] pb-5">
         <label
           htmlFor="request-memo"
-          className="mb-2 flex items-center gap-2 text-[15px] font-bold"
+          className="mb-[5.5px] flex items-center gap-[10px] text-[15px] font-bold"
         >
           <img src={memoIcon} alt="" width={16} height={16} />
           내부 메모 · 주민 비공개
@@ -238,15 +238,15 @@ export default function ApplicationDetail({
             onChange={(e) => setMemo(e.target.value)}
             readOnly={!pending}
             placeholder="담당자 확인 내용을 입력하세요"
-            className="h-11 min-w-0 flex-1 rounded-md border border-[#234f73] px-3 text-[13px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73] read-only:bg-[#f4f5f6]"
+            className="h-9 min-w-0 flex-1 rounded-md border border-[#234f73] px-3 text-[13px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73] read-only:bg-[#f4f5f6]"
           />
 
           <button
             disabled={!pending}
             onClick={() => onAccept(a.id, memo.trim())}
-            className="h-11 w-[124px] shrink-0 cursor-pointer rounded-[7px] bg-[#234f73] text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] disabled:cursor-not-allowed disabled:border disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]"
+            className="h-9 w-[124px] shrink-0 cursor-pointer rounded-[7px] bg-[#234f73] text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] disabled:cursor-not-allowed disabled:border disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]"
           >
-            접수하기
+            메모 저장
           </button>
         </div>
       </footer>

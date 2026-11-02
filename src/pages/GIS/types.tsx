@@ -27,6 +27,7 @@ export type Application = {
   inflow: string;
   facilities: string;
   floodHistory: string;
+  coordinates?: { latitude: number; longitude: number };
   marker: {
     x: number;
     y: number;
