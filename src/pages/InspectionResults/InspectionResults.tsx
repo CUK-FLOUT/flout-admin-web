@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { readInspections } from "../Inspection/mockData";
+import { loadInspection } from "../Inspection/loadInspection";
+import { inspectionError } from "../../api/inspections";
 import type { InspectionApplication } from "../Inspection/mockData";
 import ResultPhotos from "../../components/inspection-results/ResultPhotos";
 import ResultsDialogs from "../../components/inspection-results/ResultsDialogs";
@@ -12,13 +14,48 @@ import emptyDocument from "../../assets/priority/empty-document.svg";
 
 export default function InspectionResults() {
   const { requestId } = useParams();
-  const application = readInspections().find((a) => a.id === requestId);
+  const [application, setApplication] = useState<InspectionApplication>();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      setLoading(true);
+      setApplication(undefined);
+      setError("");
+      try {
+        const result = await loadInspection(
+          Number(requestId),
+          controller.signal,
+        );
+
+        if (!controller.signal.aborted) setApplication(result);
+      } catch (error) {
+        if (!controller.signal.aborted) setError(inspectionError(error));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+
+    void load();
+
+    return () => controller.abort();
+  }, [requestId, revision]);
+  if (loading) return <p role="status">점검 정보를 불러오는 중…</p>;
 
   if (!application)
     return (
       <section className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
         <img src={emptyDocument} alt="" width={56} height={56} />
-        <h1 className="text-xl font-bold">신청 정보를 찾을 수 없습니다.</h1>
+        <h1 role="alert" className="text-xl font-bold">
+          {error || "신청 정보를 찾을 수 없습니다."}
+        </h1>
+        <button type="button" onClick={() => setRevision((value) => value + 1)}>
+          다시 시도
+        </button>
         <Link to="/inspection" className={resultSecondary}>
           현장점검 목록으로
         </Link>
@@ -64,7 +101,7 @@ function ResultEditor({
               ? "공개된 결과 조회·수정"
               : "점검 결과 등록·공개"}
         </h1>
-        {readOnly && (
+        {editingPublished && (
           <Link
             to={`?${new URLSearchParams({ mode: "edit" })}`}
             className="shrink-0 text-sm font-bold text-[#234f73] underline underline-offset-4"
@@ -78,6 +115,11 @@ function ResultEditor({
       >
         {a.id} · {a.resident} · {a.address} · {a.assignee}
       </div>
+      <p className="my-3 text-xs text-[#64748b]">
+        결과 조회 API는 준비 중입니다. 기존 초안·공개 결과·사진은 재조회되지
+        않으며, 현재 탭에서 입력한 내용만 표시됩니다. 업로드한 사진의 서버
+        삭제·공개 결과 재수정은 아직 지원하지 않습니다.
+      </p>
       {error && (
         <p role="alert" className="my-3 text-sm leading-[21px] text-[#a53632]">
           {error}
@@ -95,6 +137,7 @@ function ResultEditor({
             onUpload={(event) => {
               void upload(event);
             }}
+            allowRemove={false}
             onRemove={(id) =>
               update(
                 "photos",

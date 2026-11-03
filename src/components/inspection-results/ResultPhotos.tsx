@@ -9,6 +9,7 @@ type Props = {
   content: ResultContent;
   readOnly: boolean;
   busy: boolean;
+  allowRemove?: boolean;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemove: (id: string) => void;
   onSave: () => void;
@@ -18,6 +19,7 @@ export default function ResultPhotos({
   content,
   readOnly,
   busy,
+  allowRemove = true,
   onUpload,
   onRemove,
   onSave,
@@ -43,7 +45,7 @@ export default function ResultPhotos({
                 alt={`현장사진 ${photo.name}`}
                 className="h-full w-full rounded-md object-cover"
               />
-              {!readOnly && (
+              {!readOnly && allowRemove && (
                 <button
                   type="button"
                   disabled={busy}

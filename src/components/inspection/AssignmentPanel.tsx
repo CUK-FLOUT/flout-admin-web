@@ -5,7 +5,6 @@ import type {
   InspectionApplication,
 } from "../../pages/Inspection/mockData";
 import {
-  assignees,
   formatDate,
   getAssignmentDraft,
 } from "../../pages/Inspection/mockData";
@@ -13,6 +12,8 @@ import { CalendarIcon, ClockIcon } from "./InspectionIcons";
 import StatusDropdown from "./StatusDropdown";
 import { inspectionCheckbox, inspectionDate, inspectionPanel } from "./styles";
 import person from "../../assets/inspection/person.svg";
+import { getSession } from "../../auth/session";
+import { validateAssignment } from "../../pages/Inspection/apiModel";
 import type { InspectionDialogState } from "./InspectionDialog";
 
 type Props = {
@@ -20,7 +21,8 @@ type Props = {
   onSave: (
     application: InspectionApplication,
     kind: InspectionDialogState,
-  ) => boolean;
+  ) => Promise<boolean>;
+  busy: boolean;
   onStatus: (status: AssignmentDraft["status"]) => void;
 };
 const input =
@@ -30,8 +32,15 @@ export default function AssignmentPanel({
   application: a,
   onSave,
   onStatus,
+  busy,
 }: Props) {
-  const [draft, setDraft] = useState(() => getAssignmentDraft(a));
+  const [draft, setDraft] = useState(() => ({
+    ...getAssignmentDraft(a),
+    visitTime: a.visitTime,
+    assignee:
+      a.inspectorUserId != null ? a.assignee : getSession()?.name || "본인",
+    notifyResident: false,
+  }));
   const [error, setError] = useState("");
 
   function update<K extends keyof AssignmentDraft>(
@@ -43,12 +52,6 @@ export default function AssignmentPanel({
   }
 
   function save() {
-    if (!draft.assignee || !draft.visitDate || !draft.visitTime) {
-      setError("점검 담당자와 확정 방문일, 방문 시간을 모두 입력해 주세요.");
-
-      return;
-    }
-
     const next = {
       ...a,
       assignee: draft.assignee,
@@ -56,10 +59,18 @@ export default function AssignmentPanel({
       visitTime: draft.visitTime,
       notice: draft.notice,
       notifyResident: draft.notifyResident,
-      status: a.status === "대기" ? ("예정" as const) : a.status,
+      status: a.status,
     };
 
-    onSave(next, "assignment-saved");
+    const problem = validateAssignment(next);
+
+    if (problem) {
+      setError(problem);
+
+      return;
+    }
+
+    void onSave(next, "assignment-saved");
   }
 
   return (
@@ -96,13 +107,12 @@ export default function AssignmentPanel({
           />
           <select
             aria-label="점검 담당자"
+            disabled
             value={draft.assignee}
             onChange={(event) => update("assignee", event.target.value)}
             className={`${input} appearance-none pl-[38px] pr-7`}
           >
-            {assignees.map((name) => (
-              <option key={name}>{name}</option>
-            ))}
+            <option>{draft.assignee}</option>
           </select>
           <span
             aria-hidden="true"
@@ -123,6 +133,7 @@ export default function AssignmentPanel({
               aria-label="확정 방문일"
               type="date"
               required
+              disabled={busy || a.inspectorUserId != null}
               value={draft.visitDate}
               onInput={(event) =>
                 update("visitDate", event.currentTarget.value)
@@ -142,6 +153,7 @@ export default function AssignmentPanel({
               aria-label="방문 시간"
               type="time"
               required
+              disabled={busy || a.inspectorUserId != null}
               value={draft.visitTime}
               onInput={(event) =>
                 update("visitTime", event.currentTarget.value)
@@ -156,6 +168,8 @@ export default function AssignmentPanel({
         주민 방문 전 안내
         <input
           aria-label="주민 방문 전 안내"
+          disabled={busy || a.inspectorUserId != null}
+          maxLength={2000}
           value={draft.notice}
           onChange={(event) => update("notice", event.target.value)}
           className={`${input} h-[42px] font-normal`}
@@ -175,19 +189,13 @@ export default function AssignmentPanel({
           />
           <button
             type="button"
+            disabled={busy}
             onClick={() => {
-              if (a.assignee === "미배정" || !a.visitDate || !a.visitTime) {
-                setError("담당자와 확정 일정을 먼저 저장해 주세요.");
-
-                return;
-              }
-
               if (
-                draft.assignee !== a.assignee ||
-                draft.visitDate !== a.visitDate ||
-                draft.visitTime !== a.visitTime ||
-                draft.notice !== a.notice ||
-                draft.notifyResident !== a.notifyResident
+                a.inspectorUserId != null &&
+                (draft.visitDate !== a.visitDate ||
+                  draft.visitTime !== a.visitTime ||
+                  draft.notice !== a.notice)
               ) {
                 setError("변경한 배정·일정을 먼저 저장해 주세요.");
 
@@ -206,12 +214,17 @@ export default function AssignmentPanel({
       <label className="flex shrink-0 items-center gap-2 text-[13px] font-medium leading-[19px]">
         <input
           type="checkbox"
-          checked={draft.notifyResident}
+          disabled
+          checked={false}
           onChange={(event) => update("notifyResident", event.target.checked)}
           className={inspectionCheckbox}
         />
         주민과 변경 일정 협의 후 최종 알림
       </label>
+      <p className="text-xs text-[#64748b]">
+        본인에게 최초 1회 배정할 수 있습니다. 일정 변경·알림 발송은 현재 API에서
+        지원하지 않습니다. 저장된 확정 일정은 재조회 응답에 포함되지 않습니다.
+      </p>
       {error && (
         <p role="alert" className="text-[13px] leading-[19px] text-[#a53632]">
           {error}
@@ -220,13 +233,14 @@ export default function AssignmentPanel({
       <div className="flex shrink-0 flex-col gap-[10px]">
         <button
           type="button"
+          disabled={busy || a.inspectorUserId != null}
           onClick={save}
           className="h-[42px] rounded-md bg-[#234f73] text-sm font-bold leading-5 text-white"
         >
           배정·일정 저장
         </button>
         <Link
-          to={`/inspection/${a.id}/results`}
+          to={`/inspection/${a.inspectionId}/results`}
           className="flex h-[42px] items-center justify-center rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5"
         >
           점검 결과 등록

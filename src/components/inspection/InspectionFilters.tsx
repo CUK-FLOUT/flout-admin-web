@@ -1,15 +1,12 @@
 import type { FormEventHandler } from "react";
 
-import { assignees, formatDate } from "../../pages/Inspection/mockData";
-import type { InspectionApplication } from "../../pages/Inspection/mockData";
-
 const control =
   "h-[46px] shrink-0 rounded-md border border-[#c8d0d7] bg-white px-3 text-[13px] font-medium leading-[19px]";
 
 type Props = {
   filterKey: string;
   params: URLSearchParams;
-  applications: InspectionApplication[];
+  inspectors: { id: number; name: string }[];
   onSearch: FormEventHandler<HTMLFormElement>;
   onReset: () => void;
 };
@@ -17,7 +14,7 @@ type Props = {
 export default function InspectionFilters({
   filterKey,
   params,
-  applications,
+  inspectors,
   onSearch,
   onReset,
 }: Props) {
@@ -35,41 +32,39 @@ export default function InspectionFilters({
         className={`${control} w-[176px]`}
       >
         <option value="">지역 전체</option>
-        {["중동", "상동", "원미동"].map((value) => (
+        {["원미구", "소사구", "오정구"].map((value) => (
           <option key={value}>{value}</option>
         ))}
       </select>
       <select
+        key={`${filterKey}:${inspectors.map(({ id, name }) => `${id}:${name}`).join("|")}`}
         name="assignee"
         aria-label="담당자 필터"
         defaultValue={params.get("assignee") || ""}
         className={`${control} w-[166px]`}
       >
         <option value="">전체 담당자</option>
-        {["미배정", ...assignees].map((value) => (
-          <option key={value}>{value}</option>
+        {params.get("assignee") &&
+          !inspectors.some(
+            ({ id }) => String(id) === params.get("assignee"),
+          ) && (
+            <option value={params.get("assignee")!}>
+              담당자 ID: {params.get("assignee")}
+            </option>
+          )}
+        {inspectors.map(({ id, name }) => (
+          <option key={id} value={id}>
+            {name}
+          </option>
         ))}
       </select>
-      <select
+      <input
+        type="date"
         name="visit"
         aria-label="방문일 필터"
         defaultValue={params.get("visit") || ""}
         className={`${control} w-[192px]`}
-      >
-        <option value="">방문일 전체</option>
-        <option value="미입력">희망일 미입력</option>
-        {[
-          ...new Set(
-            applications.map((a) => a.requestedDate).filter(Boolean),
-          ),
-        ]
-          .sort()
-          .map((value) => (
-            <option key={value} value={value}>
-              {formatDate(value)}
-            </option>
-          ))}
-      </select>
+      />
       <label
         className={`${control} flex min-w-[160px] flex-1 items-center gap-2 text-sm font-normal`}
       >
@@ -81,6 +76,7 @@ export default function InspectionFilters({
         </span>
         <input
           name="q"
+          maxLength={255}
           aria-label="주소·접수번호 검색"
           defaultValue={params.get("q") || ""}
           placeholder="주소·접수번호 검색"
