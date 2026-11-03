@@ -37,12 +37,21 @@ export default function InspectionFilters({
         ))}
       </select>
       <select
+        key={`${filterKey}:${inspectors.map(({ id, name }) => `${id}:${name}`).join("|")}`}
         name="assignee"
         aria-label="담당자 필터"
         defaultValue={params.get("assignee") || ""}
         className={`${control} w-[166px]`}
       >
         <option value="">전체 담당자</option>
+        {params.get("assignee") &&
+          !inspectors.some(
+            ({ id }) => String(id) === params.get("assignee"),
+          ) && (
+            <option value={params.get("assignee")!}>
+              담당자 ID: {params.get("assignee")}
+            </option>
+          )}
         {inspectors.map(({ id, name }) => (
           <option key={id} value={id}>
             {name}

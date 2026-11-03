@@ -160,14 +160,20 @@ export default function InspectionResultForm({ editor }: Props) {
                 </button>
               ))}
               {content.route === "지역·공공" && !readOnly && (
-                <button
-                  type="button"
-                  disabled
+                <>
+                  <button
+                    type="button"
+                    aria-disabled="true"
+                    aria-describedby="region-registration-unavailable"
                     title="지역·공공문제 등록 API 연결 준비 중"
-                  className={`${resultPrimary} w-[176px]`}
-                >
-                  지역 문제 등록
-                </button>
+                    className={`${resultPrimary} w-[176px]`}
+                  >
+                    지역 문제 등록
+                  </button>
+                  <p id="region-registration-unavailable" className="w-full text-xs text-[#64748b]">
+                    지역·공공문제 등록은 API 연결 준비 중으로 현재 사용할 수 없습니다.
+                  </p>
+                </>
               )}
             </div>
             <label className="flex min-h-10 items-center gap-2 max-sm:flex-col max-sm:items-start">

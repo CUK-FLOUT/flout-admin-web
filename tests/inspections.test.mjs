@@ -343,3 +343,49 @@ test("requests carry cancellation signal and no mock fallback on HTTP failure", 
   });
   await assert.rejects(api.getInspection(91), /server unavailable/);
 });
+
+test("inspection errors distinguish network failure from HTTP failure without a usable message", () => {
+  const { inspectionError } = harness().load("src/api/inspections.ts");
+  const network = new axios.AxiosError("Network Error", "ERR_NETWORK");
+  assert.equal(
+    inspectionError(network),
+    "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  );
+  for (const body of [
+    undefined,
+    null,
+    "server error",
+    {},
+    { message: "" },
+    { message: "  " },
+    { message: 123 },
+  ]) {
+    const http = new axios.AxiosError(
+      "Request failed",
+      "ERR_BAD_RESPONSE",
+      undefined,
+      null,
+      { status: 500, data: body },
+    );
+    assert.equal(
+      inspectionError(http),
+      "현장점검 요청에 실패했습니다. 다시 시도해 주세요.",
+    );
+  }
+  const forbidden = new axios.AxiosError(
+    "Forbidden",
+    "ERR_BAD_REQUEST",
+    undefined,
+    null,
+    {
+      status: 403,
+      data: { message: "본인 관할 지역의 점검만 조회할 수 있습니다." },
+    },
+  );
+  assert.equal(
+    inspectionError(forbidden),
+    "본인 관할 지역의 점검만 조회할 수 있습니다.",
+  );
+  assert.equal(inspectionError(new Error("입력 오류")), "입력 오류");
+  assert.equal(inspectionError(null), "요청을 처리하지 못했습니다.");
+});

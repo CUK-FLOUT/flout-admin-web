@@ -31,6 +31,7 @@ export default function InspectionManagement() {
   const [pageData, setPageData] = useState<InspectionPage | null>(null);
   const [selected, setSelected] = useState<InspectionApplication>();
   const [storageError, setStorageError] = useState("");
+  const [inspectorsError, setInspectorsError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
@@ -125,6 +126,8 @@ export default function InspectionManagement() {
       let page = 0;
       let totalPages = 1;
 
+      setInspectorsError("");
+
       try {
         while (page < totalPages) {
           const response = await getInspections(
@@ -143,7 +146,8 @@ export default function InspectionManagement() {
 
         setInspectors([...names].map(([id, name]) => ({ id, name })));
       } catch (error) {
-        if (!controller.signal.aborted) setStorageError(inspectionError(error));
+        if (!controller.signal.aborted)
+          setInspectorsError(inspectionError(error));
       }
     }
 
@@ -299,6 +303,18 @@ export default function InspectionManagement() {
         onSearch={search}
         onReset={reset}
       />
+
+      {inspectorsError && (
+        <p role="alert" className="text-sm text-[#a53632]">
+          담당자 필터를 불러오지 못했습니다. {inspectorsError}
+          <button
+            type="button"
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            다시 시도
+          </button>
+        </p>
+      )}
 
       {storageError && (
         <p role="alert" className="text-sm text-[#a53632]">

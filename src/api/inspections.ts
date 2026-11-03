@@ -88,17 +88,27 @@ const root = "/api/admin/inspections";
 function result<T>(data: Envelope<T>): T {
   if (!data.isSuccess)
     throw new Error(data.message || "현장점검 요청을 처리하지 못했습니다.");
-  if (data.result == null) throw new Error("현장점검 응답을 확인하지 못했습니다.");
+  if (data.result == null)
+    throw new Error("현장점검 응답을 확인하지 못했습니다.");
 
   return data.result;
 }
 
 export function inspectionError(error: unknown): string {
-  if (axios.isAxiosError<{ message?: string }>(error))
-    return (
-      error.response?.data?.message ||
-      "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
-    );
+  if (axios.isAxiosError(error)) {
+    if (!error.response)
+      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+
+    const data: unknown = error.response.data;
+    const body =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : null;
+
+    return typeof body?.message === "string" && body.message.trim()
+      ? body.message
+      : "현장점검 요청에 실패했습니다. 다시 시도해 주세요.";
+  }
 
   return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
 }
