@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { loginAdmin, startGoogleLogin } from "../../api/auth";
+import { getLoginDestination } from "../../auth/redirect";
 import AuthLayout from "../../components/layout/AuthLayout";
 
 import { AuthField, PasswordField, primaryButtonClass } from "./AuthFields";
@@ -21,6 +22,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const destination = getLoginDestination(location.state);
+
+  const activeRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -28,7 +35,7 @@ export default function AdminLogin() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSubmitting) return;
+    if (activeRequest.current) return;
 
     const formData = new FormData(event.currentTarget);
 
@@ -46,32 +53,45 @@ export default function AdminLogin() {
       return;
     }
 
+    const controller = new AbortController();
+
+    activeRequest.current = controller;
     setIsSubmitting(true);
     setErrorMessage("");
 
     try {
-      await loginAdmin({
-        email: email.trim(),
-        password,
-      });
+      await loginAdmin({ email: email.trim(), password }, controller.signal);
 
-      navigate("/", { replace: true });
+      if (controller.signal.aborted) return;
+
+      navigate(destination, { replace: true });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, LOGIN_ERROR_MESSAGE));
+      if (!controller.signal.aborted)
+        setErrorMessage(getErrorMessage(error, LOGIN_ERROR_MESSAGE));
     } finally {
-      setIsSubmitting(false);
+      activeRequest.current = null;
+      if (!controller.signal.aborted) setIsSubmitting(false);
     }
   }
 
-  function handleGoogleLogin() {
-    if (isSubmitting) return;
+  async function handleGoogleLogin() {
+    if (activeRequest.current) return;
 
+    const controller = new AbortController();
+
+    activeRequest.current = controller;
+    setIsSubmitting(true);
     setErrorMessage("");
 
     try {
-      startGoogleLogin();
+      await startGoogleLogin(controller.signal);
+      if (!controller.signal.aborted) navigate(destination, { replace: true });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, GOOGLE_ERROR_MESSAGE));
+      if (!controller.signal.aborted)
+        setErrorMessage(getErrorMessage(error, GOOGLE_ERROR_MESSAGE));
+    } finally {
+      activeRequest.current = null;
+      if (!controller.signal.aborted) setIsSubmitting(false);
     }
   }
 
