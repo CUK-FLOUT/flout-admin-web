@@ -326,3 +326,38 @@ test("메모 저장 실패 시 성공으로 처리하지 않고 서버 오류를
   );
   assert.equal(h.requests.length, 1);
 });
+
+test("지정 상태 별도 조회는 기존 필터 없이 접수번호로 검색하며 false도 반환한다", async () => {
+  const h = harness(),
+    api = h.load("src/api/priorityInspections.ts");
+  h.setResponse((config) => ({
+    applications:
+      config.params.page === 0
+        ? [{ applicationId: 530, designated: true }]
+        : [{ applicationId: 53, designated: false }],
+    totalPages: 2,
+  }));
+  assert.equal(await api.getPriorityDesignation(53, "000053"), false);
+  assert.deepEqual(plain(h.requests.map((r) => r.params)), [
+    { keyword: "000053", page: 0, size: 100 },
+    { keyword: "000053", page: 1, size: 100 },
+  ]);
+});
+
+test("후보 조회에서 제외된 신청의 지정 상태는 미지정으로 추측하지 않는다", async () => {
+  const h = harness(),
+    api = h.load("src/api/priorityInspections.ts");
+  h.setResponse(() => ({ applications: [], totalPages: 0 }));
+  assert.equal(await api.getPriorityDesignation(53, "000053"), undefined);
+});
+
+test("알 수 없는 URL 위험도와 상태 값은 요청과 저장 가드에서 동일하게 제외한다", () => {
+  const { normalizePriorityFilters } = harness().load(
+    "src/pages/Priority/priorityUtils.ts",
+  );
+  assert.deepEqual(plain(normalizePriorityFilters("오타", "배정 완료")), {});
+  assert.deepEqual(plain(normalizePriorityFilters("주의", "미지정")), {
+    riskLevel: "CAUTION",
+    designated: false,
+  });
+});

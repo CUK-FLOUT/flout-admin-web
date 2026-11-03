@@ -13,6 +13,7 @@ const modalKinds = ["designate", "designated", "saved", "reorder"];
 type Props = {
   dialog: string;
   busy?: boolean;
+  orderLoading?: boolean;
   error?: string;
   orderReady?: boolean;
   cancelledDesignation?: boolean;
@@ -30,6 +31,7 @@ type Props = {
 export default function PriorityModals({
   dialog,
   busy = false,
+  orderLoading = false,
   error = "",
   orderReady = true,
   cancelledDesignation = false,
@@ -50,6 +52,7 @@ export default function PriorityModals({
       <PriorityOrderModal
         applications={eligible}
         busy={busy}
+        loading={orderLoading}
         error={error}
         ready={orderReady}
         onRetry={onRetry}

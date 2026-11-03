@@ -15,6 +15,7 @@ const riskDots = { 높음: highDot, 주의: warningDot, 낮음: lowDot };
 type Props = {
   applications: PriorityApplication[];
   busy?: boolean;
+  loading?: boolean;
   ready?: boolean;
   error?: string;
   onRetry?: () => void;
@@ -27,6 +28,7 @@ type Props = {
 export default function PriorityOrderModal({
   applications,
   busy = false,
+  loading = false,
   ready = true,
   error = "",
   onRetry,
@@ -109,6 +111,7 @@ export default function PriorityOrderModal({
   }, []);
 
   function moveTo(id: string, targetId: string) {
+    if (busy) return;
     const from = order.indexOf(id);
     const to = order.indexOf(targetId);
 
@@ -206,9 +209,11 @@ export default function PriorityOrderModal({
         지정된 신청을 드래그해 점검 우선순서를 변경해주세요.
       </p>
       <p className="min-h-6 shrink-0 text-sm font-medium leading-[22px]">
-        {busy ? "처리 중입니다." : `우선점검 지정 대상 ${rows.length}건`}
+        {busy || loading
+          ? "처리 중입니다."
+          : `우선점검 지정 대상 ${rows.length}건`}
         {error && <span role="alert"> · {error}</span>}
-        {!ready && !busy && (
+        {!ready && !busy && !loading && (
           <button type="button" onClick={onRetry}>
             {" "}
             전체 대상 다시 조회
@@ -369,7 +374,7 @@ export default function PriorityOrderModal({
         <button
           type="button"
           onClick={onSave}
-          disabled={busy || !ready || !rows.length}
+          disabled={busy || loading || !ready || !rows.length}
           className="h-[46px] w-40 rounded-[6.364px] bg-[#234f73] text-[15px] font-medium leading-[21px] tracking-[-.09px] text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           선정 순서 저장

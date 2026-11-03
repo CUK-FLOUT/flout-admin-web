@@ -177,3 +177,27 @@ export async function savePriorityInternalMemo(
 
   return unwrap(data);
 }
+
+export async function getPriorityDesignation(
+  applicationId: number,
+  receiptNo: string,
+  signal?: AbortSignal,
+) {
+  validateApplicationIds([applicationId]);
+  let page = 0;
+
+  while (!signal?.aborted) {
+    const result = await getPriorityInspections(
+      { keyword: receiptNo, page, size: 100 },
+      signal,
+    );
+    const application = result.applications.find(
+      (item) => item.applicationId === applicationId,
+    );
+
+    if (application) return application.designated;
+    if (++page >= result.totalPages) return undefined;
+  }
+
+  return undefined;
+}

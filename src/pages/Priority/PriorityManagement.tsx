@@ -8,6 +8,7 @@ import PriorityModals from "../../components/priority/PriorityModals";
 import {
   getPriorityInspections,
   getPriorityInspection,
+  getPriorityDesignation,
   getPriorityOrder,
   setPriorityDesignation,
   priorityError,
@@ -17,10 +18,13 @@ import type {
   PriorityItem,
   PriorityPage,
   PriorityDetailResponse,
-  RiskLevel,
 } from "../../api/priorityInspections";
 import { commitPriorityOrder } from "./orderApi";
-import { changePosition, normalizePriorityOrder } from "./priorityUtils";
+import {
+  changePosition,
+  normalizePriorityOrder,
+  normalizePriorityFilters,
+} from "./priorityUtils";
 import type { PriorityApplication } from "./mockData";
 
 function toApplication(item: PriorityItem): PriorityApplication {
@@ -59,6 +63,11 @@ export default function PriorityManagement() {
     data?: PriorityDetailResponse;
     error?: string;
   }>();
+  const [designation, setDesignation] = useState<{
+    key: string;
+    value?: boolean;
+    error?: string;
+  }>();
   const [eligible, setEligible] = useState<PriorityApplication[]>([]);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -72,7 +81,7 @@ export default function PriorityManagement() {
     error?: string;
     message?: string;
   }>();
-  const memoFlights = useRef(new Set<number>());
+  const memoFlights = useRef(new Map<number, Promise<void>>());
   const mutation = useRef(false);
   const orderRequest = useRef(0);
   const [cancelledDesignation, setCancelledDesignation] = useState(false);
@@ -86,7 +95,10 @@ export default function PriorityManagement() {
   const page = Number.isSafeInteger(rawPage) && rawPage >= 0 ? rawPage : 0;
   const filterKey = JSON.stringify([district, risk, status, keyword]);
   const listKey = JSON.stringify([filterKey, page, revision]);
-  const hasFilters = Boolean(keyword.trim() || district || risk || status);
+  const { riskLevel, designated } = normalizePriorityFilters(risk, status);
+  const hasFilters = Boolean(
+    keyword.trim() || district || riskLevel || designated !== undefined,
+  );
   const data = list?.key === listKey ? list.data : undefined;
   const listError = list?.key === listKey ? list.error : undefined;
   const loading = !data && !listError;
@@ -94,17 +106,23 @@ export default function PriorityManagement() {
   const selectedRow = requestId
     ? filtered.find((a) => a.applicationId === Number(requestId))
     : filtered[0];
+  const selectionInList = selectedRow !== undefined;
   const selectedApplicationId = requestId
     ? Number(requestId)
     : selectedRow?.applicationId;
   const detailKey = JSON.stringify([selectedApplicationId, revision]);
   const detailData = detail?.key === detailKey ? detail.data : undefined;
   const detailError = detail?.key === detailKey ? detail.error : undefined;
+  const selectedDesignation =
+    selectedRow?.designated ??
+    (designation?.key === detailKey ? designation.value : undefined);
+  const designationError =
+    designation?.key === detailKey ? designation.error : undefined;
   const selected = detailData
     ? {
         ...toApplication({
           ...detailData,
-          designated: selectedRow?.designated ?? false,
+          designated: selectedDesignation ?? false,
         }),
         resident: detailData.applicantName,
         address: [detailData.address, detailData.detailAddress]
@@ -112,7 +130,7 @@ export default function PriorityManagement() {
           .join(" "),
         memo: detailData.internalMemo || "",
         inspectionNeed: detailData.inspectionNeed,
-        designationKnown: Boolean(selectedRow),
+        designationKnown: selectedDesignation !== undefined,
       }
     : undefined;
   const modalOrder = normalizePriorityOrder(draftOrder, eligible);
@@ -120,20 +138,13 @@ export default function PriorityManagement() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const riskLevel = (
-      { 높음: "HIGH", 주의: "CAUTION", 낮음: "LOW" } as Record<
-        string,
-        RiskLevel
-      >
-    )[risk];
 
     getPriorityInspections(
       {
         keyword,
         district: district || undefined,
         riskLevel,
-        designated:
-          status === "지정" ? true : status === "미지정" ? false : undefined,
+        designated,
         page,
         size: 10,
       },
@@ -148,15 +159,21 @@ export default function PriorityManagement() {
       });
 
     return () => controller.abort();
-  }, [district, risk, status, keyword, page, listKey]);
+  }, [district, riskLevel, designated, keyword, page, listKey]);
 
   useEffect(() => {
     if (selectedApplicationId === undefined) return;
     const controller = new AbortController();
 
-    getPriorityInspection(selectedApplicationId, controller.signal)
+    Promise.resolve(memoFlights.current.get(selectedApplicationId))
+      .then(() => {
+        if (controller.signal.aborted) return undefined;
+
+        return getPriorityInspection(selectedApplicationId, controller.signal);
+      })
       .then((data) => {
-        if (!controller.signal.aborted) setDetail({ key: detailKey, data });
+        if (!controller.signal.aborted && data)
+          setDetail({ key: detailKey, data });
       })
       .catch((cause) => {
         if (!controller.signal.aborted)
@@ -165,6 +182,27 @@ export default function PriorityManagement() {
 
     return () => controller.abort();
   }, [selectedApplicationId, detailKey]);
+
+  useEffect(() => {
+    if (!detailData || selectionInList || !data) return;
+    const controller = new AbortController();
+
+    getPriorityDesignation(
+      detailData.applicationId,
+      detailData.receiptNo,
+      controller.signal,
+    )
+      .then((value) => {
+        if (!controller.signal.aborted)
+          setDesignation({ key: detailKey, value });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setDesignation({ key: detailKey, error: priorityError(cause) });
+      });
+
+    return () => controller.abort();
+  }, [detailData, selectionInList, data, detailKey]);
 
   useEffect(
     () => () => {
@@ -325,6 +363,7 @@ export default function PriorityManagement() {
 
     try {
       await setPriorityDesignation([selected.applicationId], !cancel);
+      await memoFlights.current.get(selected.applicationId);
       setCancelledDesignation(cancel);
       setRevision((value) => value + 1);
       setOrderReady(false);
@@ -342,44 +381,52 @@ export default function PriorityManagement() {
   async function saveMemo() {
     const id = selected?.applicationId;
 
-    if (!id || !selected || memoFlights.current.has(id)) return;
+    if (!id || !selected) return;
+    if (memoFlights.current.has(id)) return memoFlights.current.get(id);
     const value = memoDrafts[id];
 
     if (value === undefined || value === selected.memo) return;
-    memoFlights.current.add(id);
+
     setMemoSaving((current) => ({ ...current, [id]: true }));
     setMemoFeedback({ id, message: "메모를 저장하는 중입니다." });
-    try {
-      const saved = await savePriorityInternalMemo(id, value);
+    const flight = (async () => {
+      try {
+        const saved = await savePriorityInternalMemo(id, value);
 
-      setDetail((current) =>
-        current?.data?.applicationId === id
-          ? {
-              ...current,
-              data: { ...current.data, internalMemo: saved.internalMemo },
-            }
-          : current,
-      );
-      setMemoDrafts((current) => {
-        if (current[id] !== value) return current;
-        const next = { ...current };
+        setDetail((current) =>
+          current?.data?.applicationId === id
+            ? {
+                ...current,
+                data: { ...current.data, internalMemo: saved.internalMemo },
+              }
+            : current,
+        );
+        setMemoDrafts((current) => {
+          if (current[id] !== value) return current;
+          const next = { ...current };
 
-        delete next[id];
+          delete next[id];
 
-        return next;
-      });
-      setMemoFeedback({ id, message: "메모가 저장되었습니다." });
-    } catch (cause) {
-      setMemoFeedback({ id, error: priorityError(cause) });
-    } finally {
-      memoFlights.current.delete(id);
-      setMemoSaving((current) => ({ ...current, [id]: false }));
-    }
+          return next;
+        });
+        setMemoFeedback({ id, message: "메모가 저장되었습니다." });
+      } catch (cause) {
+        setMemoFeedback({ id, error: priorityError(cause) });
+      } finally {
+        memoFlights.current.delete(id);
+        setMemoSaving((current) => ({ ...current, [id]: false }));
+      }
+    })();
+
+    memoFlights.current.set(id, flight);
+
+    return flight;
   }
 
   function closeModal() {
     if (mutation.current) return;
     orderRequest.current += 1;
+    setOrderLoading(false);
     setError("");
     patch({ dialog: null, mode: null });
   }
@@ -397,9 +444,9 @@ export default function PriorityManagement() {
         onReset={reset}
       />
 
-      {(listError || detailError) && (
+      {(listError || detailError || designationError) && (
         <p role="alert">
-          {listError || detailError}{" "}
+          {listError || detailError || designationError}{" "}
           <button
             type="button"
             onClick={() => setRevision((value) => value + 1)}
@@ -488,7 +535,8 @@ export default function PriorityManagement() {
         selected={selected}
         eligible={eligible}
         modalOrder={modalOrder}
-        busy={busy || orderLoading}
+        busy={busy}
+        orderLoading={orderLoading}
         error={error}
         orderReady={orderReady}
         cancelledDesignation={cancelledDesignation}
