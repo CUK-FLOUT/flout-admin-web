@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { loginAdmin, startGoogleLogin } from "../../api/auth";
+import { getLoginDestination } from "../../auth/redirect";
 import AuthLayout from "../../components/layout/AuthLayout";
 
 import { AuthField, PasswordField, primaryButtonClass } from "./AuthFields";
@@ -21,6 +22,8 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const destination = getLoginDestination(location.state);
 
   const activeRequest = useRef<AbortController | null>(null);
 
@@ -61,7 +64,7 @@ export default function AdminLogin() {
 
       if (controller.signal.aborted) return;
 
-      navigate("/", { replace: true });
+      navigate(destination, { replace: true });
     } catch (error) {
       if (!controller.signal.aborted)
         setErrorMessage(getErrorMessage(error, LOGIN_ERROR_MESSAGE));
@@ -82,7 +85,7 @@ export default function AdminLogin() {
 
     try {
       await startGoogleLogin(controller.signal);
-      if (!controller.signal.aborted) navigate("/", { replace: true });
+      if (!controller.signal.aborted) navigate(destination, { replace: true });
     } catch (error) {
       if (!controller.signal.aborted)
         setErrorMessage(getErrorMessage(error, GOOGLE_ERROR_MESSAGE));

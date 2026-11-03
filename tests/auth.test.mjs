@@ -71,6 +71,7 @@ function harness(stored, env = {}) {
   };
   const context = vm.createContext({
     console,
+    URL,
     Error,
     Date,
     Promise,
@@ -140,6 +141,7 @@ function harness(stored, env = {}) {
     http: load(resolve(root, "api/authTransport.ts")).authClient,
     client: load(resolve(root, "api/client.ts")).apiClient,
     google: load(resolve(root, "auth/google.ts")),
+    redirect: load(resolve(root, "auth/redirect.ts")),
     storage,
     scripts,
     timers,
@@ -648,4 +650,247 @@ test("profile result from an older login cannot be used by a newer session", asy
   h.client.defaults.adapter = async (config) =>
     ok(config, { name: "새 담당자", jurisdiction: "새 관할" });
   assert.equal((await h.admin.getAdminProfile()).name, "새 담당자");
+});
+
+test("loaded GIS script without accounts.id is removed and a fresh script is used on retry", async () => {
+  const h = harness(undefined, { VITE_GOOGLE_CLIENT_ID: "test-client" });
+  const first = h.google.requestGoogleIdToken();
+  const oldScript = h.scripts[0];
+  oldScript.dispatchEvent(new Event("load"));
+  await assert.rejects(first, /초기화하지/);
+  assert.equal(h.scripts.length, 0);
+  assert.equal(h.timers.size, 0);
+  const second = h.google.requestGoogleIdToken();
+  assert.equal(h.scripts.length, 1);
+  assert.notStrictEqual(h.scripts[0], oldScript);
+  h.scripts[0].dispatchEvent(new Event("error"));
+  await assert.rejects(second, /불러오지/);
+});
+
+test("both token lifetimes must be finite positive numbers", () => {
+  const h = harness();
+  for (const field of ["expiresIn", "refreshExpiresIn"]) {
+    for (const value of [Infinity, -Infinity, NaN, 0, -1, "3600"]) {
+      assert.throws(() => h.store.parseSession(session({ [field]: value })));
+    }
+  }
+  assert.equal(h.store.parseSession(session()).expiresIn, 3600);
+});
+
+test("login return path preserves internal pathname, query and hash while rejecting unsafe destinations", () => {
+  const { getLoginDestination } = harness().redirect;
+  assert.equal(
+    getLoginDestination({ from: "/inspection/000001?tab=results#memo" }),
+    "/inspection/000001?tab=results#memo",
+  );
+  assert.equal(
+    getLoginDestination({ from: "/gis?next=https://example.com#map" }),
+    "/gis?next=https://example.com#map",
+  );
+  for (const from of [
+    "//evil.example",
+    "https://evil.example",
+    "javascript:alert(1)",
+    "/\\evil.example",
+    "/%2f%2fevil.example",
+    "/%5cevil.example",
+    "/%0aevil",
+    "/login",
+    "/signup/",
+    "/gis/../login",
+    "/%6cogin",
+    "/%zz",
+    " /gis",
+    null,
+    { pathname: "/gis" },
+  ]) {
+    assert.equal(getLoginDestination({ from }), "/");
+  }
+  assert.equal(getLoginDestination(undefined), "/");
+});
+
+function guardHarness(initialSession, refresh) {
+  let current = initialSession;
+  let effect;
+  let focus;
+  let nextTimer = 0;
+  const timers = new Map();
+  const errors = [];
+  const location = {
+    pathname: "/inspection/000001",
+    search: "?tab=results",
+    hash: "#memo",
+  };
+  const isAccessValid = (value) =>
+    value !== null &&
+    Date.parse(value.expiresAt) > Date.now() &&
+    Date.parse(value.refreshExpiresAt) > Date.now();
+  const exports = {};
+  const source = readFileSync(resolve(root, "auth/RequireAdmin.tsx"), "utf8");
+  const code = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2023,
+      jsx: ts.JsxEmit.ReactJSX,
+    },
+  }).outputText;
+  vm.runInNewContext(code, {
+    exports,
+    Error,
+    Date,
+    Promise,
+    require(specifier) {
+      if (specifier === "react")
+        return {
+          useEffect(callback) {
+            effect = callback;
+          },
+          useState() {
+            return [null, (value) => errors.push(value)];
+          },
+          useSyncExternalStore(_subscribe, snapshot) {
+            return snapshot();
+          },
+        };
+      if (specifier === "react-router-dom")
+        return {
+          Navigate: "Navigate",
+          Outlet: "Outlet",
+          useLocation: () => location,
+        };
+      if (specifier === "../api/auth") return { refreshSession: refresh };
+      if (specifier === "./session")
+        return {
+          getSession: () => current,
+          isAccessValid,
+          subscribeSession() {},
+        };
+      return require(specifier);
+    },
+    window: {
+      setTimeout(fn, delay) {
+        const id = ++nextTimer;
+        timers.set(id, { fn, delay });
+        return id;
+      },
+      addEventListener(event, callback) {
+        assert.equal(event, "focus");
+        focus = callback;
+      },
+      removeEventListener(event, callback) {
+        assert.equal(event, "focus");
+        if (focus === callback) focus = undefined;
+      },
+    },
+    clearTimeout(id) {
+      timers.delete(id);
+    },
+  });
+  const output = exports.default();
+  const cleanup = effect();
+  return {
+    output,
+    timers,
+    errors,
+    setSession(value) {
+      current = value;
+    },
+    focus() {
+      focus?.();
+    },
+    unmount() {
+      cleanup?.();
+    },
+    async runNext() {
+      const entry = timers.entries().next().value;
+      assert.ok(entry, "expected a scheduled timer");
+      const [id, item] = entry;
+      timers.delete(id);
+      item.fn();
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+  };
+}
+
+test("unauthenticated guard passes pathname, query and hash through login state", () => {
+  const h = guardHarness(null, () =>
+    assert.fail("must not refresh without a session"),
+  );
+  assert.equal(h.output.props.to, "/login");
+  assert.equal(
+    h.output.props.state.from,
+    "/inspection/000001?tab=results#memo",
+  );
+  assert.equal(h.timers.size, 0);
+});
+
+test("transient refresh failures retry with capped backoff and clean up on unmount", async () => {
+  let calls = 0;
+  const h = guardHarness(
+    session({ expiresAt: new Date(Date.now() - 1000).toISOString() }),
+    async () => {
+      calls++;
+      throw new Error("network unavailable");
+    },
+  );
+  assert.equal([...h.timers.values()][0].delay, 0);
+  for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+    await h.runNext();
+    assert.equal(h.timers.size, 1);
+    assert.equal([...h.timers.values()][0].delay, delay);
+  }
+  assert.equal(calls, 7);
+  h.unmount();
+  assert.equal(h.timers.size, 0);
+  h.focus();
+  assert.equal(calls, 7);
+});
+
+test("cleared or replaced sessions never schedule further refresh retries", async () => {
+  for (const next of [null, session({ accessToken: "new-login" })]) {
+    let h;
+    h = guardHarness(
+      session({ expiresAt: new Date(Date.now() - 1000).toISOString() }),
+      async () => {
+        h.setSession(next);
+        throw new Error("auth changed");
+      },
+    );
+    await h.runNext();
+    assert.equal(h.timers.size, 0);
+    assert.equal(h.errors.length, 0);
+    h.unmount();
+  }
+});
+
+test("focus keeps the existing expiry check and does not create concurrent retries", async () => {
+  const valid = guardHarness(session(), () =>
+    assert.fail("must not refresh valid access on focus"),
+  );
+  valid.focus();
+  valid.unmount();
+  let calls = 0;
+  let fail;
+  const h = guardHarness(
+    session({ expiresAt: new Date(Date.now() - 1000).toISOString() }),
+    () => {
+      calls++;
+      return new Promise((_, reject) => {
+        fail = reject;
+      });
+    },
+  );
+  await h.runNext();
+  h.focus();
+  assert.equal(calls, 1);
+  fail(new Error("network unavailable"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.timers.size, 1);
+  h.focus();
+  assert.equal(calls, 2);
+  assert.equal(h.timers.size, 0);
+  h.unmount();
+  fail(new Error("network unavailable"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.timers.size, 0);
 });

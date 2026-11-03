@@ -47,6 +47,7 @@ function loadGoogleIdentity(): Promise<GoogleIdentity> {
         reject(error);
       } else if (window.google?.accounts.id) resolve(window.google.accounts.id);
       else {
+        script.remove();
         sdkFlight = null;
         reject(new Error("Google 인증을 초기화하지 못했습니다."));
       }

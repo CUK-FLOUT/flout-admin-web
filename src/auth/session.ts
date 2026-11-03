@@ -41,8 +41,10 @@ export function parseSession(value: unknown): AdminSession {
     record.tokenType !== "Bearer" ||
     !Number.isSafeInteger(record.userId) ||
     typeof record.expiresIn !== "number" ||
+    !Number.isFinite(record.expiresIn) ||
     record.expiresIn <= 0 ||
     typeof record.refreshExpiresIn !== "number" ||
+    !Number.isFinite(record.refreshExpiresIn) ||
     record.refreshExpiresIn <= 0 ||
     !Number.isFinite(Date.parse(record.expiresAt as string)) ||
     !Number.isFinite(Date.parse(record.refreshExpiresAt as string))
