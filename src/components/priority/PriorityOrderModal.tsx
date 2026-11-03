@@ -29,6 +29,8 @@ export default function PriorityOrderModal({
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const dragging = useRef<string | null>(null);
+  const lastDragY = useRef<number | null>(null);
+  const scrollFrame = useRef<number | null>(null);
   const pointerDrag = useRef<{
     id: string;
     pointerId: number;
@@ -74,12 +76,27 @@ export default function PriorityOrderModal({
     dialog?.showModal();
 
     return () => {
+      if (scrollFrame.current !== null)
+        window.cancelAnimationFrame(scrollFrame.current);
+      scrollFrame.current = null;
+      lastDragY.current = null;
+      dragging.current = null;
+      pointerDrag.current = null;
       if (dialog?.open) dialog.close();
       previous.forEach(({ element, overflow, gutter }) => {
         element.style.overflow = overflow;
         element.style.scrollbarGutter = gutter;
       });
-      opener?.focus({ preventScroll: true });
+      const focusTarget = opener?.isConnected
+        ? opener
+        : document.querySelector<HTMLElement>(
+            "[data-priority-order-trigger]",
+          ) ||
+          document.querySelector<HTMLElement>(
+            'form[aria-label="우선점검 검색 조건"] select',
+          );
+
+      if (focusTarget?.isConnected) focusTarget.focus({ preventScroll: true });
     };
   }, []);
 
@@ -107,6 +124,33 @@ export default function PriorityOrderModal({
     else if (clientY > bounds.bottom - 40) viewport.scrollTop += 24;
   }
 
+  function startDragScroll(clientY: number) {
+    if (!Number.isFinite(clientY)) return;
+    lastDragY.current = clientY;
+    if (scrollFrame.current !== null) return;
+    const tick = () => {
+      scrollFrame.current = null;
+      if (
+        (!dragging.current && !pointerDrag.current) ||
+        lastDragY.current === null
+      )
+        return;
+      scrollList(lastDragY.current);
+      scrollFrame.current = window.requestAnimationFrame(tick);
+    };
+
+    scrollFrame.current = window.requestAnimationFrame(tick);
+  }
+
+  function stopDrag() {
+    if (scrollFrame.current !== null)
+      window.cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = null;
+    lastDragY.current = null;
+    dragging.current = null;
+    pointerDrag.current = null;
+  }
+
   return (
     <dialog
       ref={dialogRef}
@@ -128,7 +172,7 @@ export default function PriorityOrderModal({
         )
           onCancel();
       }}
-      className="fixed inset-0 m-auto h-[470px] max-h-[calc(100dvh_-_32px)] w-[calc(100vw_-_32px)] max-w-[900px] overflow-hidden rounded-xl border-0 bg-white px-7 pb-6 pt-7 font-[family-name:Pretendard,sans-serif] text-[#202b36] shadow-none backdrop:bg-black/[.36] open:flex open:flex-col open:gap-5 [&_button]:cursor-pointer [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[#234f73]"
+      className="fixed inset-0 m-auto h-[470px] max-h-[calc(100dvh_-_32px)] w-[calc(100vw_-_32px)] max-w-[900px] overflow-y-auto rounded-xl border-0 bg-white px-7 pb-6 pt-7 font-[family-name:Pretendard,sans-serif] text-[#202b36] shadow-none backdrop:bg-black/[.36] open:flex open:flex-col open:gap-5 [&_button]:cursor-pointer [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[#234f73]"
     >
       <header className="flex h-8 shrink-0 items-center justify-between">
         <h2
@@ -162,7 +206,7 @@ export default function PriorityOrderModal({
         data-order-scroll
         tabIndex={0}
         aria-label="선정 순서 목록"
-        className="min-h-0 flex-1 overflow-auto overscroll-contain"
+        className="min-h-0 flex-1 overflow-auto overscroll-contain [@media(max-height:320px)]:min-h-[100px]"
       >
         <table className="w-full min-w-[820px] table-fixed border-separate border-spacing-0 text-center text-[13px] font-normal leading-5 [&_td]:border-b [&_td]:border-[#c8d0d7]">
           <colgroup>
@@ -195,13 +239,13 @@ export default function PriorityOrderModal({
                 className="h-14 bg-white"
                 onDragOver={(event) => {
                   event.preventDefault();
-                  scrollList(event.clientY);
+                  startDragScroll(event.clientY);
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
                   if (dragging.current)
                     moveTo(dragging.current, application.id);
-                  dragging.current = null;
+                  stopDrag();
                 }}
               >
                 <td className="p-0">
@@ -215,9 +259,10 @@ export default function PriorityOrderModal({
                       dragging.current = application.id;
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", application.id);
+                      startDragScroll(event.clientY);
                     }}
                     onDragEnd={() => {
-                      dragging.current = null;
+                      stopDrag();
                     }}
                     onKeyDown={(event) => {
                       if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -234,12 +279,13 @@ export default function PriorityOrderModal({
                         pointerId: event.pointerId,
                       };
                       event.currentTarget.setPointerCapture(event.pointerId);
+                      startDragScroll(event.clientY);
                     }}
                     onPointerMove={(event) => {
                       const drag = pointerDrag.current;
 
                       if (!drag || drag.pointerId !== event.pointerId) return;
-                      scrollList(event.clientY);
+                      startDragScroll(event.clientY);
                       const target = document
                         .elementFromPoint(event.clientX, event.clientY)
                         ?.closest<HTMLElement>("[data-order-id]")
@@ -249,12 +295,9 @@ export default function PriorityOrderModal({
                         moveTo(drag.id, target);
                       }
                     }}
-                    onPointerUp={() => {
-                      pointerDrag.current = null;
-                    }}
-                    onPointerCancel={() => {
-                      pointerDrag.current = null;
-                    }}
+                    onPointerUp={stopDrag}
+                    onPointerCancel={stopDrag}
+                    onLostPointerCapture={stopDrag}
                   >
                     <img src={dragHandle} alt="" width={18} height={18} />
                   </button>

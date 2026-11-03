@@ -4,26 +4,40 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
-function render(order = ["A", "B", "C"]) {
+function render(order = ["A", "B", "C"], { openerConnected = true } = {}) {
   const effects = [];
   const moves = [];
   let cancelled = 0,
     saved = 0,
-    restoredFocus = false;
+    restoredFocus = false,
+    focusTarget = null;
+  const frames = new Map();
+  let frameId = 0;
   class Element {
     constructor() {
       this.style = { overflow: "auto", scrollbarGutter: "" };
+      this.isConnected = true;
       this.clientWidth = 1440;
       this.offsetWidth = 1440;
     }
     focus() {
       restoredFocus = true;
+      focusTarget = this;
     }
   }
   const html = new Element(),
     body = new Element(),
     main = new Element();
   main.style.scrollbarGutter = "stable";
+  const opener = new Element(),
+    trigger = new Element();
+  opener.isConnected = openerConnected;
+  const viewport = {
+    scrollTop: 0,
+    getBoundingClientRect() {
+      return { top: 100, bottom: 300 };
+    },
+  };
   const dialog = {
     open: false,
     showModal() {
@@ -33,7 +47,7 @@ function render(order = ["A", "B", "C"]) {
       this.open = false;
     },
     querySelector() {
-      return null;
+      return viewport;
     },
   };
   let refIndex = 0;
@@ -53,13 +67,23 @@ function render(order = ["A", "B", "C"]) {
     module: mod,
     exports: mod.exports,
     HTMLElement: Element,
-    window: { innerWidth: 1440 },
+    window: {
+      innerWidth: 1440,
+      requestAnimationFrame(callback) {
+        const id = ++frameId;
+        frames.set(id, callback);
+        return id;
+      },
+      cancelAnimationFrame(id) {
+        frames.delete(id);
+      },
+    },
     document: {
       documentElement: html,
       body,
-      activeElement: new Element(),
-      querySelector() {
-        return main;
+      activeElement: opener,
+      querySelector(selector) {
+        return selector === "main" ? main : trigger;
       },
     },
     require(name) {
@@ -111,6 +135,18 @@ function render(order = ["A", "B", "C"]) {
     body,
     main,
     dialog,
+    opener,
+    trigger,
+    viewport,
+    frames,
+    runFrame() {
+      const [id, callback] = frames.entries().next().value;
+      frames.delete(id);
+      callback();
+    },
+    get focusTarget() {
+      return focusTarget;
+    },
     get cancelled() {
       return cancelled;
     },
@@ -166,4 +202,58 @@ test("scroll locks and focus are restored exactly after modal closes", () => {
   assert.equal(h.main.style.scrollbarGutter, "stable");
   assert.equal(h.body.style.overflow, "auto");
   assert.equal(h.restoredFocus, true);
+});
+
+test("disconnected opener restores focus to a persistent control", () => {
+  const h = render(undefined, { openerConnected: false });
+  const cleanup = h.effects[0]();
+  cleanup();
+  assert.equal(h.focusTarget, h.trigger);
+});
+
+test("connected opener keeps the original focus restoration", () => {
+  const h = render();
+  h.effects[0]()();
+  assert.equal(h.focusTarget, h.opener);
+});
+
+test("holding a pointer at the edge keeps scrolling until release, cancel or unmount", () => {
+  const h = render();
+  const cleanup = h.effects[0]();
+  const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+  const down = {
+    pointerType: "touch",
+    pointerId: 1,
+    clientY: 290,
+    currentTarget: { setPointerCapture() {} },
+  };
+  handle.props.onPointerDown(down);
+  h.runFrame();
+  assert.equal(h.viewport.scrollTop, 24);
+  h.runFrame();
+  assert.equal(h.viewport.scrollTop, 48);
+  handle.props.onPointerUp();
+  assert.equal(h.frames.size, 0);
+  handle.props.onPointerDown(down);
+  handle.props.onPointerCancel();
+  assert.equal(h.frames.size, 0);
+  handle.props.onPointerDown(down);
+  cleanup();
+  assert.equal(h.frames.size, 0);
+});
+
+test("native drag auto-scroll also stops after drop and dragend", () => {
+  const h = render();
+  const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+  const event = { clientY: 290, dataTransfer: { setData() {} } };
+  handle.props.onDragStart(event);
+  h.runFrame();
+  assert.equal(h.viewport.scrollTop, 24);
+  handle.props.onDragEnd();
+  assert.equal(h.frames.size, 0);
+  handle.props.onDragStart(event);
+  h.nodes
+    .find((n) => n.props["data-order-id"] === "C")
+    .props.onDrop({ preventDefault() {} });
+  assert.equal(h.frames.size, 0);
 });
