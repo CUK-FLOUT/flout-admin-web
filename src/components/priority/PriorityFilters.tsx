@@ -32,7 +32,7 @@ export default function PriorityFilters({
         className={`${control} w-[176px]`}
       >
         <option value="">지역 전체</option>
-        {["중동", "상동", "원미동"].map((s) => (
+        {["원미구", "소사구", "오정구"].map((s) => (
           <option key={s}>{s}</option>
         ))}
       </select>
@@ -54,7 +54,7 @@ export default function PriorityFilters({
         className={`${control} w-[192px]`}
       >
         <option value="">처리 상태 전체</option>
-        {["접수", "배정 대기", "배정 완료"].map((s) => (
+        {["지정", "미지정"].map((s) => (
           <option key={s}>{s}</option>
         ))}
       </select>
@@ -68,6 +68,7 @@ export default function PriorityFilters({
         />
         <input
           name="q"
+          maxLength={255}
           aria-label="주소 또는 접수번호"
           defaultValue={params.get("q") || ""}
           placeholder="주소·접수번호 검색"
