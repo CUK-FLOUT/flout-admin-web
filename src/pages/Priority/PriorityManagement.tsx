@@ -6,7 +6,11 @@ import PriorityFilters from "../../components/priority/PriorityFilters";
 import PriorityList from "../../components/priority/PriorityList";
 import PriorityModals from "../../components/priority/PriorityModals";
 import { priorityStorageKey, readPrioritySnapshot } from "./mockData";
-import { changePosition, orderApplications } from "./priorityUtils";
+import {
+  changePosition,
+  normalizePriorityOrder,
+  orderApplications,
+} from "./priorityUtils";
 import type { PriorityApplication } from "./mockData";
 
 export default function PriorityManagement() {
@@ -52,10 +56,7 @@ export default function PriorityManagement() {
   const eligible = snapshot.applications.filter(
     (a) => a.designated && !a.assigned,
   );
-  const modalOrder = [
-    ...draftOrder.filter((id) => eligible.some((a) => a.id === id)),
-    ...eligible.filter((a) => !draftOrder.includes(a.id)).map((a) => a.id),
-  ];
+  const modalOrder = normalizePriorityOrder(draftOrder, eligible);
 
   const filterKey = [
     params.get("district"),
@@ -111,8 +112,14 @@ export default function PriorityManagement() {
   }
 
   function beginOrder() {
-    setDraftOrder(snapshot.order);
-    patch({ mode: "order" });
+    setDraftOrder(normalizePriorityOrder(snapshot.order, eligible));
+    patch({ dialog: "reorder" });
+  }
+
+  function moveOrder(id: string, delta: number) {
+    setDraftOrder((order) =>
+      changePosition(normalizePriorityOrder(order, eligible), id, delta),
+    );
   }
 
   function saveOrder() {
@@ -135,7 +142,7 @@ export default function PriorityManagement() {
   function dropOn(target: string) {
     if (!dragId || dragId === target || !modalOrder.includes(target)) return;
     setDraftOrder((order) => {
-      const next = [...order];
+      const next = normalizePriorityOrder(order, eligible);
       const from = next.indexOf(dragId),
         to = next.indexOf(target);
 
@@ -171,10 +178,8 @@ export default function PriorityManagement() {
           onDropOn={dropOn}
           onDragStart={setDragId}
           onDragEnd={() => setDragId(null)}
-          onOpenReorder={() => patch({ dialog: "reorder" })}
-          onMove={(id, delta) =>
-            setDraftOrder((order) => changePosition(order, id, delta))
-          }
+          onOpenReorder={beginOrder}
+          onMove={moveOrder}
           onReset={reset}
         />
         <PriorityDetail
@@ -199,9 +204,7 @@ export default function PriorityManagement() {
         onClose={() => patch({ dialog: null })}
         onDesignate={designate}
         onSaveOrder={saveOrder}
-        onMove={(id, delta) =>
-          setDraftOrder((order) => changePosition(order, id, delta))
-        }
+        onMove={moveOrder}
         onCancelReorder={() => {
           setDraftOrder(snapshot.order);
           patch({ dialog: null, mode: null });

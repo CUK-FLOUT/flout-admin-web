@@ -164,6 +164,7 @@ export default function PriorityDetail({
         </button>
         <button
           type="button"
+          data-priority-order-trigger
           onClick={onOrder}
           className={`flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-[#234f73] bg-white px-4 hover:bg-[#eef3f7] ${ordering ? "h-[43px]" : "h-10"}`}
         >

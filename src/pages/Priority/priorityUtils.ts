@@ -1,5 +1,14 @@
 import type { PriorityApplication } from "./mockData";
 
+export function normalizePriorityOrder(
+  order: string[],
+  eligible: Pick<PriorityApplication, "id">[],
+) {
+  const ids = new Set(eligible.map(({ id }) => id));
+
+  return [...new Set([...order.filter((id) => ids.has(id)), ...ids])];
+}
+
 export function changePosition(order: string[], id: string, delta: number) {
   const from = order.indexOf(id);
   const to = from + delta;
