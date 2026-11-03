@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:auth": "node --test tests/auth.test.mjs",
     "test:photo": "node --experimental-strip-types --test tests/photoStorage.test.mjs",
     "test:priority": "node --experimental-strip-types --test tests/priorityUtils.test.mjs"
   },

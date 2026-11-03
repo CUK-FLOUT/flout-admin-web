@@ -5,6 +5,7 @@ import PriorityManagement from "./pages/Priority/PriorityManagement";
 import GisApplications from "./pages/GIS/GisApplications";
 import AdminLayout from "./components/layout/AdminLayout";
 import AdminLogin from "./pages/Auth/AdminLogin";
+import RequireAdmin from "./auth/RequireAdmin";
 import SupportManagement from "./pages/Support/SupportManagement";
 import SupportReview from "./pages/Support/SupportReview";
 import ConstructionManagement from "./pages/Construction/ConstructionManagement";
@@ -18,43 +19,48 @@ function App() {
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/signup" element={<Navigate to="/login" replace />} />
 
-        <Route element={<AdminLayout />}>
-          <Route path="/" element={<Navigate to="/gis" replace />} />
-          <Route path="/gis" element={<GisApplications />} />
-          <Route path="/gis/:requestId" element={<GisApplications />} />
+        <Route element={<RequireAdmin />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/" element={<Navigate to="/gis" replace />} />
+            <Route path="/gis" element={<GisApplications />} />
+            <Route path="/gis/:requestId" element={<GisApplications />} />
 
-          <Route path="/priority" element={<PriorityManagement />} />
-          <Route path="/priority/:requestId" element={<PriorityManagement />} />
+            <Route path="/priority" element={<PriorityManagement />} />
+            <Route
+              path="/priority/:requestId"
+              element={<PriorityManagement />}
+            />
 
-          <Route
-            path="/infrastructure"
-            element={<InfrastructureManagement />}
-          />
-          <Route
-            path="/infrastructure/:issueId/review"
-            element={<InfrastructureReview />}
-          />
+            <Route
+              path="/infrastructure"
+              element={<InfrastructureManagement />}
+            />
+            <Route
+              path="/infrastructure/:issueId/review"
+              element={<InfrastructureReview />}
+            />
 
-          <Route path="/inspection" element={<InspectionManagement />} />
-          <Route
-            path="/inspection/:requestId"
-            element={<InspectionManagement />}
-          />
-          <Route
-            path="/inspection/:requestId/results"
-            element={<InspectionResults />}
-          />
-          <Route path="/support" element={<SupportManagement />} />
-          <Route path="/support/:requestId" element={<SupportManagement />} />
-          <Route
-            path="/support/:requestId/review"
-            element={<SupportReview />}
-          />
-          <Route path="/construction" element={<ConstructionManagement />} />
-          <Route
-            path="/construction/:requestId"
-            element={<ConstructionManagement />}
-          />
+            <Route path="/inspection" element={<InspectionManagement />} />
+            <Route
+              path="/inspection/:requestId"
+              element={<InspectionManagement />}
+            />
+            <Route
+              path="/inspection/:requestId/results"
+              element={<InspectionResults />}
+            />
+            <Route path="/support" element={<SupportManagement />} />
+            <Route path="/support/:requestId" element={<SupportManagement />} />
+            <Route
+              path="/support/:requestId/review"
+              element={<SupportReview />}
+            />
+            <Route path="/construction" element={<ConstructionManagement />} />
+            <Route
+              path="/construction/:requestId"
+              element={<ConstructionManagement />}
+            />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

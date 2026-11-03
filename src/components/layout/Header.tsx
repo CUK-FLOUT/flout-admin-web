@@ -1,6 +1,59 @@
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getAdminProfile } from "../../api/admin";
+import type { AdminProfile } from "../../api/admin";
+import {
+  getSession,
+  getSessionGeneration,
+  subscribeSession,
+} from "../../auth/session";
 import profile from "../../assets/layout/profile.png";
 
 export default function Header() {
+  const session = useSyncExternalStore(
+    subscribeSession,
+    getSession,
+    () => null,
+  );
+  const generation = getSessionGeneration();
+  const [account, setAccount] = useState<{
+    generation: number;
+    profile?: AdminProfile;
+    error?: string;
+  } | null>(null);
+  const currentAccount = account?.generation === generation ? account : null;
+
+  useEffect(() => {
+    let active = true;
+
+    if (session) {
+      void getAdminProfile().then(
+        (profile) => {
+          if (active) setAccount({ generation, profile });
+        },
+        (error: unknown) => {
+          if (active)
+            setAccount({
+              generation,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "계정 정보를 확인하지 못했습니다.",
+            });
+        },
+      );
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [generation, session]);
+
+  const jurisdiction = currentAccount?.profile
+    ? (currentAccount.profile.jurisdiction ?? "미지정")
+    : currentAccount?.error
+      ? "확인 불가"
+      : "확인 중";
+
   const date = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Seoul",
     year: "numeric",
@@ -17,7 +70,7 @@ export default function Header() {
         className="h-4 w-px bg-[#f4f5f6] max-sm:hidden"
       />
 
-      <span>관할 부천시</span>
+      <span title={currentAccount?.error}>관할 {jurisdiction}</span>
 
       <span aria-hidden="true" className="h-4 w-px bg-[#f4f5f6]" />
 
@@ -25,7 +78,7 @@ export default function Header() {
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f5f6]">
           <img src={profile} alt="" width={24} height={24} />
         </span>
-        고담당
+        {currentAccount?.profile?.name ?? session?.name ?? "운영자"}
       </span>
     </header>
   );
