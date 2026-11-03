@@ -162,7 +162,8 @@ export default function InspectionResultForm({ editor }: Props) {
               {content.route === "지역·공공" && !readOnly && (
                 <button
                   type="button"
-                  onClick={() => setDialog("region")}
+                  disabled
+                    title="지역·공공문제 등록 API 연결 준비 중"
                   className={`${resultPrimary} w-[176px]`}
                 >
                   지역 문제 등록

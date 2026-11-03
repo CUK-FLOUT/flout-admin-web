@@ -12,6 +12,11 @@ const badgeStyles = {
 
 type Props = {
   filtered: InspectionApplication[];
+  total: number;
+  page: number;
+  totalPages: number;
+  loading: boolean;
+  onPage: (page: number) => void;
   selectedId?: string;
   searchEmpty: boolean;
   onSelect: (id: string) => void;
@@ -21,6 +26,11 @@ type Props = {
 
 export default function InspectionList({
   filtered,
+  total,
+  page,
+  totalPages,
+  loading,
+  onPage,
   selectedId,
   searchEmpty,
   onSelect,
@@ -36,7 +46,7 @@ export default function InspectionList({
       <div className="flex h-[58px] shrink-0 items-center justify-between px-4">
         <h2 className="text-lg font-bold leading-7">점검 신청 목록</h2>
         <span className="text-[13px] leading-[22px]" aria-live="polite">
-          총 {filtered.length}건
+          총 {total}건
         </span>
       </div>
       <div
@@ -50,10 +60,7 @@ export default function InspectionList({
         >
           <colgroup>
             {[56, 194, 110, 160, 100, 138.5].map((width, index) => (
-              <col
-                key={index}
-                style={{ width: `${(width / 758.5) * 100}%` }}
-              />
+              <col key={index} style={{ width: `${(width / 758.5) * 100}%` }} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-white">
@@ -67,11 +74,7 @@ export default function InspectionList({
                 "상태",
               ].map((text, index) => (
                 <th scope="col" key={text}>
-                  {index === 0 ? (
-                    <span className="sr-only">{text}</span>
-                  ) : (
-                    text
-                  )}
+                  {index === 0 ? <span className="sr-only">{text}</span> : text}
                 </th>
               ))}
             </tr>
@@ -79,9 +82,9 @@ export default function InspectionList({
           <tbody>
             {filtered.map((a) => (
               <tr
-                key={a.id}
+                key={a.inspectionId}
                 className={
-                  a.id === selectedId
+                  String(a.inspectionId) === selectedId
                     ? "bg-[#f4f5f6]"
                     : "bg-white hover:bg-[#eef3f7]"
                 }
@@ -90,10 +93,10 @@ export default function InspectionList({
                   <input
                     type="checkbox"
                     aria-label={`${a.id} 신청 선택`}
-                    checked={a.id === selectedId}
+                    checked={String(a.inspectionId) === selectedId}
                     onChange={() => {
-                      if (a.id === selectedId) onDeselect();
-                      else onSelect(a.id);
+                      if (String(a.inspectionId) === selectedId) onDeselect();
+                      else onSelect(String(a.inspectionId));
                     }}
                     className={`${inspectionCheckbox} mx-auto`}
                   />
@@ -101,8 +104,8 @@ export default function InspectionList({
                 <td>
                   <button
                     type="button"
-                    onClick={() => onSelect(a.id)}
-                    className={`flex h-[41px] w-full items-center justify-center ${a.id === selectedId ? "font-bold" : "font-normal"}`}
+                    onClick={() => onSelect(String(a.inspectionId))}
+                    className={`flex h-[41px] w-full items-center justify-center ${String(a.inspectionId) === selectedId ? "font-bold" : "font-normal"}`}
                   >
                     {a.id} · {a.address}
                   </button>
@@ -135,18 +138,19 @@ export default function InspectionList({
             ))}
           </tbody>
         </table>
-        {!filtered.length && (
+        {!loading && !filtered.length && (
           <InspectionEmptyContent search={searchEmpty} onReset={onReset} />
         )}
       </div>
-      {!!filtered.length && (
+      {total > 0 && (
         <nav
           aria-label="목록 페이지"
           className="flex h-[61.5px] shrink-0 items-center justify-center gap-2"
         >
           <button
             type="button"
-            disabled
+            disabled={page <= 0 || loading}
+            onClick={() => onPage(page - 1)}
             aria-label="이전 페이지"
             className="size-[34px] rounded-md border border-[#c8d0d7] text-xs disabled:text-[#64748b]"
           >
@@ -157,11 +161,12 @@ export default function InspectionList({
             aria-current="page"
             className="size-[34px] rounded-md bg-[#234f73] text-xs font-bold text-white"
           >
-            1
+            {page + 1}
           </button>
           <button
             type="button"
-            disabled
+            disabled={page + 1 >= totalPages || loading}
+            onClick={() => onPage(page + 1)}
             aria-label="다음 페이지"
             className="size-[34px] rounded-md border border-[#c8d0d7] text-xs disabled:text-[#64748b]"
           >

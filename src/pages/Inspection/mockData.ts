@@ -4,6 +4,9 @@ export type InspectionStatus = "대기" | "예정" | "진행" | "완료";
 export type EditableStatus = Exclude<InspectionStatus, "대기">;
 export type InspectionApplication = {
   id: string;
+  inspectionId?: number;
+  applicationId?: number;
+  inspectorUserId?: number | null;
   resident: string;
   address: string;
   district: string;

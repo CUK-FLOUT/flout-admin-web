@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssignmentPanel from "../../components/inspection/AssignmentPanel";
@@ -8,75 +8,53 @@ import InspectionList from "../../components/inspection/InspectionList";
 import InspectionStatusTabs from "../../components/inspection/InspectionStatusTabs";
 import InspectionDialog from "../../components/inspection/InspectionDialog";
 import type { InspectionDialogState } from "../../components/inspection/InspectionDialog";
-import {
-  inspectionStatuses,
-  inspectionStorageKey,
-  readInspections,
-} from "./mockData";
+import { inspectionStatuses } from "./mockData";
 import type { EditableStatus, InspectionApplication } from "./mockData";
-import { priorityStorageKey, readPrioritySnapshot } from "../Priority/mockData";
 import {
   inspectionFocus,
   inspectionPanel,
 } from "../../components/inspection/styles";
+import {
+  assignInspection,
+  changeInspectionStatus,
+  getInspections,
+  inspectionError,
+} from "../../api/inspections";
+import type { InspectionPage } from "../../api/inspections";
+import { loadInspection } from "./loadInspection";
+import { apiStatuses, inspectionRow, inspectionSearch } from "./apiModel";
 
 export default function InspectionManagement() {
   const navigate = useNavigate();
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
-  const [applications, setApplications] = useState(readInspections);
+  const [pageData, setPageData] = useState<InspectionPage | null>(null);
+  const [selected, setSelected] = useState<InspectionApplication>();
   const [storageError, setStorageError] = useState("");
-  const [priorityOverrides] = useState(() => {
-    try {
-      return localStorage.getItem(priorityStorageKey)
-        ? readPrioritySnapshot().applications
-        : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const source =
-    params.get("dataset") === "empty"
-      ? []
-      : applications.map((a) => ({
-          ...a,
-          priority:
-            priorityOverrides.find(
-              (p) => p.id === a.id && p.address === a.address,
-            )?.designated ?? a.priority,
-        }));
-
-  const stage = ["전체", "배정 대기", ...inspectionStatuses].includes(
-    params.get("stage") || "",
-  )
-    ? params.get("stage")!
-    : "전체";
-
-  const filtered = source.filter(
-    (a) =>
-      (stage === "전체" ||
-        a.status === (stage === "배정 대기" ? "대기" : stage)) &&
-      (!params.get("district") || a.district === params.get("district")) &&
-      (!params.get("assignee") || a.assignee === params.get("assignee")) &&
-      (!params.get("visit") ||
-        (params.get("visit") === "미입력"
-          ? !a.requestedDate
-          : a.requestedDate === params.get("visit"))) &&
-      (!params.get("q") ||
-        `${a.id} ${a.address}`.includes(params.get("q")!.trim())),
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
+  const [revision, setRevision] = useState(0);
+  const [inspectors, setInspectors] = useState<{ id: number; name: string }[]>(
+    [],
   );
-
+  const assignments = useRef(new Map<number, Partial<InspectionApplication>>());
+  const searchQuery = JSON.stringify(inspectionSearch(params));
   const selectedId =
     params.get("selected") === "none"
-      ? "none"
-      : requestId || params.get("selected");
-  const selected =
-    selectedId && selectedId !== "none"
-      ? filtered.find((a) => a.id === selectedId)
-      : undefined;
-
-  const searchEmpty = source.length > 0 && filtered.length === 0;
+      ? undefined
+      : requestId || params.get("selected") || undefined;
+  const stage = params.get("stage") || "전체";
+  const filtered = (pageData?.inspections || []).map(inspectionRow);
+  const searchEmpty =
+    filtered.length === 0 &&
+    Boolean(
+      params.get("stage") ||
+      params.get("district") ||
+      params.get("assignee") ||
+      params.get("visit") ||
+      params.get("q"),
+    );
   const kind = params.get("dialog");
   const modal = ["confirm", "status-saved", "assignment-saved"].includes(
     kind || "",
@@ -88,7 +66,6 @@ export default function InspectionManagement() {
   )
     ? (params.get("target") as EditableStatus)
     : "예정";
-
   const filterKey = [
     params.get("district"),
     params.get("assignee"),
@@ -97,17 +74,86 @@ export default function InspectionManagement() {
   ].join("|");
 
   useEffect(() => {
-    const update = (event: StorageEvent) => {
-      if (event.key === inspectionStorageKey || event.key === null)
-        setApplications(readInspections());
-    };
+    const controller = new AbortController();
 
-    window.addEventListener("storage", update);
+    async function load() {
+      setLoading(true);
+      setStorageError("");
+      setPageData(null);
+      setSelected(undefined);
+      try {
+        const page = await getInspections(
+          JSON.parse(searchQuery),
+          controller.signal,
+        );
 
-    return () => window.removeEventListener("storage", update);
-  }, []);
+        if (controller.signal.aborted) return;
+        setPageData(page);
+        if (selectedId && /^[1-9]\d*$/.test(selectedId)) {
+          const item = page.inspections.find(
+            (row) => row.inspectionId === Number(selectedId),
+          );
+          const detail = await loadInspection(
+            Number(selectedId),
+            controller.signal,
+            item,
+          );
+
+          if (controller.signal.aborted) return;
+          setSelected({
+            ...detail,
+            ...assignments.current.get(detail.inspectionId!),
+          });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setStorageError(inspectionError(error));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+
+    void load();
+
+    return () => controller.abort();
+  }, [searchQuery, selectedId, revision]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadInspectors() {
+      const names = new Map<number, string>();
+      let page = 0;
+      let totalPages = 1;
+
+      try {
+        while (page < totalPages) {
+          const response = await getInspections(
+            { status: "ALL", page, size: 100 },
+            controller.signal,
+          );
+
+          if (controller.signal.aborted) return;
+          response.inspections.forEach((item) => {
+            if (item.inspectorUserId != null && item.inspectorName)
+              names.set(item.inspectorUserId, item.inspectorName);
+          });
+          totalPages = response.totalPages;
+          page++;
+        }
+
+        setInspectors([...names].map(([id, name]) => ({ id, name })));
+      } catch (error) {
+        if (!controller.signal.aborted) setStorageError(inspectionError(error));
+      }
+    }
+
+    void loadInspectors();
+
+    return () => controller.abort();
+  }, [revision]);
 
   function changeParams(values: Record<string, string | null>) {
+    if (saving.current) return;
     const next = new URLSearchParams(params);
 
     Object.entries(values).forEach(([key, value]) =>
@@ -117,14 +163,13 @@ export default function InspectionManagement() {
   }
 
   function reset() {
-    const next = new URLSearchParams();
-
-    if (params.get("dataset") === "empty") next.set("dataset", "empty");
-    navigate(`/inspection${next.size ? `?${next}` : ""}`);
+    if (saving.current) return;
+    navigate("/inspection");
   }
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving.current) return;
     const data = new FormData(event.currentTarget);
     const next = new URLSearchParams(params);
 
@@ -134,57 +179,99 @@ export default function InspectionManagement() {
       if (value) next.set(key, value);
       else next.delete(key);
     });
-    ["selected", "dialog", "target"].forEach((key) => next.delete(key));
+    ["selected", "dialog", "target", "page"].forEach((key) => next.delete(key));
     navigate(`/inspection?${next}`);
   }
 
   function select(id: string) {
+    if (saving.current) return;
     const next = new URLSearchParams(params);
 
     ["selected", "dialog", "target"].forEach((key) => next.delete(key));
-    navigate(`/inspection/${id}${next.size ? `?${next}` : ""}`);
+    navigate(`/inspection/${id}?${next}`);
   }
 
-  function save(
+  async function save(
     application: InspectionApplication,
     dialog: InspectionDialogState,
   ) {
-    const next = applications.map((a) =>
-      a.id === application.id ? application : a,
-    );
-
+    if (saving.current || !application.inspectionId) return false;
+    saving.current = true;
+    setBusy(true);
+    setStorageError("");
     try {
-      localStorage.setItem(inspectionStorageKey, JSON.stringify(next));
-      setApplications(next);
-      setStorageError("");
+      let saved = application;
 
+      if (dialog === "assignment-saved") {
+        const response = await assignInspection(application.inspectionId, {
+          visitDate: application.visitDate,
+          visitTime: application.visitTime,
+          preVisitNotice: application.notice,
+        });
+
+        saved = {
+          ...application,
+          assignee: response.inspectorName,
+          inspectorUserId: response.inspectorId,
+          visitDate: response.visitDate,
+          visitTime: response.visitTime,
+          notice: response.preVisitNotice,
+          status: "예정",
+        };
+        assignments.current.set(application.inspectionId, {
+          assignee: saved.assignee,
+          inspectorUserId: saved.inspectorUserId,
+          visitDate: saved.visitDate,
+          visitTime: saved.visitTime,
+          notice: saved.notice,
+        });
+      } else {
+        await changeInspectionStatus(
+          application.inspectionId,
+          apiStatuses[application.status as EditableStatus],
+        );
+      }
+
+      setSelected(saved);
       const query = new URLSearchParams(params);
 
-      ["stage", "district", "assignee", "visit", "q", "selected"].forEach(
-        (key) => query.delete(key),
-      );
+      [
+        "stage",
+        "district",
+        "assignee",
+        "visit",
+        "q",
+        "selected",
+        "page",
+      ].forEach((key) => query.delete(key));
       query.set("dialog", dialog);
-      query.set(
-        "target",
-        application.status === "대기" ? "예정" : application.status,
-      );
-      navigate(`/inspection/${application.id}?${query}`);
+      query.set("target", saved.status === "대기" ? "예정" : saved.status);
+      navigate(`/inspection/${application.inspectionId}?${query}`);
+      setRevision((value) => value + 1);
 
       return true;
-    } catch {
-      setStorageError(
-        "브라우저 저장 공간에 저장하지 못했습니다. 저장 공간과 브라우저 설정을 확인해 주세요.",
-      );
-      changeParams({ dialog: null, target: null });
+    } catch (error) {
+      setStorageError(inspectionError(error));
+      const query = new URLSearchParams(params);
+
+      query.delete("dialog");
+      query.delete("target");
+      setParams(query);
 
       return false;
+    } finally {
+      saving.current = false;
+      setBusy(false);
     }
   }
 
   function switchTab(tab: string) {
+    if (saving.current) return;
     const query = new URLSearchParams(params);
 
-    ["selected", "dialog", "target"].forEach((key) => query.delete(key));
+    ["selected", "dialog", "target", "page"].forEach((key) =>
+      query.delete(key),
+    );
     if (tab === "전체") query.delete("stage");
     else query.set("stage", tab);
     navigate(`/inspection?${query}`);
@@ -208,7 +295,7 @@ export default function InspectionManagement() {
       <InspectionFilters
         filterKey={filterKey}
         params={params}
-        applications={applications}
+        inspectors={inspectors}
         onSearch={search}
         onReset={reset}
       />
@@ -219,10 +306,28 @@ export default function InspectionManagement() {
         </p>
       )}
 
-      <div className="grid grid-cols-[minmax(0,760fr)_minmax(0,406fr)] gap-4 max-[1101px]:grid-cols-[minmax(0,1fr)]">
+      {storageError && (
+        <button type="button" onClick={() => setRevision((value) => value + 1)}>
+          다시 시도
+        </button>
+      )}
+      {loading && <p role="status">현장점검 정보를 불러오는 중…</p>}
+      <div
+        aria-busy={loading || busy}
+        className="grid grid-cols-[minmax(0,760fr)_minmax(0,406fr)] gap-4 max-[1101px]:grid-cols-[minmax(0,1fr)]"
+      >
         <InspectionList
           filtered={filtered}
-          selectedId={selected?.id}
+          selectedId={
+            selected?.inspectionId ? String(selected.inspectionId) : undefined
+          }
+          total={pageData?.totalElements || 0}
+          page={pageData?.page || 0}
+          totalPages={pageData?.totalPages || 0}
+          loading={loading || !!storageError}
+          onPage={(page) =>
+            changeParams({ page: String(page), selected: "none" })
+          }
           searchEmpty={searchEmpty}
           onSelect={select}
           onDeselect={() => changeParams({ selected: "none" })}
@@ -232,6 +337,7 @@ export default function InspectionManagement() {
           <AssignmentPanel
             key={`${selected.id}:${selected.assignee}:${selected.visitDate}:${selected.visitTime}:${selected.status}:${selected.notice}:${selected.notifyResident}`}
             application={selected}
+            busy={busy}
             onSave={save}
             onStatus={(status) =>
               changeParams({ dialog: "confirm", target: status })
@@ -253,30 +359,19 @@ export default function InspectionManagement() {
           </section>
         )}
       </div>
-      {selected &&
-        modal &&
-        (modal !== "confirm" ||
-          (selected.assignee !== "미배정" &&
-            selected.visitDate &&
-            selected.visitTime)) && (
-          <InspectionDialog
-            key={modal}
-            kind={modal}
-            application={selected}
-            targetStatus={targetStatus}
-            onClose={closeDialog}
-            onConfirm={() => {
-              if (
-                selected.assignee === "미배정" ||
-                !selected.visitDate ||
-                !selected.visitTime ||
-                (targetStatus === "완료" && !selected.resultPublished)
-              )
-                return;
-              save({ ...selected, status: targetStatus }, "status-saved");
-            }}
-          />
-        )}
+      {selected && modal && (
+        <InspectionDialog
+          key={modal}
+          kind={modal}
+          application={selected}
+          targetStatus={targetStatus}
+          busy={busy}
+          onClose={closeDialog}
+          onConfirm={() => {
+            void save({ ...selected, status: targetStatus }, "status-saved");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ type Props = {
   kind: InspectionDialogState;
   application: InspectionApplication;
   targetStatus: EditableStatus;
+  busy: boolean;
   onClose: () => void;
   onConfirm: () => void;
 };
@@ -49,10 +50,10 @@ export default function InspectionDialog({
   targetStatus,
   onClose,
   onConfirm,
+  busy,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
-  const blocked =
-    kind === "confirm" && targetStatus === "완료" && !a.resultPublished;
+  const blocked = busy;
   const confirmation = kind === "confirm";
   const assignment = kind === "assignment-saved";
   const title = confirmation
@@ -83,7 +84,7 @@ export default function InspectionDialog({
       aria-describedby="inspection-dialog-description"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!busy) onClose();
       }}
       onClick={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -95,7 +96,7 @@ export default function InspectionDialog({
           event.clientY < box.top ||
           event.clientY > box.bottom
         )
-          onClose();
+          if (!busy) onClose();
       }}
       className={`font-[family-name:Inter,Pretendard,sans-serif] w-[calc(100vw_-_32px)] ${confirmation ? "max-w-[580px]" : assignment ? "max-w-[480px]" : "max-w-[520px]"} ${inspectionFocus} fixed inset-0 m-auto max-h-[calc(100dvh-32px)] overflow-y-auto border border-[#c8d0d7] bg-white p-[23px] text-[#202b36] backdrop:bg-black/30 ${confirmation ? "rounded-xl" : "rounded-lg"}`}
     >
@@ -112,7 +113,7 @@ export default function InspectionDialog({
             className="text-sm leading-[21px]"
           >
             {assignment
-              ? "주민과 협의한 방문 일정입니다. 신청 상세·방문 준비사항과 일정 확정 알림에 반영됩니다."
+              ? "점검 담당자와 확정 방문 일정이 저장되었습니다. 알림은 발송되지 않습니다."
               : targetStatus === "완료"
                 ? "현장점검이 끝났다면 점검상태를 등록해주세요"
                 : "주민 신청 상세에도 동일한 점검 상태를 표시합니다."}
@@ -129,7 +130,9 @@ export default function InspectionDialog({
           {confirmation ? (
             <>
               <Row confirmation={confirmation} label="확정 방문">
-                {formatDate(a.visitDate)} · {a.visitTime} · {a.assignee}
+                {a.visitDate && a.visitTime
+                  ? `${formatDate(a.visitDate)} · ${a.visitTime} · ${a.assignee}`
+                  : "확정 일정은 서버에서 확인합니다."}
               </Row>
               <Row confirmation={confirmation} label="변경 상태">
                 {targetStatus}
@@ -162,14 +165,15 @@ export default function InspectionDialog({
             className={`text-sm leading-[21px] text-[#64748b] ${blocked ? "min-h-[42px]" : ""}`}
           >
             {blocked
-              ? `점검 결과 등록·공개 후 완료 상태로 저장됩니다. ${a.id}은 결과가 없어 완료 저장할 수 없습니다.`
-              : "담당자·확정 일정이 등록된 신청의 상태를 변경합니다."}
+              ? "점검 상태를 저장하는 중입니다."
+              : "예정 → 진행 → 완료 순서로 변경합니다. 결과 공개는 완료 저장 후 진행해 주세요."}
           </p>
         )}
         {confirmation ? (
           <div className="flex gap-2">
             <button
               type="button"
+              disabled={busy}
               onClick={onClose}
               className="h-10 flex-1 rounded-md border border-[#c8d0d7] bg-white px-4 text-sm font-bold"
             >
@@ -181,7 +185,7 @@ export default function InspectionDialog({
               onClick={onConfirm}
               className="h-10 flex-1 rounded-md bg-[#234f73] px-4 text-sm font-bold text-white disabled:border disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]"
             >
-              {blocked ? "점검 결과 등록 필요" : "점검 상태 저장"}
+              {busy ? "저장 중…" : "점검 상태 저장"}
             </button>
           </div>
         ) : (
