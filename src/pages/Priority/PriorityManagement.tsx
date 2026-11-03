@@ -112,7 +112,7 @@ export default function PriorityManagement() {
 
   function beginOrder() {
     setDraftOrder(snapshot.order);
-    patch({ mode: "order" });
+    patch({ dialog: "reorder" });
   }
 
   function saveOrder() {
@@ -171,7 +171,7 @@ export default function PriorityManagement() {
           onDropOn={dropOn}
           onDragStart={setDragId}
           onDragEnd={() => setDragId(null)}
-          onOpenReorder={() => patch({ dialog: "reorder" })}
+          onOpenReorder={beginOrder}
           onMove={(id, delta) =>
             setDraftOrder((order) => changePosition(order, id, delta))
           }
