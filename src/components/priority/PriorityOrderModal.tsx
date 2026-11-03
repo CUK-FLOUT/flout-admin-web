@@ -14,6 +14,11 @@ const riskDots = { 높음: highDot, 주의: warningDot, 낮음: lowDot };
 
 type Props = {
   applications: PriorityApplication[];
+  busy?: boolean;
+  loading?: boolean;
+  ready?: boolean;
+  error?: string;
+  onRetry?: () => void;
   order: string[];
   onMove: (id: string, delta: number) => void;
   onCancel: () => void;
@@ -22,6 +27,11 @@ type Props = {
 
 export default function PriorityOrderModal({
   applications,
+  busy = false,
+  loading = false,
+  ready = true,
+  error = "",
+  onRetry,
   order,
   onMove,
   onCancel,
@@ -101,6 +111,7 @@ export default function PriorityOrderModal({
   }, []);
 
   function moveTo(id: string, targetId: string) {
+    if (busy) return;
     const from = order.indexOf(id);
     const to = order.indexOf(targetId);
 
@@ -158,7 +169,7 @@ export default function PriorityOrderModal({
       aria-describedby="priority-order-description"
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+        if (!busy) onCancel();
       }}
       onClick={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -170,7 +181,7 @@ export default function PriorityOrderModal({
           event.clientY < bounds.top ||
           event.clientY > bounds.bottom
         )
-          onCancel();
+          if (!busy) onCancel();
       }}
       className="fixed inset-0 m-auto h-[470px] max-h-[calc(100dvh_-_32px)] w-[calc(100vw_-_32px)] max-w-[900px] overflow-y-auto rounded-xl border-0 bg-white px-7 pb-6 pt-7 font-[family-name:Pretendard,sans-serif] text-[#202b36] shadow-none backdrop:bg-black/[.36] open:flex open:flex-col open:gap-5 [&_button]:cursor-pointer [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[#234f73]"
     >
@@ -185,6 +196,7 @@ export default function PriorityOrderModal({
           type="button"
           aria-label="선정 순서 변경 닫기"
           onClick={onCancel}
+          disabled={busy}
           className="flex h-6 w-7 shrink-0 items-center justify-center text-[28px] font-medium leading-[22px]"
         >
           ×
@@ -197,7 +209,16 @@ export default function PriorityOrderModal({
         지정된 신청을 드래그해 점검 우선순서를 변경해주세요.
       </p>
       <p className="min-h-6 shrink-0 text-sm font-medium leading-[22px]">
-        우선점검 지정 대상 {rows.length}건
+        {busy || loading
+          ? "처리 중입니다."
+          : `우선점검 지정 대상 ${rows.length}건`}
+        {error && <span role="alert"> · {error}</span>}
+        {!ready && !busy && !loading && (
+          <button type="button" onClick={onRetry}>
+            {" "}
+            전체 대상 다시 조회
+          </button>
+        )}
       </p>
       <p className="sr-only" id="priority-order-keyboard">
         정렬 버튼에 초점을 맞춘 뒤 위아래 방향키로 순서를 변경할 수 있습니다.
@@ -345,6 +366,7 @@ export default function PriorityOrderModal({
         <button
           type="button"
           onClick={onCancel}
+          disabled={busy}
           className="h-[46px] w-[100px] rounded-md border border-[#c8d0d7] bg-white text-[15px] font-medium leading-[21px] tracking-[-.09px]"
         >
           취소
@@ -352,7 +374,7 @@ export default function PriorityOrderModal({
         <button
           type="button"
           onClick={onSave}
-          disabled={!rows.length}
+          disabled={busy || loading || !ready || !rows.length}
           className="h-[46px] w-40 rounded-[6.364px] bg-[#234f73] text-[15px] font-medium leading-[21px] tracking-[-.09px] text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           선정 순서 저장

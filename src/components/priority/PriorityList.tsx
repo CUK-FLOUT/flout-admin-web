@@ -15,6 +15,11 @@ const riskDots = { 높음: highDot, 주의: warningDot, 낮음: lowDot };
 
 type Props = {
   filtered: PriorityApplication[];
+  loading?: boolean;
+  total?: number;
+  page?: number;
+  totalPages?: number;
+  onPage?: (page: number) => void;
   selectedId?: string;
   ordering: boolean;
   searchEmpty: boolean;
@@ -29,6 +34,11 @@ type Props = {
 
 export default function PriorityList({
   filtered,
+  loading = false,
+  total = filtered.length,
+  page = 0,
+  totalPages = 1,
+  onPage,
   selectedId,
   ordering,
   searchEmpty,
@@ -49,7 +59,7 @@ export default function PriorityList({
         <h2 className="text-base font-bold leading-[23px]">
           점검 전 신청 비교
         </h2>
-        <p className="text-xs leading-[18px]">총 {filtered.length}건</p>
+        <p className="text-xs leading-[18px]">총 {total}건</p>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[780px] table-fixed border-collapse text-center text-[13px] leading-5">
@@ -104,10 +114,7 @@ export default function PriorityList({
                           onOpenReorder();
                         }}
                         onKeyDown={(e) => {
-                          if (
-                            e.key === "ArrowUp" ||
-                            e.key === "ArrowDown"
-                          ) {
+                          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                             e.preventDefault();
                             onMove(a.id, e.key === "ArrowUp" ? -1 : 1);
                           }
@@ -145,12 +152,7 @@ export default function PriorityList({
                   <span
                     className={`inline-flex items-center gap-[5px] rounded-lg border px-[9px] py-1 font-bold ${riskStyle[a.risk]}`}
                   >
-                    <img
-                      src={riskDots[a.risk]}
-                      alt=""
-                      width={7}
-                      height={7}
-                    />
+                    <img src={riskDots[a.risk]} alt="" width={7} height={7} />
                     {a.risk}
                   </span>
                 </td>
@@ -168,7 +170,7 @@ export default function PriorityList({
             ))}
           </tbody>
         </table>
-        {!filtered.length && (
+        {!loading && !filtered.length && (
           <div className="flex min-h-[430px] flex-col items-center justify-center px-6 text-center">
             <img
               src={searchEmpty ? emptySearch : emptyDocument}
@@ -205,27 +207,33 @@ export default function PriorityList({
         >
           <button
             type="button"
-            disabled
+            disabled={loading || page <= 0}
+            onClick={() => onPage?.(page - 1)}
             aria-label="이전 페이지"
             className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
           >
             ‹
           </button>
-          {[1, 2, 3, 4, 5].map((n) => (
+          {Array.from(
+            { length: Math.min(5, totalPages) },
+            (_, i) => Math.max(0, Math.min(page - 2, totalPages - 5)) + i + 1,
+          ).map((n) => (
             <button
               key={n}
               type="button"
-              disabled={n !== 1}
-              aria-current={n === 1 ? "page" : undefined}
+              disabled={loading}
+              onClick={() => onPage?.(n - 1)}
+              aria-current={n === page + 1 ? "page" : undefined}
               aria-label={`${n}페이지`}
-              className={`h-[34px] w-[34px] rounded-md border text-sm ${n === 1 ? "border-[#234f73] bg-[#234f73] font-bold text-white" : "border-[#cbd5e1] bg-white text-[#64748b]"}`}
+              className={`h-[34px] w-[34px] rounded-md border text-sm ${n === page + 1 ? "border-[#234f73] bg-[#234f73] font-bold text-white" : "border-[#cbd5e1] bg-white text-[#64748b]"}`}
             >
               {n}
             </button>
           ))}
           <button
             type="button"
-            disabled
+            disabled={loading || page + 1 >= totalPages}
+            onClick={() => onPage?.(page + 1)}
             aria-label="다음 페이지"
             className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
           >

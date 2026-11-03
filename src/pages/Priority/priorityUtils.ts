@@ -38,3 +38,14 @@ export function orderApplications(
     a.designated && !a.assigned ? full[index++] : a,
   );
 }
+
+export function normalizePriorityFilters(risk: string, status: string) {
+  const riskLevels = { 높음: "HIGH", 주의: "CAUTION", 낮음: "LOW" } as const;
+  const riskLevel = Object.hasOwn(riskLevels, risk)
+    ? riskLevels[risk as keyof typeof riskLevels]
+    : undefined;
+  const designated =
+    status === "지정" ? true : status === "미지정" ? false : undefined;
+
+  return { riskLevel, designated };
+}

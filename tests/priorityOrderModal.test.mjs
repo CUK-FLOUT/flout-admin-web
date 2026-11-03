@@ -4,9 +4,13 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
-function render(order = ["A", "B", "C"], { openerConnected = true } = {}) {
+function render(
+  order = ["A", "B", "C"],
+  { openerConnected = true, busy = false, loading = false } = {},
+) {
   const effects = [];
   const moves = [];
+  const announcements = [];
   let cancelled = 0,
     saved = 0,
     restoredFocus = false,
@@ -98,7 +102,7 @@ function render(order = ["A", "B", "C"], { openerConnected = true } = {}) {
             return { current: refIndex++ === 0 ? dialog : value };
           },
           useState(value) {
-            return [value, () => {}];
+            return [value, (next) => announcements.push(next)];
           },
         };
       throw new Error(name);
@@ -114,6 +118,8 @@ function render(order = ["A", "B", "C"], { openerConnected = true } = {}) {
   const tree = mod.exports.default({
     applications,
     order,
+    busy,
+    loading,
     onMove: (id, delta) => moves.push([id, delta]),
     onCancel: () => cancelled++,
     onSave: () => saved++,
@@ -130,6 +136,7 @@ function render(order = ["A", "B", "C"], { openerConnected = true } = {}) {
     tree,
     nodes,
     moves,
+    announcements,
     effects,
     html,
     body,
@@ -256,4 +263,29 @@ test("native drag auto-scroll also stops after drop and dragend", () => {
     .find((n) => n.props["data-order-id"] === "C")
     .props.onDrop({ preventDefault() {} });
   assert.equal(h.frames.size, 0);
+});
+
+test("busy movement changes neither order nor the live announcement", () => {
+  const h = render(undefined, { busy: true });
+  const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+  handle.props.onKeyDown({ key: "ArrowDown", preventDefault() {} });
+  assert.equal(h.moves.length, 0);
+  assert.equal(h.announcements.length, 0);
+});
+
+test("loading keeps the modal closable while save remains disabled", () => {
+  const h = render(undefined, { loading: true });
+  h.tree.props.onCancel({ preventDefault() {} });
+  assert.equal(h.cancelled, 1);
+  assert.equal(
+    h.nodes.find(
+      (n) => n.type === "button" && n.props.children === "선정 순서 저장",
+    ).props.disabled,
+    true,
+  );
+  assert.equal(
+    h.nodes.find((n) => n.props["aria-label"] === "선정 순서 변경 닫기").props
+      .disabled,
+    false,
+  );
 });

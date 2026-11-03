@@ -1,5 +1,8 @@
 export type PriorityRisk = "높음" | "주의" | "낮음";
 export type PriorityApplication = {
+  applicationId?: number;
+  inspectionNeed?: string;
+  designationKnown?: boolean;
   id: string;
   resident: string;
   address: string;

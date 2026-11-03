@@ -12,6 +12,12 @@ const modalKinds = ["designate", "designated", "saved", "reorder"];
 
 type Props = {
   dialog: string;
+  busy?: boolean;
+  orderLoading?: boolean;
+  error?: string;
+  orderReady?: boolean;
+  cancelledDesignation?: boolean;
+  onRetry?: () => void;
   selected?: PriorityApplication;
   eligible: PriorityApplication[];
   modalOrder: string[];
@@ -24,6 +30,12 @@ type Props = {
 
 export default function PriorityModals({
   dialog,
+  busy = false,
+  orderLoading = false,
+  error = "",
+  orderReady = true,
+  cancelledDesignation = false,
+  onRetry,
   selected,
   eligible,
   modalOrder,
@@ -39,6 +51,11 @@ export default function PriorityModals({
     return (
       <PriorityOrderModal
         applications={eligible}
+        busy={busy}
+        loading={orderLoading}
+        error={error}
+        ready={orderReady}
+        onRetry={onRetry}
         order={modalOrder}
         onMove={onMove}
         onCancel={onCancelReorder}
@@ -51,15 +68,20 @@ export default function PriorityModals({
       key={dialog}
       title={
         dialog === "designate"
-          ? "우선점검 대상으로 지정할까요?"
+          ? selected?.designated
+            ? "우선점검 지정을 취소할까요?"
+            : "우선점검 대상으로 지정할까요?"
           : dialog === "designated"
-            ? "우선점검 대상으로 지정했습니다."
+            ? cancelledDesignation
+              ? "우선점검 지정을 취소했습니다."
+              : "우선점검 대상으로 지정했습니다."
             : dialog === "saved"
               ? "선정 순서를 저장했습니다."
               : "지정된 우선점검 대상의 순서 변경"
       }
       onClose={onClose}
     >
+      {error && <p role="alert">{error}</p>}
       {dialog === "designate" && (
         <>
           <p className="mt-2 text-sm leading-[21px]">
@@ -67,7 +89,9 @@ export default function PriorityModals({
               ? `${selected.id} · ${selected.resident}님의 신청`
               : "선택된 신청이 없습니다."}
             <br />
-            지정 후 현장점검 담당자와 방문 일정을 배정할 수 있습니다.
+            {selected?.designated
+              ? "선택한 신청의 우선점검 지정을 취소합니다."
+              : "지정 후 현장점검 담당자와 방문 일정을 배정할 수 있습니다."}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button type="button" onClick={onClose} className={secondary}>
@@ -76,10 +100,12 @@ export default function PriorityModals({
             <button
               type="button"
               onClick={onDesignate}
-              disabled={!selected || selected.designated}
+              disabled={
+                busy || !selected || selected.designationKnown === false
+              }
               className={primary}
             >
-              대상 지정
+              {selected?.designated ? "지정 취소" : "대상 지정"}
             </button>
           </div>
         </>
@@ -98,7 +124,7 @@ export default function PriorityModals({
             </div>
             <div className="flex">
               <dt className="w-32 text-[#64748b]">우선점검</dt>
-              <dd>지정</dd>
+              <dd>{cancelledDesignation ? "미지정" : "지정"}</dd>
             </div>
           </dl>
           <button

@@ -5,6 +5,9 @@ import emptySearch from "../../assets/priority/empty-search.svg";
 type Props = {
   application?: PriorityApplication;
   searchEmpty: boolean;
+  busy?: boolean;
+  memoSaving?: boolean;
+  onSaveMemo?: () => void;
   memo: string;
   onMemo: (value: string) => void;
   ordering: boolean;
@@ -14,6 +17,9 @@ type Props = {
 
 export default function PriorityDetail({
   application,
+  busy = false,
+  memoSaving = false,
+  onSaveMemo,
   searchEmpty,
   memo,
   onMemo,
@@ -83,7 +89,7 @@ export default function PriorityDetail({
         <div className="flex gap-3">
           <dt className="w-[116px] shrink-0">점검 필요도</dt>
           <dd className="flex-1 text-right text-sm font-medium">
-            우선점검 권장
+            {application.inspectionNeed || "우선점검 권장"}
           </dd>
         </div>
       </dl>
@@ -142,6 +148,16 @@ export default function PriorityDetail({
         <input
           id="priority-memo"
           value={memo}
+          readOnly={memoSaving}
+          maxLength={2000}
+          title="Enter를 누르거나 입력란을 벗어나면 저장됩니다."
+          onBlur={onSaveMemo}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              onSaveMemo?.();
+            }
+          }}
           onChange={(event) => onMemo(event.target.value)}
           className="block h-[42px] w-full rounded-md border border-[#c8d0d7] bg-white px-[14px] text-[13px] leading-[21px] focus:outline-2 focus:outline-[#234f73]"
         />
@@ -154,13 +170,13 @@ export default function PriorityDetail({
         <button
           type="button"
           onClick={onDesignate}
-          disabled={application.designated}
+          disabled={busy || application.designationKnown === false}
           className={`flex w-full shrink-0 items-center justify-center gap-2 rounded-md bg-[#234f73] px-4 text-white hover:bg-[#183b58] disabled:cursor-not-allowed disabled:bg-[#eef3f7] disabled:text-[#64748b] ${ordering ? "h-[42px]" : "h-10"}`}
         >
           <span aria-hidden="true" className="text-[15px]">
             ✓
           </span>
-          {application.designated ? "우선점검 지정 완료" : "우선점검 대상 지정"}
+          {application.designated ? "우선점검 지정 취소" : "우선점검 대상 지정"}
         </button>
         <button
           type="button"
