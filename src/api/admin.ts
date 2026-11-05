@@ -5,6 +5,7 @@ import { getSession, getSessionGeneration } from "../auth/session";
 export interface AdminProfile {
   name: string;
   jurisdiction: string | null;
+  timeStamp: string | null;
 }
 
 let profileRequest: {
@@ -19,9 +20,12 @@ export function getAdminProfile(): Promise<AdminProfile> {
   if (profileRequest?.generation === generation) return profileRequest.promise;
 
   const promise = apiClient
-    .get<{ isSuccess: boolean; message: string; result: AdminProfile | null }>(
-      "/api/admin/me",
-    )
+    .get<{
+      isSuccess: boolean;
+      message: string;
+      result: Pick<AdminProfile, "name" | "jurisdiction"> | null;
+      timeStamp?: unknown;
+    }>("/api/admin/me")
     .then(({ data }) => {
       if (generation !== getSessionGeneration())
         throw new Error("인증 정보가 변경되었습니다.");
@@ -38,7 +42,11 @@ export function getAdminProfile(): Promise<AdminProfile> {
         throw new Error("계정 정보 응답이 올바르지 않습니다.");
       }
 
-      return { name: result.name, jurisdiction: result.jurisdiction };
+      return {
+        name: result.name,
+        jurisdiction: result.jurisdiction,
+        timeStamp: validTimeStamp(data.timeStamp),
+      };
     })
     .catch((error: unknown) => {
       if (profileRequest?.promise === promise) profileRequest = null;
@@ -55,4 +63,19 @@ export function getAdminProfile(): Promise<AdminProfile> {
   profileRequest = { generation, promise };
 
   return promise;
+}
+
+function validTimeStamp(value: unknown): string | null {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+  )
+    return null;
+  const iso = value.replace(" ", "T");
+  const date = new Date(`${iso}Z`);
+
+  return Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 19) === iso
+    ? value
+    : null;
 }

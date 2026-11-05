@@ -591,6 +591,53 @@ test("account profile uses authenticated GET, handles null jurisdiction, and sha
   assert.equal(h.store.getSession().email, "admin@example.com");
 });
 
+test("profile reads timeStamp from the response envelope rather than result", async () => {
+  const h = harness(session());
+  h.client.defaults.adapter = async (config) => ({
+    ...ok(config, {
+      name: "김담당",
+      jurisdiction: "부천시",
+      timeStamp: "잘못된 위치",
+    }),
+    data: {
+      ...envelope({
+        name: "김담당",
+        jurisdiction: "부천시",
+        timeStamp: "잘못된 위치",
+      }),
+      timeStamp: "2026-10-21 22:30:00",
+    },
+  });
+  const profile = await h.admin.getAdminProfile();
+  assert.equal(profile.timeStamp, "2026-10-21 22:30:00");
+  assert.equal(profile.name, "김담당");
+  assert.equal(profile.jurisdiction, "부천시");
+});
+
+test("invalid timestamps do not hide profile data or change auth", async () => {
+  for (const timeStamp of [
+    undefined,
+    null,
+    "",
+    "invalid",
+    123,
+    "2026-02-30 12:00:00",
+    "2026-10-21 25:00:00",
+  ]) {
+    const h = harness(session());
+    const sessionBefore = h.store.getSession();
+    h.client.defaults.adapter = async (config) => ({
+      ...ok(config, { name: "김담당", jurisdiction: null }),
+      data: { ...envelope({ name: "김담당", jurisdiction: null }), timeStamp },
+    });
+    const profile = await h.admin.getAdminProfile();
+    assert.equal(profile.timeStamp, null);
+    assert.equal(profile.name, "김담당");
+    assert.equal(profile.jurisdiction, null);
+    assert.strictEqual(h.store.getSession(), sessionBefore);
+  }
+});
+
 test("profile 401 shares existing refresh flow, while 403/500/network errors keep auth", async () => {
   const h = harness(session());
   let refreshes = 0;

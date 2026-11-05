@@ -54,12 +54,11 @@ export default function Header() {
       ? "확인 불가"
       : "확인 중";
 
-  const date = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const date =
+    currentAccount?.profile?.timeStamp ??
+    (currentAccount?.profile || currentAccount?.error
+      ? "확인 불가"
+      : "확인 중");
 
   return (
     <header className="flex min-h-[68px] shrink-0 flex-wrap items-center justify-end gap-3 border-b border-[#c8d0d7] bg-white px-6 py-3 text-[15px] leading-5">
