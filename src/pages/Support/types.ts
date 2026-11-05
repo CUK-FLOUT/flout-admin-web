@@ -30,6 +30,8 @@ export type SupportApplication = {
   apiId?: number;
   serverStatus?: string;
   attachmentUrls?: Record<string, string>;
+  attachmentKeys?: string[];
+  reviewLoaded?: boolean;
   programName?: string;
   programTarget?: string;
   resident: string;

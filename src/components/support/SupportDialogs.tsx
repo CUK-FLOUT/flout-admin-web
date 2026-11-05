@@ -52,6 +52,9 @@ export default function SupportDialogs({
 }: Props) {
   const isOwner = a.ownership === "소유자";
   const issue = approvalIssue(a, draft);
+  const documentIndex = a.attachmentKeys?.indexOf(document || "") ?? -1;
+  const documentTitle =
+    documentIndex >= 0 ? a.documents[documentIndex] : document;
 
   if (kind === "approve")
     return (
@@ -351,7 +354,7 @@ export default function SupportDialogs({
   if (kind === "document")
     return (
       <SupportDialog
-        title={document || "주민 제출 자료"}
+        title={documentTitle || "주민 제출 자료"}
         width="max-w-[480px]"
         height="min-h-[198px]"
         onClose={onClose}
@@ -380,7 +383,12 @@ export default function SupportDialogs({
   return (
     <SupportDialog
       title={
-        a.id + (isOwner ? " · 공개된 점검 결과" : " · 공개된 전문가 점검 결과")
+        a.id +
+        (a.inspectionPublished
+          ? isOwner
+            ? " · 공개된 점검 결과"
+            : " · 공개된 전문가 점검 결과"
+          : " · 점검 결과")
       }
       width={isOwner ? "max-w-[448px]" : "max-w-[580px]"}
       height={isOwner ? "min-h-[625px]" : "min-h-[318px]"}
@@ -390,7 +398,7 @@ export default function SupportDialogs({
       {isOwner && (
         <>
           <span className="w-fit rounded-full border border-[#234f73] bg-[#eef3f7] px-4 py-1 text-xs text-[#234f73]">
-            점검 완료·결과 공개
+            {a.inspectionPublished ? "점검 완료·결과 공개" : "결과 공개 전"}
           </span>
           <h3 className="text-2xl font-bold leading-9">우리 집 맞춤 예방안</h3>
         </>
@@ -445,7 +453,11 @@ export default function SupportDialogs({
             지원 대상과 범위는 행정 검토 후 확정됩니다.
           </p>
           <hr className="border-[#cbd5e1]" />
-          <p className="text-sm">결과 공개 완료 · 주민에게 제공된 동일 내용</p>
+          <p className="text-sm">
+            {a.inspectionPublished
+              ? "결과 공개 완료 · 주민에게 제공된 동일 내용"
+              : "결과 공개 전"}
+          </p>
           <p className="text-xs leading-[18px] text-[#64748b]">
             권장조치 목록 공개 · 후속 처리 분류·내부 메모 비공개
           </p>

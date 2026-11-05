@@ -89,9 +89,11 @@ export default function SupportDetail({
             {a.documents.length ? (
               a.documents.map((d, i) => (
                 <button
-                  key={d}
+                  key={a.attachmentKeys?.[i] ?? i}
                   type="button"
-                  onClick={() => onDialog("document", d)}
+                  onClick={() =>
+                    onDialog("document", a.attachmentKeys?.[i] ?? d)
+                  }
                   className="w-fit text-left hover:text-[#234f73] hover:underline"
                 >
                   {i === 0 ? "주민 제출: " : ""}
@@ -111,7 +113,9 @@ export default function SupportDetail({
           </dl>
           <div className="grid shrink-0 grid-cols-2 gap-2">
             <button type="button" onClick={onReview} className={supportPrimary}>
-              {a.status === "승인" || a.status === "미승인" ? "지원 결과 조회" : "지원 자격 검토"}
+              {a.status === "승인" || a.status === "미승인"
+                ? "지원 결과 조회"
+                : "지원 자격 검토"}
             </button>
             <button
               type="button"

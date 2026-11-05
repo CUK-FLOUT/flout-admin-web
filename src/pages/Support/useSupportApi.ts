@@ -10,8 +10,9 @@ import type {
   SupportCounts,
   SupportPage,
   SupportSearchFilters,
+  SupportDetails,
+  SupportReviewDetails,
 } from "../../api/supportApplications";
-import type { SupportApplication } from "./types";
 import { mapSupportDetail } from "./apiMapping";
 
 export function useSupportList(
@@ -20,14 +21,17 @@ export function useSupportList(
   revision = 0,
   filters: SupportSearchFilters = {},
 ) {
-  const [state, setState] = useState<{
+  const [listState, setListState] = useState<{
     key?: string;
     page?: SupportPage;
+    listError: string;
+    loading: boolean;
+  }>({ listError: "", loading: true });
+  const [countState, setCountState] = useState<{
+    key?: string;
     counts?: SupportCounts;
     error: string;
-    listError?: string;
-    loading: boolean;
-  }>({ error: "", loading: true });
+  }>({ error: "" });
   const { district, status, landlordConsentStatus } = filters;
   const key = JSON.stringify([
     keyword,
@@ -41,41 +45,56 @@ export function useSupportList(
   useEffect(() => {
     const controller = new AbortController();
 
-    Promise.allSettled([
-      getSupportApplications(
-        keyword,
-        page,
-        { district, status, landlordConsentStatus },
-        controller.signal,
-      ),
-      getSupportCounts(controller.signal),
-    ]).then(([list, counts]) => {
-      if (controller.signal.aborted) return;
-      const listError =
-        list.status === "rejected" ? supportError(list.reason) : "";
-
-      setState({
-        key,
-        page: list.status === "fulfilled" ? list.value : undefined,
-        counts: counts.status === "fulfilled" ? counts.value : undefined,
-        error:
-          listError ||
-          (counts.status === "rejected" ? supportError(counts.reason) : ""),
-        listError,
-        loading: false,
+    getSupportApplications(
+      keyword,
+      page,
+      { district, status, landlordConsentStatus },
+      controller.signal,
+    )
+      .then((result) => {
+        if (!controller.signal.aborted)
+          setListState({ key, page: result, listError: "", loading: false });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setListState({ key, listError: supportError(cause), loading: false });
       });
-    });
+    getSupportCounts(controller.signal)
+      .then((counts) => {
+        if (!controller.signal.aborted)
+          setCountState({ key, counts, error: "" });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setCountState({ key, error: supportError(cause) });
+      });
 
     return () => controller.abort();
   }, [keyword, page, key, district, status, landlordConsentStatus]);
 
-  return state.key === key ? state : { error: "", loading: true };
+  const list =
+    listState.key === key
+      ? listState
+      : { listError: "", loading: true, page: undefined };
+  const counts =
+    countState.key === key ? countState : { error: "", counts: undefined };
+
+  return {
+    ...list,
+    counts: counts.counts,
+    error: list.listError || counts.error,
+  };
 }
 
 export function useSupportRecord(id: number | undefined, review = false) {
-  const [state, setState] = useState<{
+  const [detailState, setDetailState] = useState<{
     id?: number;
-    application?: SupportApplication;
+    detail?: SupportDetails;
+    error: string;
+  }>({ error: "" });
+  const [reviewState, setReviewState] = useState<{
+    id?: number;
+    review?: SupportReviewDetails;
     error: string;
   }>({ error: "" });
 
@@ -83,29 +102,42 @@ export function useSupportRecord(id: number | undefined, review = false) {
     if (!id || !Number.isSafeInteger(id) || id <= 0) return;
     const controller = new AbortController();
 
-    Promise.all([
-      getSupportDetail(id, controller.signal),
-      review
-        ? getSupportReview(id, controller.signal)
-        : Promise.resolve(undefined),
-    ])
-      .then(([detail, review]) => {
+    getSupportDetail(id, controller.signal)
+      .then((detail) => {
         if (!controller.signal.aborted)
-          setState({
-            id,
-            application: mapSupportDetail(detail, review),
-            error: "",
-          });
+          setDetailState({ id, detail, error: "" });
       })
       .catch((cause) => {
         if (!controller.signal.aborted)
-          setState({ id, error: supportError(cause) });
+          setDetailState({ id, error: supportError(cause) });
       });
+    if (review) {
+      getSupportReview(id, controller.signal)
+        .then((result) => {
+          if (!controller.signal.aborted)
+            setReviewState({ id, review: result, error: "" });
+        })
+        .catch((cause) => {
+          if (!controller.signal.aborted)
+            setReviewState({ id, error: supportError(cause) });
+        });
+    }
 
     return () => controller.abort();
   }, [id, review]);
-  if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0))
-    return { error: "올바른 지원 신청 ID가 필요합니다." };
 
-  return state.id === id ? state : { error: "" };
+  const detail = detailState.id === id ? detailState.detail : undefined;
+  const reviewDetail =
+    review && reviewState.id === id ? reviewState.review : undefined;
+
+  return {
+    application: detail ? mapSupportDetail(detail, reviewDetail) : undefined,
+    error:
+      id !== undefined && (!Number.isSafeInteger(id) || id <= 0)
+        ? "올바른 지원 신청 ID가 필요합니다."
+        : detailState.id === id
+          ? detailState.error
+          : "",
+    reviewError: review && reviewState.id === id ? reviewState.error : "",
+  };
 }

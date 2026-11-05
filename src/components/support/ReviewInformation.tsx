@@ -136,11 +136,11 @@ export default function ReviewInformation({
             <dd>
               {a.documents.length
                 ? a.documents.map((d, i) => (
-                    <span key={d}>
+                    <span key={a.attachmentKeys?.[i] ?? i}>
                       {i > 0 && " · "}
                       <button
                         type="button"
-                        onClick={() => onDocument(d)}
+                        onClick={() => onDocument(a.attachmentKeys?.[i] ?? d)}
                         className="hover:underline"
                       >
                         {d}

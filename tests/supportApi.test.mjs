@@ -191,7 +191,7 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
     ...detail,
     attachments: [{ originalName: "파일", fileUrl: "javascript:alert(1)" }],
   });
-  assert.equal(unsafe.attachmentUrls["파일"], "");
+  assert.equal(unsafe.attachmentUrls["attachment-0"], "");
 });
 test("현행 서버 지원 상태를 검토 중·승인·미승인으로 표시한다", () => {
   const h = harness();
@@ -206,6 +206,7 @@ test("현행 서버 지원 상태를 검토 중·승인·미승인으로 표시�
 });
 
 function reviewHarness(overrides = {}) {
+  const cleanups = [];
   let index = 0;
   const slots = [];
   let params = new URLSearchParams("dialog=approve");
@@ -219,6 +220,7 @@ function reviewHarness(overrides = {}) {
     id: "000002",
     apiId: 201,
     serverStatus: "SUBMITTED",
+    reviewLoaded: true,
     status: "검토 중",
     resident: "테스트",
     address: "부천시",
@@ -265,6 +267,13 @@ function reviewHarness(overrides = {}) {
                 },
               ];
             },
+            useEffect(effect) {
+              const i = index++;
+              if (!(i in slots)) {
+                slots[i] = true;
+                cleanups.push(effect());
+              }
+            },
             useRef(value) {
               const i = index++;
               return (slots[i] ??= { current: value });
@@ -305,6 +314,7 @@ function reviewHarness(overrides = {}) {
     dialog: () =>
       render().find((n) => String(n.type).endsWith("/SupportDialogs")),
     params: () => params,
+    unmount: () => cleanups.forEach((cleanup) => cleanup?.()),
   };
 }
 test("승인 연속 클릭은 한 요청만 보내고 저장 중 닫기를 막으며 서버 성공 후 완료 모달을 연다", async () => {
@@ -395,6 +405,7 @@ test("API 신청은 동의 확인 상태와 파일명으로 승인 요청을 막
   const a = {
     ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
     inspectionPublished: true,
+    reviewLoaded: true,
   };
   const draft = {
     ...a.review,
@@ -421,6 +432,7 @@ test("기존 Mock 신청의 동의 검증은 그대로 유지한다", () => {
     ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
     apiId: undefined,
     inspectionPublished: true,
+    reviewLoaded: true,
   };
   assert.match(
     approvalIssue(a, {
@@ -564,7 +576,7 @@ test("상세·검토 응답의 거주층을 한글로 표시하며 미입력을 
   );
 });
 
-function listHookHarness() {
+function listHookHarness(countsPromise, recordApi = {}) {
   const slots = [],
     pending = [],
     reads = [];
@@ -576,7 +588,9 @@ function listHookHarness() {
         reads.push({ keyword, page, filters, signal, resolve }),
       );
     },
-    getSupportCounts: async () => ({ totalCount: 42 }),
+    ...recordApi,
+    getSupportCounts: () =>
+      countsPromise ?? Promise.resolve({ totalCount: 42 }),
     supportError: (e) => e.message,
   };
   const source = ts.transpileModule(
@@ -618,7 +632,7 @@ function listHookHarness() {
           },
         };
       if (name.endsWith("/supportApplications")) return api;
-      return {};
+      return harness().load("src/pages/Support/apiMapping.ts");
     },
   });
   function render(filters = {}, page = 0, revision = 0) {
@@ -627,7 +641,16 @@ function listHookHarness() {
     for (const effect of pending.splice(0)) effect();
     return result;
   }
-  return { render, reads };
+  return {
+    render,
+    reads,
+    record(id) {
+      index = 0;
+      const result = module.exports.useSupportRecord(id, true);
+      for (const effect of pending.splice(0)) effect();
+      return result;
+    },
+  };
 }
 test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답이 최신 결과를 덮어쓰지 않는다", async () => {
   const h = listHookHarness();
@@ -665,4 +688,130 @@ test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답
   await new Promise(setImmediate);
   assert.equal(h.render().page.totalElements, 0);
   assert.equal(h.render().counts.totalCount, 42);
+});
+
+test("공백 오류 메시지는 기본 문구를 사용하고 유효한 원문은 보존한다", () => {
+  const { supportError } = harness().load("src/api/supportApplications.ts");
+  for (const message of ["", "  ", "\n\t"]) {
+    assert.equal(
+      supportError({ isAxiosError: true, response: { data: { message } } }),
+      "지원 신청 요청에 실패했습니다.",
+    );
+  }
+  assert.equal(
+    supportError({
+      isAxiosError: true,
+      response: { data: { message: " 원문 " } },
+    }),
+    " 원문 ",
+  );
+});
+
+test("거주 형태와 동의 검토 매핑은 미입력과 모순된 상태를 구분한다", () => {
+  const { mapSupportDetail } = harness().load(
+    "src/pages/Support/apiMapping.ts",
+  );
+  for (const [occupancyType, expected] of [
+    ["OWNER", "소유자"],
+    ["TENANT", "세입자"],
+    ["ETC", "기타"],
+    [null, "미입력"],
+    ["OTHER", "미입력"],
+  ]) {
+    assert.equal(
+      mapSupportDetail({ ...item, occupancyType, attachments: [] }).ownership,
+      expected,
+    );
+  }
+  const a = mapSupportDetail(
+    { ...item, landlordConsentStatus: "NOT_REQUIRED", attachments: [] },
+    { landlordConsentRequired: true },
+  );
+  assert.equal(a.review.consentRequired, "필요");
+  assert.equal(a.review.consentState, "미확인");
+});
+
+test("동일한 파일명도 고유 문서 키로 각각의 URL을 보존한다", () => {
+  const { mapSupportDetail } = harness().load(
+    "src/pages/Support/apiMapping.ts",
+  );
+  const a = mapSupportDetail({
+    ...item,
+    attachments: [
+      { originalName: "동의서.pdf", fileUrl: "https://example.com/1" },
+      { originalName: "동의서.pdf", fileUrl: "https://example.com/2" },
+    ],
+  });
+  assert.equal(new Set(a.attachmentKeys).size, 2);
+  assert.equal(a.attachmentUrls[a.attachmentKeys[0]], "https://example.com/1");
+  assert.equal(a.attachmentUrls[a.attachmentKeys[1]], "https://example.com/2");
+});
+
+test("검토 정보를 받기 전에는 API 신청 승인을 차단한다", () => {
+  const h = harness();
+  const { mapSupportDetail } = h.load("src/pages/Support/apiMapping.ts");
+  const { approvalIssue } = h.load("src/pages/Support/model.ts");
+  const a = mapSupportDetail({ ...item, attachments: [] });
+  assert.match(
+    approvalIssue(a, {
+      ...a.review,
+      checks: [true, true, true],
+      scope: "시설",
+    }),
+    /검토 정보를/,
+  );
+});
+
+test("통계 응답을 기다리지 않고 도착한 목록을 표시한다", async () => {
+  const h = listHookHarness(new Promise(() => {}));
+  h.render();
+  h.reads[0].resolve({
+    supportApplications: [item],
+    totalElements: 1,
+    totalPages: 1,
+  });
+  await new Promise(setImmediate);
+  assert.equal(h.render().loading, false);
+  assert.equal(h.render().page.totalElements, 1);
+  assert.equal(h.render().counts, undefined);
+});
+
+test("승인 요청 중 언마운트되면 완료 모달을 열지 않는다", async () => {
+  let complete;
+  const h = reviewHarness({
+    approveSupport: () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  });
+  const pending = h.dialog().props.onConfirm();
+  h.unmount();
+  complete({ status: "APPROVED" });
+  await pending;
+  assert.equal(h.params().get("dialog"), "approve");
+});
+
+test("검토 조회가 실패해도 상세를 표시하고 승인 준비 상태는 유지하지 않는다", async () => {
+  let detailResolve, reviewReject;
+  const h = listHookHarness(undefined, {
+    getSupportDetail: () =>
+      new Promise((resolve) => {
+        detailResolve = resolve;
+      }),
+    getSupportReview: () =>
+      new Promise((resolve, reject) => {
+        reviewReject = reject;
+      }),
+  });
+  h.record(201);
+  detailResolve({ ...item, attachments: [] });
+  await new Promise(setImmediate);
+  assert.ok(h.record(201).application);
+  assert.equal(h.record(201).application.reviewLoaded, false);
+  reviewReject(new Error("검토 조회 실패"));
+  await new Promise(setImmediate);
+  assert.ok(h.record(201).application);
+  assert.equal(h.record(201).error, "");
+  assert.equal(h.record(201).reviewError, "검토 조회 실패");
+  assert.equal(h.record(201).application.reviewLoaded, false);
 });

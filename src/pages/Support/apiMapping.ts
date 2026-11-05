@@ -73,6 +73,7 @@ export function mapSupport(item: SupportListItem): SupportApplication {
     id: item.receiptNo,
     apiId: item.supportApplicationId,
     serverStatus: item.status,
+    reviewLoaded: false,
     resident: item.applicantName,
     phone: "—",
     district: "",
@@ -126,7 +127,9 @@ export function mapSupportDetail(
         ? "소유자"
         : detail.occupancyType === "TENANT"
           ? "세입자"
-          : "기타",
+          : detail.occupancyType === "ETC"
+            ? "기타"
+            : "미입력",
     residentNote: detail.residentRequest || "미입력",
     preferred:
       [
@@ -141,10 +144,12 @@ export function mapSupportDetail(
       ]
         .filter(Boolean)
         .join(" · ") || "미입력",
+    reviewLoaded: review !== undefined,
     documents: detail.attachments.map((a) => a.originalName),
+    attachmentKeys: detail.attachments.map((_, index) => `attachment-${index}`),
     attachmentUrls: Object.fromEntries(
-      detail.attachments.map((a) => [
-        a.originalName,
+      detail.attachments.map((a, index) => [
+        `attachment-${index}`,
         /^https?:\/\//.test(a.fileUrl) ? a.fileUrl : "",
       ]),
     ),
@@ -162,6 +167,10 @@ export function mapSupportDetail(
           ? "필요"
           : "불필요"
         : a.review.consentRequired,
+      consentState:
+        review?.landlordConsentRequired && a.review.consentState === "불필요"
+          ? "미확인"
+          : a.review.consentState,
       scope: review?.supportScope || "",
     },
   };

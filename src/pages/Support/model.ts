@@ -103,6 +103,8 @@ export function approvalIssue(
   a: SupportApplication,
   draft: ReviewDraft,
 ): string | null {
+  if (a.apiId && !a.reviewLoaded)
+    return "지원 자격 검토 정보를 먼저 불러와 주세요.";
   if (a.apiId && a.serverStatus !== "SUBMITTED")
     return "현재 상태에서는 승인할 수 없습니다.";
   if (!draft.checks.every(Boolean))

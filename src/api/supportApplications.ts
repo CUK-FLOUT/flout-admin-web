@@ -182,7 +182,7 @@ export function supportError(cause: unknown) {
       return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
     const data = cause.response.data as { message?: unknown } | undefined;
 
-    return typeof data?.message === "string"
+    return typeof data?.message === "string" && data.message.trim()
       ? data.message
       : "지원 신청 요청에 실패했습니다.";
   }

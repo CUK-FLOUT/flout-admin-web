@@ -20,7 +20,6 @@ export default function AdministrativeReview({
   onChange,
   onApprove,
   onReject,
-  onSave,
   onCheck,
 }: {
   application: SupportApplication;
@@ -29,11 +28,13 @@ export default function AdministrativeReview({
   onChange: (draft: ReviewDraft) => void;
   onApprove: () => void;
   onReject: () => void;
-  onSave: () => void;
   onCheck: () => void;
 }) {
   const readOnly =
-    busy || (a.apiId ? a.serverStatus !== "SUBMITTED" : a.status !== "검토 중");
+    busy ||
+    (a.apiId
+      ? !a.reviewLoaded || a.serverStatus !== "SUBMITTED"
+      : a.status !== "검토 중");
   const owner = a.ownership === "소유자";
 
   if (owner)
@@ -195,9 +196,6 @@ export default function AdministrativeReview({
         </label>
         {!readOnly && (
           <>
-            <button type="button" onClick={onSave} className={supportSecondary}>
-              검토 내용 저장
-            </button>
             <button
               type="button"
               onClick={onCheck}
@@ -368,9 +366,6 @@ export default function AdministrativeReview({
       </div>
       {owner && !readOnly && (
         <div className="mt-3 flex flex-col gap-2">
-          <button type="button" onClick={onSave} className={supportSecondary}>
-            검토 내용 저장
-          </button>
           <button type="button" onClick={onCheck} className={supportSecondary}>
             검토 확인사항
           </button>

@@ -73,7 +73,7 @@ function SupportManagementScreen() {
         : visible[0]?.apiId;
   const record = useSupportRecord(selectedApiId, true);
   const selected = record.application;
-  const error = response.error || record.error;
+  const error = response.error || record.error || record.reviewError;
   const total = response.page?.totalElements ?? 0;
   const stats = [
     {
@@ -291,7 +291,12 @@ function SupportManagementScreen() {
                 : "목록을 불러오지 못했습니다. 검색을 다시 시도해 주세요."}
             </p>
           ) : !visible.length ? (
-            <SupportEmpty search={Boolean(params.get("q"))} onReset={reset} />
+            <SupportEmpty
+              search={Object.values(initialFilters(params)).some((value) =>
+                Boolean(value.trim()),
+              )}
+              onReset={reset}
+            />
           ) : (
             <>
               <div className="mt-[19px] min-h-0 flex-1 overflow-auto">

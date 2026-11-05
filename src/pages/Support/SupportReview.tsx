@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import AdministrativeReview from "../../components/support/AdministrativeReview";
 import ReviewInformation from "../../components/support/ReviewInformation";
@@ -23,7 +23,6 @@ const dialogKinds: SupportDialogKind[] = [
   "reject",
   "approved",
   "rejected",
-  "review-saved",
   "review-check",
   "inspection",
   "document",
@@ -49,10 +48,22 @@ export default function SupportReview() {
       </section>
     );
 
-  return <SupportReviewScreen key={requestId} initial={record.application} />;
+  return (
+    <SupportReviewScreen
+      key={requestId + ":" + Boolean(record.application.reviewLoaded)}
+      initial={record.application}
+      loadError={record.reviewError || ""}
+    />
+  );
 }
 
-function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
+function SupportReviewScreen({
+  initial,
+  loadError = "",
+}: {
+  initial: SupportApplication;
+  loadError?: string;
+}) {
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
 
@@ -60,6 +71,15 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [draft, setDraft] = useState<ReviewDraft | null>(() =>
     a ? structuredClone(a.review) : null,
   );
@@ -97,14 +117,15 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
     );
   const currentDraft = a.serverStatus === "SUBMITTED" ? draft : a.review;
 
-  function saveReview() {
-    setError(
-      "현재 API에는 검토 초안·메모 저장 기능이 없습니다. 지원 범위와 확인 항목은 승인 시 전송됩니다.",
-    );
-  }
-
   async function confirm() {
-    if (saving.current || a.serverStatus !== "SUBMITTED" || !a.apiId) return;
+    if (
+      !mounted.current ||
+      saving.current ||
+      !a.reviewLoaded ||
+      a.serverStatus !== "SUBMITTED" ||
+      !a.apiId
+    )
+      return;
     const approved = kind === "approve" || kind === "review-check";
 
     saving.current = true;
@@ -115,6 +136,7 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
         ? await approveSupport(a.apiId, currentDraft.scope, currentDraft.checks)
         : await rejectSupport(a.apiId, reason);
 
+      if (!mounted.current) return;
       setApplication({
         ...a,
         serverStatus: result.status,
@@ -124,10 +146,10 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
       });
       show(approved ? "approved" : "rejected");
     } catch (cause) {
-      setError(supportError(cause));
+      if (mounted.current) setError(supportError(cause));
     } finally {
       saving.current = false;
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -164,9 +186,9 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
           지원 목록으로
         </Link>
       </div>
-      {error && (
+      {(error || loadError) && (
         <p role="alert" className="mb-3 text-sm leading-[21px] text-[#a53632]">
-          {error}
+          {error || loadError}
         </p>
       )}
       <div
@@ -192,7 +214,6 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
             setReason(currentDraft.memo);
             show("reject");
           }}
-          onSave={saveReview}
           onCheck={() => show("review-check")}
         />
       </div>
@@ -205,7 +226,7 @@ function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
           busy={busy}
           reason={reason}
           document={params.get("document") || undefined}
-          error={error}
+          error={error || loadError}
           onClose={() => {
             if (!saving.current) show(null);
           }}
