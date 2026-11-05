@@ -31,6 +31,7 @@ type Props = {
   reason?: string;
   document?: string;
   error?: string;
+  busy?: boolean;
   onClose: () => void;
   onConfirm?: () => void;
   onReason?: (value: string) => void;
@@ -43,6 +44,7 @@ export default function SupportDialogs({
   reason = "",
   document,
   error,
+  busy = false,
   onClose,
   onConfirm,
   onReason,
@@ -84,7 +86,7 @@ export default function SupportDialogs({
             취소
           </button>
           <button
-            disabled={!!issue}
+            disabled={busy || !!issue}
             onClick={onConfirm}
             className={supportPrimary + " h-11 rounded-md text-base"}
           >
@@ -130,7 +132,7 @@ export default function SupportDialogs({
           </button>
           <button
             onClick={onConfirm}
-            disabled={!reason.trim()}
+            disabled={busy || !reason.trim()}
             className={supportPrimary + " h-11 rounded-md"}
           >
             안내 입력 후 저장
@@ -178,12 +180,16 @@ export default function SupportDialogs({
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={onConfirm}
-            disabled={!!issue}
+            disabled={busy || !!issue}
             className={supportPrimary}
           >
             지원 승인 저장
           </button>
-          <button onClick={onClose} className={supportSecondary}>
+          <button
+            disabled={busy}
+            onClick={onClose}
+            className={supportSecondary}
+          >
             취소
           </button>
         </div>
@@ -214,7 +220,7 @@ export default function SupportDialogs({
             ? "시공 관리에서 확인"
             : "승인한 신청을 시공 대상 등록"}
         </button>
-        <button onClick={onClose} className={supportSecondary}>
+        <button disabled={busy} onClick={onClose} className={supportSecondary}>
           닫기
         </button>
       </SupportDialog>
@@ -239,7 +245,7 @@ export default function SupportDialogs({
           <Row label="신청">{a.id + " · " + a.resident}</Row>
           <Row label="검토 결과">지원 미승인</Row>
         </dl>
-        <button onClick={onClose} className={supportPrimary}>
+        <button disabled={busy} onClick={onClose} className={supportPrimary}>
           확인
         </button>
       </SupportDialog>
@@ -273,7 +279,7 @@ export default function SupportDialogs({
             등록 전 단계입니다.
           </p>
         )}
-        <button onClick={onClose} className={supportPrimary}>
+        <button disabled={busy} onClick={onClose} className={supportPrimary}>
           확인
         </button>
       </SupportDialog>
@@ -326,6 +332,14 @@ export default function SupportDialogs({
         </p>
         {a.status === "승인" && (
           <Link
+            onClick={(event) => {
+              if (a.apiId) {
+                event.preventDefault();
+                window.alert(
+                  "시공 관리 API 연동 후 해당 신청의 시공 정보를 확인할 수 있습니다.",
+                );
+              }
+            }}
             to={"/construction?requestId=" + a.id}
             className={supportSecondary}
           >
@@ -344,9 +358,19 @@ export default function SupportDialogs({
       >
         <p className="text-sm leading-[21px]">주민 제출 자료 · {a.id}</p>
         <p className="text-sm leading-[21px] text-[#64748b]">
-          파일 원본이 연결되지 않았습니다.
+          {a.attachmentUrls?.[document || ""] ? (
+            <a
+              href={a.attachmentUrls[document || ""]}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              첨부자료 열기
+            </a>
+          ) : (
+            "파일 원본이 연결되지 않았습니다."
+          )}
         </p>
-        <button onClick={onClose} className={supportSecondary}>
+        <button disabled={busy} onClick={onClose} className={supportSecondary}>
           닫기
         </button>
       </SupportDialog>
@@ -428,10 +452,14 @@ export default function SupportDialogs({
         </>
       ) : (
         <p className="text-[13px] leading-5 text-[#64748b]">
-          ▧ 현장사진 {result.photos.length}개 · 주민에게 공개된 동일 자료
+          {a.apiId ? (
+            "현장사진 정보는 현재 지원 조회 API에서 제공하지 않습니다."
+          ) : (
+            <>▧ 현장사진 {result.photos.length}개 · 주민에게 공개된 동일 자료</>
+          )}
         </p>
       )}
-      <button onClick={onClose} className={supportSecondary}>
+      <button disabled={busy} onClick={onClose} className={supportSecondary}>
         닫기
       </button>
     </SupportDialog>

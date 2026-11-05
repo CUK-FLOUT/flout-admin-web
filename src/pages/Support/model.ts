@@ -103,13 +103,16 @@ export function approvalIssue(
   a: SupportApplication,
   draft: ReviewDraft,
 ): string | null {
+  if (a.apiId && a.serverStatus !== "SUBMITTED")
+    return "현재 상태에서는 승인할 수 없습니다.";
   if (!draft.checks.every(Boolean))
     return "신청자·주택 정보, 전문가 점검 결과, 사업 자격·필요서류를 모두 확인해 주세요.";
   if (!a.inspectionPublished)
     return "공개된 전문가 점검 결과를 먼저 확인해 주세요.";
-  if (draft.consentRequired === "검토 필요")
+  if (!a.apiId && draft.consentRequired === "검토 필요")
     return "임대인 동의 필요 여부를 확인해 주세요.";
   if (
+    !a.apiId &&
     draft.consentRequired === "필요" &&
     (draft.consentState !== "확인 완료" ||
       !a.documents.some((d) => d.includes("동의")))
@@ -186,6 +189,15 @@ export function confirmRejection(
 }
 
 export function inspectionFor(a: SupportApplication) {
+  if (a.apiId)
+    return {
+      selected: a.vulnerabilities,
+      summary:
+        a.inspectionSummary ||
+        "점검 결과의 상세 설명·사진은 현재 지원 조회 응답에 포함되지 않습니다.",
+      actions: a.recommendations,
+      photos: [],
+    };
   const published = readResultsState().records[a.id]?.published;
 
   return {

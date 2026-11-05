@@ -15,6 +15,7 @@ const checkLabels = [
 
 export default function AdministrativeReview({
   application: a,
+  busy = false,
   draft,
   onChange,
   onApprove,
@@ -23,6 +24,7 @@ export default function AdministrativeReview({
   onCheck,
 }: {
   application: SupportApplication;
+  busy?: boolean;
   draft: ReviewDraft;
   onChange: (draft: ReviewDraft) => void;
   onApprove: () => void;
@@ -30,7 +32,8 @@ export default function AdministrativeReview({
   onSave: () => void;
   onCheck: () => void;
 }) {
-  const readOnly = a.status !== "검토 중";
+  const readOnly =
+    busy || (a.apiId ? a.serverStatus !== "SUBMITTED" : a.status !== "검토 중");
   const owner = a.ownership === "소유자";
 
   if (owner)
@@ -88,7 +91,7 @@ export default function AdministrativeReview({
             className="[&>button]:h-10 [&>button]:text-sm [&>button]:leading-[21px]"
             value={draft.consentRequired}
             options={[...consentRequirements]}
-            disabled={readOnly}
+            disabled={!!a.apiId || readOnly}
             onChange={(value) =>
               onChange({
                 ...draft,
@@ -113,7 +116,9 @@ export default function AdministrativeReview({
             className="[&>button]:h-10 [&>button]:text-sm [&>button]:leading-[21px]"
             value={draft.consentState}
             options={[...consentStates]}
-            disabled={readOnly || draft.consentRequired === "불필요"}
+            disabled={
+              !!a.apiId || readOnly || draft.consentRequired === "불필요"
+            }
             onChange={(value) =>
               onChange({
                 ...draft,
@@ -181,7 +186,7 @@ export default function AdministrativeReview({
         <label className="flex min-h-[21px] items-center gap-2 text-sm leading-[21px]">
           <input
             type="checkbox"
-            disabled={readOnly}
+            disabled={!!a.apiId || readOnly}
             checked={draft.notify}
             onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
             className="size-[18px] shrink-0 accent-[#234f73]"
@@ -264,7 +269,7 @@ export default function AdministrativeReview({
             review
             value={draft.consentRequired}
             options={[...consentRequirements]}
-            disabled={readOnly}
+            disabled={!!a.apiId || readOnly}
             onChange={(value) =>
               onChange({
                 ...draft,
@@ -288,7 +293,9 @@ export default function AdministrativeReview({
             review
             value={draft.consentState}
             options={[...consentStates]}
-            disabled={readOnly || draft.consentRequired === "불필요"}
+            disabled={
+              !!a.apiId || readOnly || draft.consentRequired === "불필요"
+            }
             onChange={(value) =>
               onChange({
                 ...draft,
@@ -334,7 +341,7 @@ export default function AdministrativeReview({
       <label className="mt-6 flex min-h-[21px] items-center gap-[10px] text-sm leading-[21px]">
         <input
           type="checkbox"
-          disabled={readOnly}
+          disabled={!!a.apiId || readOnly}
           checked={draft.notify}
           onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
           className="size-[18px] shrink-0 accent-[#234f73]"

@@ -66,7 +66,7 @@ export default function ReviewInformation({
         </h2>
         <dl>
           <InformationRow label="신청자 / 연락처">
-            {a.resident + " · " + a.phone.replace("****", a.id.slice(-4))}
+            {a.resident + " · " + a.phone}
           </InformationRow>
           <InformationRow label="주택 / 거주 형태">
             {a.address + " · " + a.housing + " · " + a.ownership}
@@ -113,8 +113,8 @@ export default function ReviewInformation({
         </h2>
         <dl className="text-xs leading-[17px]">
           {[
-            ["지원사업", "해당 사업 확인 필요"],
-            ["지원 대상 조건", "해당 사업 기준 확인"],
+            ["지원사업", a.programName || "해당 사업 확인 필요"],
+            ["지원 대상 조건", a.programTarget || "해당 사업 기준 확인"],
             [
               "지원 범위",
               a.status === "승인" ? a.review.scope : "담당자 검토 후 확정",

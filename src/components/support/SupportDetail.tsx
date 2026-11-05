@@ -111,7 +111,7 @@ export default function SupportDetail({
           </dl>
           <div className="grid shrink-0 grid-cols-2 gap-2">
             <button type="button" onClick={onReview} className={supportPrimary}>
-              {a.status === "검토 중" ? "지원 자격 검토" : "지원 결과 조회"}
+              {a.status === "승인" || a.status === "미승인" ? "지원 결과 조회" : "지원 자격 검토"}
             </button>
             <button
               type="button"

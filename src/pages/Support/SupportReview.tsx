@@ -1,10 +1,5 @@
-import { useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import AdministrativeReview from "../../components/support/AdministrativeReview";
 import ReviewInformation from "../../components/support/ReviewInformation";
 import SupportDialogs from "../../components/support/SupportDialogs";
@@ -12,13 +7,14 @@ import {
   supportFocus,
   supportSecondary,
 } from "../../components/support/styles";
+import { approvalIssue } from "./model";
+import { useSupportRecord } from "./useSupportApi";
 import {
-  approvalIssue,
-  confirmApproval,
-  confirmRejection,
-  withReview,
-} from "./model";
-import { useSupportData } from "./useSupportData";
+  approveSupport,
+  rejectSupport,
+  supportError,
+} from "../../api/supportApplications";
+import type { SupportApplication } from "./types";
 import type { ReviewDraft, SupportDialogKind } from "./types";
 import back from "../../assets/support/back.svg";
 
@@ -38,28 +34,43 @@ const dialogKinds: SupportDialogKind[] = [
 export default function SupportReview() {
   const { requestId } = useParams();
 
-  return <SupportReviewScreen key={requestId} />;
+  const record = useSupportRecord(Number(requestId), true);
+
+  if (!record.application)
+    return (
+      <section
+        role="status"
+        className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center"
+      >
+        <p>{record.error || "지원 신청을 불러오는 중입니다."}</p>
+        <Link to="/support" className={supportSecondary}>
+          지원 목록으로
+        </Link>
+      </section>
+    );
+
+  return <SupportReviewScreen key={requestId} initial={record.application} />;
 }
 
-function SupportReviewScreen() {
+function SupportReviewScreen({ initial }: { initial: SupportApplication }) {
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { applications, error, updateApplication } = useSupportData();
-  const a = applications.find((a) => a.id === requestId);
+
+  const [a, setApplication] = useState(initial);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [draft, setDraft] = useState<ReviewDraft | null>(() =>
     a ? structuredClone(a.review) : null,
   );
-  const [savedReview, setSavedReview] = useState(draft);
-  const [reason, setReason] = useState(
-    a?.rejectionReason || a?.review.memo || "",
-  );
+
+  const [reason, setReason] = useState(a?.review.memo || "");
   const kind = dialogKinds.includes(params.get("dialog") as SupportDialogKind)
     ? (params.get("dialog") as SupportDialogKind)
     : null;
   const returnValue = params.get("returnTo");
   const returnTo =
-    returnValue && /^\/support(?:\/\d{6})?(?:\?[^#]*)?$/.test(returnValue)
+    returnValue && /^\/support(?:\/\d+)?(?:\?[^#]*)?$/.test(returnValue)
       ? returnValue
       : "/support/" + (requestId || "");
 
@@ -73,7 +84,7 @@ function SupportReviewScreen() {
     setParams(p, { replace: true });
   }
 
-  if (!a || !draft || !savedReview)
+  if (!a || !draft)
     return (
       <section className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
         <h1 className="text-xl font-bold">
@@ -84,53 +95,46 @@ function SupportReviewScreen() {
         </Link>
       </section>
     );
-  const currentDraft = a.status === "검토 중" ? draft : a.review;
+  const currentDraft = a.serverStatus === "SUBMITTED" ? draft : a.review;
 
   function saveReview() {
-    if (
-      updateApplication(a!.id, (original) => {
-        if (original.status !== "검토 중")
-          throw new Error(
-            "이미 검토 결과가 확정된 신청입니다. 목록에서 현재 상태를 확인해 주세요.",
-          );
+    setError(
+      "현재 API에는 검토 초안·메모 저장 기능이 없습니다. 지원 범위와 확인 항목은 승인 시 전송됩니다.",
+    );
+  }
 
-        return withReview(original, currentDraft);
-      })
-    ) {
-      setSavedReview(structuredClone(currentDraft));
-      show("review-saved");
+  async function confirm() {
+    if (saving.current || a.serverStatus !== "SUBMITTED" || !a.apiId) return;
+    const approved = kind === "approve" || kind === "review-check";
+
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = approved
+        ? await approveSupport(a.apiId, currentDraft.scope, currentDraft.checks)
+        : await rejectSupport(a.apiId, reason);
+
+      setApplication({
+        ...a,
+        serverStatus: result.status,
+        status: approved ? "승인" : "미승인",
+        review: structuredClone(currentDraft),
+        rejectionReason: approved ? "" : reason.trim(),
+      });
+      show(approved ? "approved" : "rejected");
+    } catch (cause) {
+      setError(supportError(cause));
+    } finally {
+      saving.current = false;
+      setBusy(false);
     }
   }
 
-  function confirm() {
-    if (a!.status !== "검토 중") return;
-    const approved = kind === "approve" || kind === "review-check";
-
-    if (
-      updateApplication(a!.id, (original) => {
-        if (original.status !== "검토 중")
-          throw new Error(
-            "이미 검토 결과가 확정된 신청입니다. 목록에서 현재 상태를 확인해 주세요.",
-          );
-
-        return approved
-          ? confirmApproval(original, currentDraft, savedReview!)
-          : confirmRejection(original, currentDraft, reason);
-      })
-    )
-      show(approved ? "approved" : "rejected");
-  }
-
   function register() {
-    if (
-      updateApplication(a!.id, (original) => {
-        if (original.status !== "승인")
-          throw new Error("승인된 신청만 시공 대상으로 등록할 수 있습니다.");
-
-        return { ...original, constructionRegistered: true };
-      })
-    )
-      navigate("/construction?requestId=" + a!.id);
+    window.alert(
+      "승인된 신청의 시공 연계는 서버에서 처리합니다. 시공 관리 API 연동 후 목록에서 확인할 수 있습니다.",
+    );
   }
 
   return (
@@ -179,11 +183,15 @@ function SupportReviewScreen() {
         <AdministrativeReview
           application={a}
           draft={currentDraft}
+          busy={busy}
           onChange={setDraft}
           onApprove={() =>
             show(approvalIssue(a, currentDraft) ? "review-check" : "approve")
           }
-          onReject={() => show("reject")}
+          onReject={() => {
+            setReason(currentDraft.memo);
+            show("reject");
+          }}
           onSave={saveReview}
           onCheck={() => show("review-check")}
         />
@@ -194,10 +202,13 @@ function SupportReviewScreen() {
           kind={kind}
           application={a}
           draft={currentDraft}
+          busy={busy}
           reason={reason}
           document={params.get("document") || undefined}
           error={error}
-          onClose={() => show(null)}
+          onClose={() => {
+            if (!saving.current) show(null);
+          }}
           onConfirm={confirm}
           onReason={setReason}
           onRegister={register}
