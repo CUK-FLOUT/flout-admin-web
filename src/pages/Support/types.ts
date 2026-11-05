@@ -1,4 +1,11 @@
-export const supportStatuses = ["검토 중", "승인", "미승인"] as const;
+export const supportStatuses = [
+  "검토 중",
+  "승인",
+  "미승인",
+  "접수",
+  "동의 확인 필요",
+  "일정 조율 중",
+] as const;
 export const consentRequirements = ["검토 필요", "필요", "불필요"] as const;
 export const consentStates = [
   "미확인",
@@ -20,6 +27,13 @@ export type ReviewDraft = {
 };
 export type SupportApplication = {
   id: string;
+  apiId?: number;
+  serverStatus?: string;
+  attachmentUrls?: Record<string, string>;
+  attachmentKeys?: string[];
+  reviewLoaded?: boolean;
+  programName?: string;
+  programTarget?: string;
   resident: string;
   phone: string;
   district: string;

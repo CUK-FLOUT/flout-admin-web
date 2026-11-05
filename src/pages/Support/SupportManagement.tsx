@@ -11,8 +11,16 @@ import {
   supportPrimary,
   supportSecondary,
 } from "../../components/support/styles";
-import { consentLabel, filterSupport } from "./model";
-import { useSupportData } from "./useSupportData";
+import { consentLabel } from "./model";
+import {
+  mapSupport,
+  supportSearchFilters,
+  supportDistrictOptions,
+  supportStatusOptions,
+  supportConsentOptions,
+} from "./apiMapping";
+import { useSupportList, useSupportRecord } from "./useSupportApi";
+
 import type { SupportDialogKind, SupportFilters } from "./types";
 import search from "../../assets/support/search.svg";
 import documentIcon from "../../assets/support/stat-document.svg";
@@ -21,9 +29,11 @@ import clockIcon from "../../assets/support/stat-clock.svg";
 import userIcon from "../../assets/support/stat-user.svg";
 
 const initialFilters = (p: URLSearchParams): SupportFilters => ({
-  district: p.get("district") || "",
-  status: p.get("status") || "",
-  consent: p.get("consent") || "",
+  district:
+    supportDistrictOptions.find((value) => value === p.get("district")) || "",
+  status: supportStatusOptions.find((value) => value === p.get("status")) || "",
+  consent:
+    supportConsentOptions.find((value) => value === p.get("consent")) || "",
   q: p.get("q") || "",
 });
 const panel =
@@ -43,44 +53,45 @@ function SupportManagementScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { applications, error } = useSupportData();
   const [filters, setFilters] = useState(() => initialFilters(params));
-  const source = params.get("dataset") === "empty" ? [] : applications;
-  const filtered = filterSupport(source, initialFilters(params));
-  const pageCount = Math.max(1, Math.ceil(filtered.length / 5));
-  const page = Math.min(
-    pageCount,
-    Math.max(1, Math.floor(Number(params.get("page"))) || 1),
+  const [revision, setRevision] = useState(0);
+  const page = Math.max(1, Math.floor(Number(params.get("page"))) || 1);
+  const response = useSupportList(
+    params.get("q") || "",
+    page - 1,
+    revision,
+    supportSearchFilters(initialFilters(params)),
   );
-  const visible = filtered.slice((page - 1) * 5, page * 5);
+  const visible = response.page?.supportApplications.map(mapSupport) ?? [];
+  const pageCount = Math.max(1, response.page?.totalPages ?? 1);
   const selectedId = requestId || params.get("selected");
-  const selected =
+  const selectedApiId =
     selectedId === "none"
       ? undefined
       : selectedId
-        ? filtered.find((a) => a.id === selectedId)
-        : visible[0];
+        ? Number(selectedId)
+        : visible[0]?.apiId;
+  const record = useSupportRecord(selectedApiId, true);
+  const selected = record.application;
+  const error = response.error || record.error || record.reviewError;
+  const total = response.page?.totalElements ?? 0;
   const stats = [
-    { label: "지원 신청", count: source.length, icon: documentIcon },
+    {
+      label: "지원 신청",
+      count: response.counts?.totalCount,
+      icon: documentIcon,
+    },
     {
       label: "검토 중",
-      count: source.filter((a) => a.status === "검토 중").length,
+      count: response.counts?.reviewingCount,
       icon: reviewIcon,
     },
     {
       label: "동의 확인 필요",
-      count: source.filter(
-        (a) =>
-          a.review.consentRequired === "필요" &&
-          a.review.consentState !== "확인 완료",
-      ).length,
+      count: response.counts?.consentRequiredCount,
       icon: clockIcon,
     },
-    {
-      label: "승인",
-      count: source.filter((a) => a.status === "승인").length,
-      icon: userIcon,
-    },
+    { label: "승인", count: response.counts?.approvedCount, icon: userIcon },
   ];
   const kind = params.get("dialog") as SupportDialogKind | null;
   const dialog =
@@ -108,6 +119,7 @@ function SupportManagementScreen() {
 
   function searchSubmit(e: FormEvent) {
     e.preventDefault();
+    setRevision((value) => value + 1);
     const p = returnQuery();
 
     ["district", "status", "consent", "q", "page", "selected"].forEach((k) =>
@@ -120,10 +132,10 @@ function SupportManagementScreen() {
   }
 
   function reset() {
+    setRevision((value) => value + 1);
     setFilters({ district: "", status: "", consent: "", q: "" });
     const p = new URLSearchParams();
 
-    if (params.get("dataset") === "empty") p.set("dataset", "empty");
     change(p);
   }
 
@@ -133,12 +145,12 @@ function SupportManagementScreen() {
 
     p.set("dialog", value);
     if (document) p.set("document", document);
-    change(p, selected.id);
+    change(p, String(selected.apiId));
   }
 
   function review() {
     if (!selected) return;
-    if (selected.status !== "검토 중") {
+    if (selected.status === "승인" || selected.status === "미승인") {
       showDialog(
         selected.status === "승인" ? "approved-view" : "rejected-view",
       );
@@ -152,10 +164,10 @@ function SupportManagementScreen() {
     p.set(
       "returnTo",
       "/support/" +
-        selected.id +
+        String(selected.apiId) +
         (returnQuery().size ? "?" + returnQuery().toString() : ""),
     );
-    navigate("/support/" + selected.id + "/review?" + p.toString());
+    navigate("/support/" + selected.apiId + "/review?" + p.toString());
   }
 
   const pageNumbers = [1, 2, 3].map(
@@ -181,7 +193,7 @@ function SupportManagementScreen() {
         <SupportSelect
           label="지역"
           value={filters.district || "지역 전체"}
-          options={["지역 전체", "원미구", "소사구", "오정구"]}
+          options={["지역 전체", ...supportDistrictOptions]}
           onChange={(v) =>
             setFilters((f) => ({ ...f, district: v === "지역 전체" ? "" : v }))
           }
@@ -189,7 +201,7 @@ function SupportManagementScreen() {
         <SupportSelect
           label="지원 상태"
           value={filters.status || "지원 상태 전체"}
-          options={["지원 상태 전체", "검토 중", "승인", "미승인"]}
+          options={["지원 상태 전체", ...supportStatusOptions]}
           onChange={(v) =>
             setFilters((f) => ({
               ...f,
@@ -200,16 +212,7 @@ function SupportManagementScreen() {
         <SupportSelect
           label="동의 확인"
           value={filters.consent || "동의 확인 전체"}
-          options={[
-            "동의 확인 전체",
-            "불필요",
-            "필요 여부 검토 전",
-            "필요 · 미확인",
-            "필요 · 자료 요청",
-            "필요 · 확인 중",
-            "필요 · 확인 완료",
-            "필요 · 불필요",
-          ]}
+          options={["동의 확인 전체", ...supportConsentOptions]}
           onChange={(v) =>
             setFilters((f) => ({
               ...f,
@@ -253,7 +256,7 @@ function SupportManagementScreen() {
             <div className="flex min-w-0 flex-col gap-1 pt-1">
               <h2 className="text-sm leading-[17px]">{stat.label}</h2>
               <p className="text-[27px] font-bold leading-[33px]">
-                {stat.count}건
+                {stat.count ?? "—"}건
               </p>
             </div>
           </article>
@@ -279,12 +282,21 @@ function SupportManagementScreen() {
             >
               지원 신청 목록
             </h2>
-            <span className="text-xs leading-[18px]">
-              총 {filtered.length}건
-            </span>
+            <span className="text-xs leading-[18px]">총 {total}건</span>
           </div>
-          {!filtered.length ? (
-            <SupportEmpty search={source.length > 0} onReset={reset} />
+          {response.loading || response.listError ? (
+            <p role="status" className="mt-[19px] text-sm">
+              {response.loading
+                ? "지원 신청을 불러오는 중입니다."
+                : "목록을 불러오지 못했습니다. 검색을 다시 시도해 주세요."}
+            </p>
+          ) : !visible.length ? (
+            <SupportEmpty
+              search={Object.values(initialFilters(params)).some((value) =>
+                Boolean(value.trim()),
+              )}
+              onReset={reset}
+            />
           ) : (
             <>
               <div className="mt-[19px] min-h-0 flex-1 overflow-auto">
@@ -314,18 +326,20 @@ function SupportManagementScreen() {
                   </div>
                   {visible.map((a) => (
                     <div
-                      key={a.id}
+                      key={a.apiId}
                       role="row"
-                      aria-selected={selected?.id === a.id}
+                      aria-selected={selected?.apiId === a.apiId}
                       className={
                         "grid min-h-[62px] grid-cols-[minmax(181px,181fr)_minmax(194px,194fr)_minmax(190px,190fr)_95px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
-                        (selected?.id === a.id ? "bg-[#f4f5f6]" : "bg-white")
+                        (selected?.apiId === a.apiId
+                          ? "bg-[#f4f5f6]"
+                          : "bg-white")
                       }
                     >
                       <div role="cell">
                         <button
                           type="button"
-                          onClick={() => change(returnQuery(), a.id)}
+                          onClick={() => change(returnQuery(), String(a.apiId))}
                           aria-label={a.id + " · " + a.resident + " 신청 선택"}
                           className="py-5 text-left after:absolute"
                         >
@@ -404,7 +418,7 @@ function SupportManagementScreen() {
           kind={dialog}
           application={selected}
           document={params.get("document") || undefined}
-          onClose={() => change(returnQuery(), selected.id, true)}
+          onClose={() => change(returnQuery(), String(selected.apiId), true)}
         />
       )}
     </div>
