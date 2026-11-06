@@ -147,6 +147,7 @@ function hookHarness(overrides = {}) {
     getGisMarkers: async () => ({applications:[]}),
     getGisStats: async () => ({totalCount:0}),
     getGisDetail: async () => detail,
+    getGisMemo: async () => "기존 메모",
     getGisAttachments: async () => [],
     getGisHistories: async () => ({histories:[],totalCount:0}),
     getGisSupport: async () => ({support:null}),
@@ -231,4 +232,39 @@ test("검색·신청 변경 후 늦은 이전 응답과 화면 이탈 후 응답
   assert.equal(h.calls.filter(c=>c.name==="getGisDetail")[0].args[1].aborted,true);
   h.unmount();
   assert.equal(h.calls.filter(c=>c.name==="getGisDetail")[1].args[1].aborted,true);
+});
+
+test("기존 우선점검 조회 API에서 메모를 읽고 조회 지연·실패를 빈 메모와 구분한다", async () => {
+  const h = harness(), api = h.load("src/api/gisApplications.ts");
+  const signal = new AbortController().signal;
+  h.setResponse(() => ({internalMemo:"기존 저장 메모"}));
+  assert.equal(await api.getGisMemo(29, signal), "기존 저장 메모");
+  assert.equal(h.requests[0].url, "/api/admin/priority-inspections/29");
+  assert.equal(h.requests[0].signal, signal);
+  let finish;
+  const state = hookHarness({getGisMemo: () => new Promise(resolve => {finish=resolve;})});
+  state.render('{"page":0}', "29");
+  await settle();
+  assert.equal(state.render('{"page":0}', "29").record.internalMemo, undefined);
+  finish("기존 메모");
+  await settle();
+  assert.equal(state.render('{"page":0}', "29").record.internalMemo, "기존 메모");
+  const failed = hookHarness({getGisMemo: async () => {throw new Error("메모 조회 실패");}});
+  failed.render('{"page":0}',"29");
+  await settle();
+  assert.equal(failed.render('{"page":0}',"29").record.internalMemo, undefined);
+  assert.equal(failed.render('{"page":0}',"29").record.errors.internalMemo, "메모 조회 실패");
+  const empty = hookHarness({getGisMemo: async () => null});
+  empty.render('{"page":0}',"29");
+  await settle();
+  assert.equal(empty.render('{"page":0}',"29").record.internalMemo, null);
+});
+
+test("마커 없는 신청에는 페이지 번호를 대신 붙이지 않는다", () => {
+  const {gisMarkerNumber,gisApplication} = harness().load("src/pages/GIS/apiMapping.ts");
+  const markers = [{applicationId:50},{applicationId:29}];
+  assert.equal(gisMarkerNumber(29,markers),2);
+  assert.equal(gisMarkerNumber(99,markers),undefined);
+  assert.equal(gisMarkerNumber(29),undefined);
+  assert.equal(gisApplication({...detail,processingStatus:"RECEIVED"},gisMarkerNumber(99,markers)).number,undefined);
 });

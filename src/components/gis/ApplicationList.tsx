@@ -39,7 +39,7 @@ function ApplicationRow({ application, selected, onSelect }: RowProps) {
       >
         <span className="min-w-0 flex-1">
           <strong className="block text-base leading-[21px]">
-            {application.number}. {application.address}
+            {application.number !== undefined && `${application.number}. `}{application.address}
           </strong>
 
           <span className="mt-[3px] block text-sm leading-[19px]">

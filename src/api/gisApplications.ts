@@ -1,3 +1,4 @@
+import { getPriorityInspection } from "./priorityInspections";
 import axios from "axios";
 import { apiClient } from "./client";
 
@@ -190,3 +191,6 @@ export function gisError(error: unknown): string {
     ? error.message
     : "GIS 요청을 처리하지 못했습니다.";
 }
+
+export const getGisMemo = (id: number, signal?: AbortSignal) =>
+  getPriorityInspection(id, signal).then((result) => result.internalMemo);

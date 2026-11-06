@@ -11,7 +11,7 @@ export type RequestStatus =
 export type Application = {
   id: string;
   receiptNo?: string;
-  number: number;
+  number?: number;
   address: string;
   district: string;
   resident: string;
@@ -19,7 +19,7 @@ export type Application = {
   risk: Risk;
   status: string;
   history: string[];
-  memo: string;
+  memo?: string;
   visitDate: string;
   visitTime: string;
   reason: string;

@@ -51,7 +51,15 @@ export default function ApplicationDetail({
   record,
 }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("신청 정보");
-  const [memo, setMemo] = useState(a.memo);
+  const [memoSource, setMemoSource] = useState(record.internalMemo);
+  const [memo, setMemo] = useState(record.internalMemo ?? "");
+
+  if (memoSource !== record.internalMemo) {
+    setMemoSource(record.internalMemo);
+    setMemo(record.internalMemo ?? "");
+  }
+
+  const memoReady = record.internalMemo !== undefined && !record.errors.internalMemo;
   const [photo, setPhoto] = useState<{
     src: string;
     title: string;
@@ -74,7 +82,7 @@ export default function ApplicationDetail({
     };
   }, []);
   async function saveMemo() {
-    if (inFlight.current) return;
+    if (inFlight.current || !memoReady) return;
     inFlight.current = true;
     setSaving(true);
     setSaveError("");
@@ -390,20 +398,21 @@ export default function ApplicationDetail({
             id="request-memo"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            disabled={saving}
+            disabled={saving || !memoReady}
             maxLength={2000}
             placeholder="담당자 확인 내용을 입력하세요"
             className="h-9 min-w-0 flex-1 rounded-md border border-[#234f73] px-3 text-[13px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73] read-only:bg-[#f4f5f6]"
           />
 
           <button
-            disabled={saving}
+            disabled={saving || !memoReady}
             onClick={() => void saveMemo()}
             className="h-9 w-[124px] shrink-0 cursor-pointer rounded-[7px] bg-[#234f73] text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] disabled:cursor-not-allowed disabled:border disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]"
           >
             메모 저장
           </button>
         </div>
+        {record.errors.internalMemo && <p role="alert" className="mt-2 text-sm text-[#a53632]">{record.errors.internalMemo}</p>}
         {saveMessage && (
           <p role="status" className="mt-2 text-sm text-[#27654d]">
             {saveMessage}

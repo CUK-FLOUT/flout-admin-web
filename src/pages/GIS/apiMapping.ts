@@ -45,7 +45,7 @@ const riskLabel = (risk: GisItem["riskLevel"]) =>
         ? "낮음"
         : "미입력";
 
-export function gisApplication(item: GisItem, number: number): Application {
+export function gisApplication(item: GisItem, number: number | undefined): Application {
   return {
     id: String(item.applicationId),
     receiptNo: item.receiptNo,
@@ -57,7 +57,7 @@ export function gisApplication(item: GisItem, number: number): Application {
     risk: riskLabel(item.riskLevel),
     status: processingLabels[item.processingStatus] ?? "상태 확인 필요",
     history: [],
-    memo: "",
+    memo: undefined,
     visitDate: "미입력",
     visitTime: "미입력",
     reason: "미입력",
@@ -158,4 +158,11 @@ export function gisDetailApplication(
       : "미입력",
     reason: detail.requestReason || "미입력",
   };
+}
+
+
+export function gisMarkerNumber(applicationId: number, markers: GisMarker[] = []) {
+  const index = markers.findIndex((marker) => marker.applicationId === applicationId);
+
+  return index < 0 ? undefined : index + 1;
 }

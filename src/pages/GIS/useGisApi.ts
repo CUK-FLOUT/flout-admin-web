@@ -3,13 +3,14 @@ import * as api from "../../api/gisApplications";
 
 export interface GisRecord {
   detail?: api.GisDetail;
+  internalMemo?: string | null;
   attachments?: api.GisAttachment[];
   histories?: api.GisHistories;
   support?: api.GisSupport | null;
   construction?: api.GisConstruction | null;
   errors: Partial<
     Record<
-      "detail" | "attachments" | "histories" | "support" | "construction",
+      "detail" | "attachments" | "histories" | "support" | "construction" | "internalMemo",
       string
     >
   >;
@@ -106,6 +107,7 @@ export function useGisApi(query: string, id: string | undefined) {
 
       await Promise.all([
         part("detail", api.getGisDetail(number, controller.signal)),
+        part("internalMemo", api.getGisMemo(number, controller.signal)),
         part("attachments", api.getGisAttachments(number, controller.signal)),
         part("histories", api.getGisHistories(number, controller.signal)),
         part(

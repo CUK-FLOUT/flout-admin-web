@@ -9,6 +9,7 @@ import {
   gisApplication,
   gisDetailApplication,
   gisMapApplication,
+  gisMarkerNumber,
   gisSearch,
 } from "./apiMapping";
 import { useGisApi } from "./useGisApi";
@@ -48,12 +49,10 @@ export default function GisApplications() {
     ),
   );
   const data = useGisApi(query, requestId);
-  const filtered = (data.page?.applications ?? []).map((item, index) =>
+  const filtered = (data.page?.applications ?? []).map((item) =>
     gisApplication(
       item,
-      data.markers?.some((marker) => marker.applicationId === item.applicationId)
-        ? data.markers.findIndex((marker) => marker.applicationId === item.applicationId) + 1
-        : (data.page?.page ?? 0) * (data.page?.size ?? 10) + index + 1,
+      gisMarkerNumber(item.applicationId, data.markers),
     ),
   );
   const markers = (data.markers ?? []).map((marker, index) =>
