@@ -23,7 +23,7 @@ export function getMapLocation(
   const coordinates = application.coordinates;
   const point = coordinates
     ? [coordinates.latitude, coordinates.longitude]
-    : demoCoordinates[application.id];
+    : application.receiptNo ? undefined : demoCoordinates[application.id];
 
   if (
     !point ||

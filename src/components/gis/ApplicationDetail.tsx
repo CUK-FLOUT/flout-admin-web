@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Application } from "../../pages/GIS/types";
 
@@ -7,13 +7,15 @@ import basic from "../../assets/gis/imgIconBasicInfo.svg";
 import resident from "../../assets/gis/imgIconResident.svg";
 import attachment from "../../assets/gis/imgIconAttachment.svg";
 import memoIcon from "../../assets/gis/imgIconMemo.svg";
-import door from "../../assets/gis/imgJpg.png";
-import drain from "../../assets/gis/imgJpg1.png";
+import type { GisRecord } from "../../pages/GIS/useGisApi";
+import { gisError } from "../../api/gisApplications";
+import { getSessionGeneration } from "../../auth/session";
 
 type Props = {
   application: Application;
   onClose: () => void;
-  onAccept: (id: string, memo: string) => void;
+  onAccept: (id: string, memo: string) => Promise<string>;
+  record: GisRecord;
 };
 
 const tabs = ["신청 정보", "처리 이력", "지원 정보", "시공 정보"] as const;
@@ -46,9 +48,18 @@ export default function ApplicationDetail({
   application: a,
   onClose,
   onAccept,
+  record,
 }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("신청 정보");
-  const [memo, setMemo] = useState(a.memo);
+  const [memoSource, setMemoSource] = useState(record.internalMemo);
+  const [memo, setMemo] = useState(record.internalMemo ?? "");
+
+  if (memoSource !== record.internalMemo) {
+    setMemoSource(record.internalMemo);
+    setMemo(record.internalMemo ?? "");
+  }
+
+  const memoReady = record.internalMemo !== undefined && !record.errors.internalMemo;
   const [photo, setPhoto] = useState<{
     src: string;
     title: string;
@@ -56,7 +67,62 @@ export default function ApplicationDetail({
 
   const dialog = useRef<HTMLDialogElement>(null);
 
-  const pending = a.status === "접수";
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const inFlight = useRef(false);
+  const active = useRef(true);
+  const generation = getSessionGeneration();
+
+  useEffect(() => {
+    active.current = true;
+
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  async function saveMemo() {
+    if (inFlight.current || !memoReady) return;
+    inFlight.current = true;
+    setSaving(true);
+    setSaveError("");
+    setSaveMessage("");
+    try {
+      const saved = await onAccept(a.id, memo);
+
+      if (active.current && generation === getSessionGeneration()) {
+        setMemo(saved);
+        setSaveMessage("내부 메모를 저장했습니다.");
+      }
+    } catch (error) {
+      if (active.current && generation === getSessionGeneration())
+        setSaveError(gisError(error));
+    } finally {
+      inFlight.current = false;
+      if (active.current) setSaving(false);
+    }
+  }
+
+  const support = record.support;
+  const construction = record.construction;
+  const statuses: Record<string, string> = {
+    SUBMITTED: "검토 중",
+    APPROVED: "승인",
+    REJECTED: "미승인",
+    PENDING: "일정 미등록",
+    SCHEDULED: "예정",
+    IN_PROGRESS: "진행",
+    COMPLETED: "완료",
+  };
+  const display = (value: string | null | undefined) => value || "미입력";
+  const tabError =
+    tab === "신청 정보"
+      ? record.errors.attachments
+      : tab === "처리 이력"
+        ? record.errors.histories
+        : tab === "지원 정보"
+          ? record.errors.support
+          : record.errors.construction;
 
   function openPhoto(src: string, title: string) {
     setPhoto({ src, title });
@@ -78,7 +144,7 @@ export default function ApplicationDetail({
         </button>
 
         <h2 className="text-lg font-bold">
-          {a.id} · {a.resident}님의 신청
+          {a.receiptNo ?? a.id} · {a.resident}님의 신청
         </h2>
       </header>
 
@@ -112,6 +178,11 @@ export default function ApplicationDetail({
         aria-labelledby={`request-tab-${tabs.indexOf(tab)}`}
         className="min-h-0 flex-1 overflow-y-auto px-[15px] pb-0 pt-4"
       >
+        {tabError && (
+          <p role="alert" className="mb-3 text-sm text-[#a53632]">
+            {tabError}
+          </p>
+        )}
         {tab === "신청 정보" && (
           <>
             <section className="pb-2">
@@ -167,26 +238,31 @@ export default function ApplicationDetail({
               <SectionTitle icon={attachment}>첨부 자료</SectionTitle>
 
               <div className="flex flex-wrap items-start gap-2">
-                {[
-                  [door, "출입구.jpg"],
-                  [drain, "배수구.jpg"],
-                ].map(([src, title]) => (
+                {(record.attachments ?? []).map((item) => (
                   <button
-                    key={title}
-                    onClick={() => openPhoto(src, title)}
+                    key={item.attachmentId}
+                    onClick={() =>
+                      openPhoto(item.imageUrl, item.originalFilename)
+                    }
                     className="w-32 cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-[#234f73]"
                   >
                     <img
-                      src={src}
-                      alt={`${title} 첨부사진`}
+                      src={item.imageUrl}
+                      alt={item.originalFilename}
                       className="h-[68px] w-32 rounded-[7px] border border-[#c8d0d7] object-cover"
                     />
-
-                    <span className="mt-0 block text-xs">{title}</span>
+                    <span className="mt-0 block text-xs">
+                      {item.originalFilename}
+                    </span>
                   </button>
                 ))}
-
-                <span className="ml-1 pt-[3px] text-xs">첨부사진 2개</span>
+                {!record.errors.attachments && (
+                  <span className="ml-1 pt-[3px] text-xs">
+                    {record.attachments
+                      ? `첨부사진 ${record.attachments.length}개`
+                      : "첨부사진을 불러오는 중입니다."}
+                  </span>
+                )}
               </div>
             </section>
           </>
@@ -194,32 +270,118 @@ export default function ApplicationDetail({
 
         {tab === "처리 이력" && (
           <ol className="space-y-4 text-sm leading-6">
-            {a.history.map((item, i) => (
+            {(record.histories?.histories ?? []).map((item) => (
               <li
-                key={`${i}-${item}`}
+                key={item.eventId}
                 className="border-l-2 border-[#234f73] pl-3"
               >
-                {item}
+                <p>
+                  {item.title} · {item.statusLabel}
+                </p>
+                {item.description && <p>{item.description}</p>}
+                <p>
+                  {item.occurredAt
+                    ? new Date(item.occurredAt).toLocaleString("ko-KR", {
+                        timeZone: "Asia/Seoul",
+                      })
+                    : "시각 미기록"}{" "}
+                  · {item.actorName || "처리자 미기록"}
+                </p>
               </li>
             ))}
+            {!record.errors.histories &&
+              (record.histories ? (
+                !record.histories.histories.length && (
+                  <li>등록된 처리 이력이 없습니다.</li>
+                )
+              ) : (
+                <li>처리 이력을 불러오는 중입니다.</li>
+              ))}
           </ol>
         )}
 
-        {tab === "지원 정보" && (
-          <p className="py-4 text-sm leading-6 text-[#43515e]">
-            {a.status.startsWith("지원")
-              ? `지원 상태: ${a.status}`
-              : "등록된 지원 정보가 없습니다."}
-          </p>
-        )}
-
-        {tab === "시공 정보" && (
-          <p className="py-4 text-sm leading-6 text-[#43515e]">
-            {a.status === "시공 진행"
-              ? "시공 진행 중입니다."
-              : "등록된 시공 정보가 없습니다."}
-          </p>
-        )}
+        {tab === "지원 정보" &&
+          !record.errors.support &&
+          (support === undefined ? (
+            <p>지원 정보를 불러오는 중입니다.</p>
+          ) : support === null ? (
+            <p className="py-4 text-sm leading-6 text-[#43515e]">
+              등록된 지원 정보가 없습니다.
+            </p>
+          ) : (
+            <dl className="space-y-[5px]">
+              <InfoRow label="지원사업">{display(support.programName)}</InfoRow>
+              <InfoRow label="지원 상태">
+                {statuses[support.status] ?? support.status}
+              </InfoRow>
+              <InfoRow label="신청 시설">
+                {display(support.requestedFacility)}
+              </InfoRow>
+              <InfoRow label="지원 범위">
+                {display(support.supportScope)}
+              </InfoRow>
+              <InfoRow label="임대인 동의">
+                {support.landlordConsentRequired ? "필요" : "불필요"}
+              </InfoRow>
+              <InfoRow label="동의서 제출">
+                {support.landlordConsentDocumentSubmitted ? "제출" : "미제출"}
+              </InfoRow>
+              <InfoRow label="시공 상태">
+                {support.constructionStatus
+                  ? statuses[support.constructionStatus]
+                  : "미연계"}
+              </InfoRow>
+              {support.rejectionReason && (
+                <InfoRow label="미승인 사유">{support.rejectionReason}</InfoRow>
+              )}
+            </dl>
+          ))}
+        {tab === "시공 정보" &&
+          !record.errors.construction &&
+          (construction === undefined ? (
+            <p>시공 정보를 불러오는 중입니다.</p>
+          ) : construction === null ? (
+            <p className="py-4 text-sm leading-6 text-[#43515e]">
+              등록된 시공 정보가 없습니다.
+            </p>
+          ) : (
+            <dl className="space-y-[5px]">
+              <InfoRow label="시공 상태">
+                {statuses[construction.status] ?? construction.status}
+              </InfoRow>
+              <InfoRow label="신청 시설">
+                {display(construction.requestedFacility)}
+              </InfoRow>
+              <InfoRow label="지원 범위">
+                {display(construction.supportScope)}
+              </InfoRow>
+              <InfoRow label="주민 희망일">
+                {display(construction.preferredConstructionDate)}
+              </InfoRow>
+              <InfoRow label="희망 시간대">
+                {construction.preferredTimeSlot
+                  ? { MORNING: "오전", AFTERNOON: "오후", ANY: "상관없음" }[
+                      construction.preferredTimeSlot
+                    ]
+                  : "미입력"}
+              </InfoRow>
+              <InfoRow label="확정 시공일">
+                {display(construction.constructionDate)}
+              </InfoRow>
+              <InfoRow label="확정 시간">
+                {display(construction.constructionTime)}
+              </InfoRow>
+              <InfoRow label="담당자">
+                {display(construction.managerName)}
+              </InfoRow>
+              <InfoRow label="완료 시각">
+                {display(construction.completedAt)}
+              </InfoRow>
+              <InfoRow label="최종 설치 결과">
+                {display(construction.finalInstallationResult)}
+              </InfoRow>
+            </dl>
+          ))}
       </div>
 
       <footer className="shrink-0 border-t border-[#f4f5f6] bg-white px-[15px] pt-[14px] pb-5">
@@ -236,19 +398,31 @@ export default function ApplicationDetail({
             id="request-memo"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            readOnly={!pending}
+            disabled={saving || !memoReady}
+            maxLength={2000}
             placeholder="담당자 확인 내용을 입력하세요"
             className="h-9 min-w-0 flex-1 rounded-md border border-[#234f73] px-3 text-[13px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73] read-only:bg-[#f4f5f6]"
           />
 
           <button
-            disabled={!pending}
-            onClick={() => onAccept(a.id, memo.trim())}
+            disabled={saving || !memoReady}
+            onClick={() => void saveMemo()}
             className="h-9 w-[124px] shrink-0 cursor-pointer rounded-[7px] bg-[#234f73] text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] disabled:cursor-not-allowed disabled:border disabled:border-[#cbd5e1] disabled:bg-[#f1f5f9] disabled:text-[#94a3b8]"
           >
             메모 저장
           </button>
         </div>
+        {record.errors.internalMemo && <p role="alert" className="mt-2 text-sm text-[#a53632]">{record.errors.internalMemo}</p>}
+        {saveMessage && (
+          <p role="status" className="mt-2 text-sm text-[#27654d]">
+            {saveMessage}
+          </p>
+        )}
+        {saveError && (
+          <p role="alert" className="mt-2 text-sm text-[#a53632]">
+            {saveError}
+          </p>
+        )}
       </footer>
 
       <dialog
