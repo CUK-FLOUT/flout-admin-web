@@ -30,14 +30,20 @@ export function emptyResultContent(): ResultContent {
   };
 }
 
+export function resultFeedbacks(content: ResultContent) {
+  return content.feedbackEntries ?? content.selected.map((category) => ({
+    category, feedback: content.details[category],
+  }));
+}
+
 export function resultRequest(content: ResultContent): ResultRequest {
   return {
     summary: content.summary,
-    vulnerabilities: content.selected.map((category) => ({
+    vulnerabilities: resultFeedbacks(content).map(({ category, feedback }) => ({
       type: vulnerabilityTypes[category],
-      title: content.details[category].title,
-      expertOpinion: content.details[category].opinion,
-      fieldFindings: content.details[category].findings,
+      title: feedback.title,
+      expertOpinion: feedback.opinion,
+      fieldFindings: feedback.findings,
     })),
     recommendedActions: content.actions.map((description) => ({ description })),
     followUpType:
@@ -110,16 +116,18 @@ export function resultContent(result: InspectionResult | null): ResultContent {
       throw new Error(
         "지원하지 않는 취약지점 유형입니다. 서버 데이터를 확인해 주세요.",
       );
-    if (content.selected.includes(category))
-      throw new Error(
-        "같은 유형의 취약지점이 여러 개입니다. 현재 화면에서 안전하게 수정할 수 없습니다.",
-      );
-    content.selected.push(category);
-    content.details[category] = {
+    const feedback = {
       title: vulnerability.title ?? "",
       opinion: vulnerability.expertOpinion ?? "",
       findings: vulnerability.fieldFindings ?? "",
     };
+
+    if (!content.selected.includes(category)) {
+      content.selected.push(category);
+      content.details[category] = feedback;
+    }
+
+    (content.feedbackEntries ??= []).push({ category, feedback });
   }
 
   content.actions = (result.recommendedActions ?? []).map(

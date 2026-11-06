@@ -463,17 +463,19 @@ test("서버 결과의 순서·사진 ID·메모를 화면과 재저장 본문�
   assert.equal(validateResult({ ...content, memo: "" }, true), "");
   assert.match(validateResult({ ...content, photos: [] }, true), /현장사진/);
   assert.equal(resultContent({ ...savedResult, followUpType: null }).route, "");
-  assert.throws(
-    () =>
-      resultContent({
-        ...savedResult,
-        vulnerabilities: [
-          ...savedResult.vulnerabilities,
-          ...savedResult.vulnerabilities,
-        ],
-      }),
-    /같은 유형/,
-  );
+  const duplicate = resultContent({
+    ...savedResult,
+    vulnerabilities: [
+      ...savedResult.vulnerabilities,
+      { ...savedResult.vulnerabilities[0], title: "다른 배수구", fieldFindings: "별도 확인" },
+    ],
+  });
+  assert.equal(duplicate.feedbackEntries.length, 2);
+  assert.equal(duplicate.feedbackEntries[1].feedback.findings, "별도 확인");
+  assert.deepEqual(plain(resultRequest(duplicate).vulnerabilities), [
+    ...savedResult.vulnerabilities,
+    { ...savedResult.vulnerabilities[0], title: "다른 배수구", fieldFindings: "별도 확인" },
+  ]);
 });
 
 test("지역 문제의 한글 유형과 점검 ID를 실제 요청으로 변환하고 유효하지 않은 요청은 차단한다", async () => {
@@ -623,9 +625,9 @@ function editorHarness(overrides = {}) {
       return harness().load(`src/pages/InspectionResults/${name.slice(2)}`);
     },
   });
-  function render() {
+  function render(inspectionId = 91) {
     index = 0;
-    const result = module.exports.default({ inspectionId: 91, status: "대기" });
+    const result = module.exports.default({ inspectionId, status: "대기" });
     for (const effect of effects.splice(0)) effect();
     return result;
   }
@@ -633,6 +635,11 @@ function editorHarness(overrides = {}) {
     render,
     calls,
     params: () => params,
+    remount: () => {
+      for (const value of slots) value?.cleanup?.();
+      slots.length = 0;
+      effects.length = 0;
+    },
     changeSession: () => {
       generation++;
     },
@@ -790,4 +797,47 @@ test("주소 검색은 ADMIN 클라이언트로 검색어와 1부터 시작하�
   const selected = await api.searchInspectionAddresses("지봉로", 3);
   assert.equal(selected.addresses[0].roadAddress, "도로명");
   assert.equal(selected.addresses[0].zipCode, "14662");
+});
+
+test("점검별 미저장 초안을 복원하고 저장·세션 변경 후에는 이전 초안을 적용하지 않는다", async () => {
+  const h = editorHarness();
+  h.render(91);
+  await settle();
+  h.render(91).update("summary", "미저장 91");
+  h.remount();
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, "미저장 91");
+  h.render(92);
+  await settle();
+  h.render(92).update("summary", "미저장 92");
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, "미저장 91");
+  await h.render(91).persist(false);
+  h.render(92);
+  await settle();
+  assert.equal(h.render(92).draft.summary, "미저장 92");
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, savedResult.summary);
+  h.changeSession();
+  h.render(92);
+  await settle();
+  assert.equal(h.render(92).draft.summary, savedResult.summary);
+});
+
+test("같은 유형의 두 취약지점 편집이 다른 항목을 덮어쓰지 않는다", async () => {
+  const h = editorHarness({getInspectionResult: async () => ({
+    ...savedResult, vulnerabilities: [...savedResult.vulnerabilities,
+      {...savedResult.vulnerabilities[0], title: "두번째 배수구"}],
+  })});
+  h.render();
+  await settle();
+  h.render().updateFeedback(1, {title: "두번째 수정", opinion: "별도 의견", findings: "별도 확인"});
+  await h.render().persist(false);
+  const request = h.calls.find(c => c.name === "saveInspectionDraft").args[1];
+  assert.equal(request.vulnerabilities.length, 2);
+  assert.equal(request.vulnerabilities[0].title, savedResult.vulnerabilities[0].title);
+  assert.equal(request.vulnerabilities[1].title, "두번째 수정");
 });

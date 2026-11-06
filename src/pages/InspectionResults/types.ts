@@ -14,6 +14,7 @@ export type ResultPhoto = {
 };
 export type ResultContent = {
   selected: Category[];
+  feedbackEntries?: { category: Category; feedback: Feedback }[];
   summary: string;
   details: Record<Category, Feedback>;
   actions: string[];

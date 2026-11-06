@@ -1,3 +1,4 @@
+import { getSessionGeneration } from "../../auth/session";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -23,6 +24,8 @@ import type { InspectionPage } from "../../api/inspections";
 import { loadInspection } from "./loadInspection";
 import { inspectionRow, inspectionSearch } from "./apiModel";
 
+let pendingAssignment: { inspectionId: number; generation: number } | null = null;
+
 export default function InspectionManagement() {
   const navigate = useNavigate();
   const { requestId } = useParams();
@@ -35,14 +38,20 @@ export default function InspectionManagement() {
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const active = useRef(true);
+  const generation = getSessionGeneration();
 
   useEffect(() => {
     active.current = true;
+    const pending = pendingAssignment;
+
+    pendingAssignment = null;
+    if (pending && pending.generation === getSessionGeneration())
+      navigate(`/inspection/${pending.inspectionId}?dialog=assignment-saved&target=예정`, { replace: true });
 
     return () => {
       active.current = false;
     };
-  }, []);
+  }, [navigate]);
   const [revision, setRevision] = useState(0);
   const [inspectors, setInspectors] = useState<{ id: number; name: string }[]>(
     [],
@@ -224,7 +233,14 @@ export default function InspectionManagement() {
           preVisitNotice: application.notice,
         });
 
-        if (!active.current) return false;
+        if (!active.current) {
+          if (generation === getSessionGeneration())
+            pendingAssignment = { inspectionId: application.inspectionId, generation };
+
+          return false;
+        }
+
+        if (generation !== getSessionGeneration()) return false;
         saved = {
           ...application,
           assignee: response.inspectorName,

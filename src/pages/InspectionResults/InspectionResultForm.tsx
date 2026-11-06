@@ -1,3 +1,4 @@
+import { resultFeedbacks } from "./apiContent";
 import ResultFeedback, {
   GrowingTextarea,
 } from "../../components/inspection-results/ResultFeedback";
@@ -30,6 +31,7 @@ export default function InspectionResultForm({ editor }: Props) {
     busy,
     toggleCategory,
     update,
+    updateFeedback,
     setDialog,
     upload,
     persist,
@@ -86,16 +88,16 @@ export default function InspectionResultForm({ editor }: Props) {
               onChange={(value) => update("summary", value)}
               readOnly={readOnly}
             />
-            {content.selected.map((category, index) => (
+            {resultFeedbacks(content).map(({ category, feedback }, index) => (
               <ResultFeedback
-                key={category}
+                key={index}
                 category={category}
                 index={index}
-                feedback={content.details[category]}
+                feedback={feedback}
                 readOnly={readOnly}
                 editingPublished={editingPublished}
                 onChange={(feedback) =>
-                  update("details", { ...draft.details, [category]: feedback })
+                  updateFeedback(index, feedback)
                 }
                 onPhoto={(event, type) => {
                   void upload(event, type);

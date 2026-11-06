@@ -166,6 +166,7 @@ function ResultEditor({
             update("actions", actions);
             setDialog(null);
           }}
+          readOnly={readOnly}
           onRegion={registerRegion}
           addressQuery={params.get("addressQuery") || ""}
           onSearchAddress={(query) => {

@@ -1,3 +1,4 @@
+import { resultFeedbacks } from "../../pages/InspectionResults/apiContent";
 import { inspectionError, searchInspectionAddresses } from "../../api/inspections";
 import type { AddressSearchResponse } from "../../api/inspections";
 import { useEffect, useState } from "react";
@@ -15,6 +16,7 @@ import { resultInput, resultPrimary, resultSecondary } from "./styles";
 type Props = {
   kind: ResultsDialogKind;
   busy?: boolean;
+  readOnly?: boolean;
   application: InspectionApplication;
   content: ResultContent;
   setDialog: (kind: ResultsDialogKind | null) => void;
@@ -94,6 +96,7 @@ function RegionForm({
   addressQuery,
   onSearchAddress,
   busy = false,
+  readOnly = false,
   content,
 }: Props) {
   const [location, setLocation] = useState(a.address);
@@ -101,11 +104,20 @@ function RegionForm({
   const [type, setType] = useState("반복 침수");
   const [description, setDescription] = useState(content.summary);
   const [findings, setFindings] = useState(
-    content.selected
-      .map((category) => content.details[category].findings)
+    resultFeedbacks(content)
+      .map(({ feedback }) => feedback.findings)
       .filter(Boolean)
       .join("\n"),
   );
+
+  const [initializedContent, setInitializedContent] = useState(content);
+
+  if (initializedContent !== content) {
+    setInitializedContent(content);
+    setDescription(content.summary);
+    setFindings(resultFeedbacks(content).map(({ feedback }) => feedback.findings).filter(Boolean).join("\n"));
+  }
+
   const [query, setQuery] = useState(addressQuery);
   const [addressError, setAddressError] = useState("");
   const [error, setError] = useState("");
@@ -145,6 +157,12 @@ function RegionForm({
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
+    if (readOnly) {
+      setError("공개된 점검 결과에서는 지역 문제를 등록할 수 없습니다.");
+
+      return;
+    }
+
     if (!location.trim() || !description.trim() || !findings.trim()) {
       setError("위치, 문제 내용, 현장 확인 내용을 모두 입력해 주세요.");
 
@@ -153,13 +171,15 @@ function RegionForm({
 
     setError("");
     try {
-      await onRegion({
+      const registered = await onRegion({
         location: location.trim(),
         postcode,
         kind: type,
         description: description.trim(),
         findings: findings.trim(),
       });
+
+      if (!registered) setError("등록할 수 없는 상태입니다. 점검 결과의 공개 여부와 처리 상태를 확인해 주세요.");
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -179,7 +199,7 @@ function RegionForm({
         }}
       >
         <form onSubmit={submit} className="flex flex-col gap-3">
-          <fieldset disabled={busy} className="contents">
+          <fieldset disabled={busy || readOnly} className="contents">
             <label
               htmlFor="region-location"
               className="text-sm font-bold leading-[21px]"

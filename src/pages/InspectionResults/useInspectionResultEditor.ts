@@ -16,22 +16,38 @@ import {
   emptyResultContent,
   publicIssueRequest,
   resultContent,
+  resultFeedbacks,
   resultRequest,
   validateResult,
 } from "./apiContent";
 import { categories, resultsDialogKinds } from "./types";
 import type {
   Category,
+  Feedback,
   RegionIssue,
   ResultContent,
   ResultsDialogKind,
 } from "./types";
 
+let draftGeneration: number | undefined;
+const unsavedDrafts = new Map<number, ResultContent>();
+
+function draftsFor(generation: number) {
+  if (draftGeneration !== generation) {
+    unsavedDrafts.clear();
+    draftGeneration = generation;
+  }
+
+  return unsavedDrafts;
+}
+
 export default function useInspectionResultEditor(a: InspectionApplication) {
   const [params, setParams] = useSearchParams();
   const id = a.inspectionId!;
   const generation = getSessionGeneration();
-  const [draft, setDraft] = useState<ResultContent>(emptyResultContent);
+  const [draft, setDraft] = useState<ResultContent>(() =>
+    structuredClone(draftsFor(generation).get(id) ?? emptyResultContent()),
+  );
   const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -71,7 +87,10 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
 
         if (controller.signal.aborted || generation !== getSessionGeneration())
           return;
-        setDraft(content);
+        const published = result?.resultStatus === "PUBLISHED";
+
+        if (published) draftsFor(generation).delete(id);
+        setDraft(structuredClone(published ? content : draftsFor(generation).get(id) ?? content));
         setReadOnly(result?.resultStatus === "PUBLISHED");
         setLoaded(true);
       } catch (cause) {
@@ -97,24 +116,44 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     setParams(next, { replace: true });
   }
 
+  function rememberDraft(value: ResultContent | ((previous: ResultContent) => ResultContent)) {
+    setDraft((previous) => {
+      const next = typeof value === "function" ? value(previous) : value;
+
+      draftsFor(generation).set(id, structuredClone(next));
+
+      return next;
+    });
+  }
+
+  function updateFeedback(index: number, feedback: Feedback) {
+    const entries = resultFeedbacks(content).map((entry, i) =>
+      i === index ? { ...entry, feedback } : entry,
+    );
+
+    update("feedbackEntries", entries);
+  }
+
   function update<K extends keyof ResultContent>(
     key: K,
     value: ResultContent[K],
   ) {
     if (busy || inFlight.current || readOnly || !current()) return;
-    setDraft((current) => ({ ...current, [key]: value }));
+    rememberDraft((current) => ({ ...current, [key]: value }));
     setError("");
   }
 
   function toggleCategory(category: Category) {
-    update(
-      "selected",
-      content.selected.includes(category)
-        ? content.selected.filter((c) => c !== category)
-        : categories.filter(
-            (c) => c === category || content.selected.includes(c),
-          ),
-    );
+    if (busy || inFlight.current || readOnly || !current()) return;
+    const selected = content.selected.includes(category)
+      ? content.selected.filter((c) => c !== category)
+      : categories.filter((c) => c === category || content.selected.includes(c));
+    const entries = resultFeedbacks(content).filter((entry) => selected.includes(entry.category));
+
+    if (!content.selected.includes(category))
+      entries.push({ category, feedback: content.details[category] });
+    rememberDraft({ ...content, selected, feedbackEntries: entries });
+    setError("");
   }
 
   async function persist(publish: boolean) {
@@ -133,6 +172,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     try {
       if (publish) await publishInspectionResult(id, resultRequest(draft));
       else await saveInspectionDraft(id, resultRequest(draft));
+      if (generation === getSessionGeneration()) draftsFor(generation).delete(id);
       if (!current()) return;
       setReadOnly(publish);
       inFlight.current = false;
@@ -182,7 +222,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     try {
       await deleteInspectionPhoto(id, Number(photoId));
       if (current())
-        setDraft((value) => ({
+        rememberDraft((value) => ({
           ...value,
           photos: value.photos.filter((photo) => photo.id !== photoId),
         }));
@@ -217,7 +257,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
         category,
       }));
 
-      setDraft((value) => ({ ...value, photos: [...value.photos, ...photos] }));
+      rememberDraft((value) => ({ ...value, photos: [...value.photos, ...photos] }));
     } catch (cause) {
       if (current()) setError(inspectionError(cause));
     } finally {
@@ -244,6 +284,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     dialog,
     setDialog,
     update,
+    updateFeedback,
     toggleCategory,
     persist,
     registerRegion,

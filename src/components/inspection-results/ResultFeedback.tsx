@@ -1,3 +1,4 @@
+import { resultFeedbacks } from "../../pages/InspectionResults/apiContent";
 import { useLayoutEffect, useRef } from "react";
 import type { ChangeEvent } from "react";
 import type {
@@ -160,9 +161,9 @@ export function ResidentPreview({ content }: { content: ResultContent }) {
       </p>
       <p className="font-bold">전문가 의견</p>
       <p>{content.summary}</p>
-      {content.selected.map((category, i) => (
+      {resultFeedbacks(content).map(({ category, feedback }, i) => (
         <section
-          key={category}
+          key={i}
           className="flex flex-col gap-2 rounded-md border border-[#cbd5e1] p-3"
         >
           <h4 className="font-bold">
@@ -179,11 +180,11 @@ export function ResidentPreview({ content }: { content: ResultContent }) {
               />
             ))}
           <p className="font-bold">전문가 의견</p>
-          <p className="font-bold">{content.details[category].title}</p>
-          <p>{content.details[category].opinion}</p>
+          <p className="font-bold">{feedback.title}</p>
+          <p>{feedback.opinion}</p>
           <p className="font-bold">현장 확인 내용</p>
           <p className="whitespace-pre-wrap">
-            {content.details[category].findings}
+            {feedback.findings}
           </p>
         </section>
       ))}
