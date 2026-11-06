@@ -1,4 +1,4 @@
-export type Risk = "높음" | "주의" | "낮음";
+export type Risk = "높음" | "주의" | "낮음" | "미입력";
 
 export type RequestStatus =
   | "접수"
@@ -10,13 +10,14 @@ export type RequestStatus =
 
 export type Application = {
   id: string;
+  receiptNo?: string;
   number: number;
   address: string;
   district: string;
   resident: string;
   phone: string;
   risk: Risk;
-  status: RequestStatus;
+  status: string;
   history: string[];
   memo: string;
   visitDate: string;

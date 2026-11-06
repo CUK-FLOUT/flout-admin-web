@@ -5,8 +5,14 @@ import ApplicationDetail from "../../components/gis/ApplicationDetail";
 import ApplicationList from "../../components/gis/ApplicationList";
 import ApplicationMap from "../../components/gis/ApplicationMap";
 import GisFilters from "../../components/gis/GisFilters";
-import { filterApplications } from "./filterApplications";
-import { initialApplications } from "./mockData";
+import {
+  gisApplication,
+  gisDetailApplication,
+  gisMapApplication,
+  gisSearch,
+} from "./apiMapping";
+import { useGisApi } from "./useGisApi";
+import { saveGisMemo } from "../../api/gisApplications";
 import type { Filters } from "./types";
 
 import listIcon from "../../assets/gis/imgList.svg";
@@ -19,10 +25,8 @@ export default function GisApplications() {
   const { requestId } = useParams();
   const [params] = useSearchParams();
 
-  const [applications, setApplications] = useState(initialApplications);
   const [showMarkers, setShowMarkers] = useState(true);
   const [mapRevision, setMapRevision] = useState(0);
-  const [message, setMessage] = useState("");
 
   const filterKey = params.toString();
 
@@ -36,22 +40,40 @@ export default function GisApplications() {
       search: query.get("q") || "",
     };
   }, [filterKey]);
-  const isEmptyDataset = params.get("dataset") === "empty";
-  const source = isEmptyDataset ? [] : applications;
-  const filtered = useMemo(
-    () => filterApplications(isEmptyDataset ? [] : applications, filters),
-    [applications, filters, isEmptyDataset],
+  const pageNumber = Number(params.get("page") || 0);
+  const query = JSON.stringify(
+    gisSearch(
+      filters,
+      Number.isSafeInteger(pageNumber) && pageNumber >= 0 ? pageNumber : 0,
+    ),
   );
-  const selected = filtered.find((application) => application.id === requestId);
-  const selectedId = selected?.id;
-
-  const accepted = applications.filter(
-    (application) => application.status === "배정 대기",
-  ).length;
+  const data = useGisApi(query, requestId);
+  const filtered = (data.page?.applications ?? []).map((item, index) =>
+    gisApplication(
+      item,
+      data.markers?.some((marker) => marker.applicationId === item.applicationId)
+        ? data.markers.findIndex((marker) => marker.applicationId === item.applicationId) + 1
+        : (data.page?.page ?? 0) * (data.page?.size ?? 10) + index + 1,
+    ),
+  );
+  const markers = (data.markers ?? []).map((marker, index) =>
+    gisMapApplication(
+      marker,
+      index,
+      filtered.find((item) => item.id === String(marker.applicationId)),
+    ),
+  );
+  const selected = data.record?.detail
+    ? gisDetailApplication(
+        data.record.detail,
+        markers.find((item) => item.id === requestId) ??
+          filtered.find((item) => item.id === requestId),
+      )
+    : undefined;
+  const selectedId = requestId;
 
   const handleSelectApplication = useCallback(
     (id: string) => {
-      setMessage("");
       navigate({
         pathname: `/gis/${id}`,
         search: filterKey ? `?${filterKey}` : "",
@@ -70,8 +92,6 @@ export default function GisApplications() {
   function handleSearch(filters: Filters) {
     const nextParams = new URLSearchParams();
 
-    if (params.get("dataset") === "empty") nextParams.set("dataset", "empty");
-
     if (filters.district) {
       nextParams.set("district", filters.district);
     }
@@ -88,15 +108,9 @@ export default function GisApplications() {
       nextParams.set("q", filters.search);
     }
 
-    const keepSelection =
-      requestId &&
-      filterApplications(source, filters).some(
-        (application) => application.id === requestId,
-      );
-
     navigate(
       {
-        pathname: keepSelection ? `/gis/${requestId}` : "/gis",
+        pathname: "/gis",
         search: nextParams.toString() ? `?${nextParams}` : "",
       },
       { replace: true },
@@ -107,7 +121,7 @@ export default function GisApplications() {
     navigate(
       {
         pathname: "/gis",
-        search: params.get("dataset") === "empty" ? "?dataset=empty" : "",
+        search: "",
       },
       { replace: true },
     );
@@ -115,31 +129,10 @@ export default function GisApplications() {
     setShowMarkers(true);
   }
 
-  function handleAcceptApplication(id: string, memo: string) {
-    if (
-      applications.find((application) => application.id === id)?.status !==
-      "접수"
-    ) {
-      return;
-    }
+  async function handleAcceptApplication(id: string, memo: string) {
+    const saved = await saveGisMemo(Number(id), memo);
 
-    setApplications((items) =>
-      items.map((application) =>
-        application.id === id
-          ? {
-              ...application,
-              status: "배정 대기",
-              memo,
-              history: [
-                ...application.history,
-                "접수 처리 완료 · 배정 대기로 변경되었습니다.",
-              ],
-            }
-          : application,
-      ),
-    );
-
-    setMessage("접수 처리되었습니다. 현재 상태는 배정 대기입니다.");
+    return saved.internalMemo ?? "";
   }
 
   function renderApplicationPanel() {
@@ -150,24 +143,35 @@ export default function GisApplications() {
           application={selected}
           onClose={handleCloseDetail}
           onAccept={handleAcceptApplication}
+          record={data.record!}
         />
       );
     }
 
-    const isUnknownRequest =
-      requestId && !source.some((application) => application.id === requestId);
+    if (requestId || !data.page) {
+      const error = requestId ? data.record?.errors.detail : data.listError;
 
-    if (isUnknownRequest) {
       return (
         <section className="rounded-lg border border-[#c8d0d7] bg-white p-6">
-          <h2 className="font-bold">신청을 찾을 수 없습니다.</h2>
-
-          <button
-            onClick={handleCloseDetail}
-            className="mt-4 cursor-pointer text-[#234f73] underline"
-          >
-            신청 목록으로 돌아가기
-          </button>
+          <p role={error ? "alert" : "status"}>
+            {error || "신청 정보를 불러오는 중입니다."}
+          </p>
+          {error && (
+            <button
+              onClick={data.reload}
+              className="mt-4 text-[#234f73] underline"
+            >
+              다시 시도
+            </button>
+          )}
+          {requestId && (
+            <button
+              onClick={handleCloseDetail}
+              className="mt-4 ml-4 text-[#234f73] underline"
+            >
+              신청 목록으로 돌아가기
+            </button>
+          )}
         </section>
       );
     }
@@ -176,19 +180,37 @@ export default function GisApplications() {
       <ApplicationList
         applications={filtered}
         selectedId={selectedId}
-        hasApplications={source.length > 0}
+        hasApplications={
+          Boolean(
+            filters.search ||
+            filters.district ||
+            filters.risk ||
+            filters.status,
+          ) || data.page.totalElements > 0
+        }
         showMarkers={showMarkers}
         onSelect={handleSelectApplication}
         onToggleMarkers={setShowMarkers}
+        page={data.page}
+        onPage={(page) => {
+          const next = new URLSearchParams(params);
+
+          next.set("page", String(page));
+          navigate(`/gis?${next}`);
+        }}
       />
     );
   }
 
   const summary = [
-    [listIcon, "전체 신청", 128],
-    [clockIcon, "배정 대기", 32 + accepted],
-    [checkIcon, "점검 진행 중", 8],
-    [toolboxIcon, "지원·시공 진행 중", 24],
+    [listIcon, "전체 신청", data.stats?.totalCount],
+    [clockIcon, "배정 대기", data.stats?.assignmentPendingCount],
+    [checkIcon, "점검 진행 중", data.stats?.inspectionInProgressCount],
+    [
+      toolboxIcon,
+      "지원·시공 진행 중",
+      data.stats?.supportConstructionInProgressCount,
+    ],
   ] as const;
 
   return (
@@ -197,8 +219,6 @@ export default function GisApplications() {
         <h1 className="text-[30px] font-bold leading-9 tracking-[-.54px]">
           GIS 신청 관리
         </h1>
-
-        <span className="text-xs text-[#596672]">샘플 데이터</span>
       </div>
 
       <GisFilters
@@ -228,23 +248,26 @@ export default function GisApplications() {
               <p className="text-[15px] leading-[21px]">{label}</p>
 
               <p className="text-[26px] font-bold leading-[30px]">
-                {source.length ? count : 0}건
+                {count ?? "—"}건
               </p>
             </div>
           </div>
         ))}
       </div>
 
-      {message && (
-        <p role="status" className="mb-3 text-sm text-[#27654d]">
-          {message}
-        </p>
-      )}
+      {[data.listError, data.mapError, data.statsError]
+        .filter(Boolean)
+        .map((error, i) => (
+          <p key={i} role="alert" className="mb-3 text-sm text-[#a53632]">
+            {error} <button onClick={data.reload}>다시 시도</button>
+          </p>
+        ))}
+
 
       <div className="grid min-h-[500px] items-stretch gap-[14px] lg:h-[calc(100dvh_-_332px)] lg:grid-cols-[minmax(0,678fr)_minmax(390px,490fr)]">
         <ApplicationMap
           key={mapRevision}
-          applications={filtered}
+          applications={markers}
           selectedId={selectedId}
           showMarkers={showMarkers}
           onSelect={handleSelectApplication}

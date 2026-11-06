@@ -6,6 +6,7 @@ import mediumPin from "../../assets/gis/img2.svg";
 import lowPin from "../../assets/gis/img4.svg";
 
 const pinImages: Record<Risk, string> = {
+  미입력: lowPin,
   높음: highPin,
   주의: mediumPin,
   낮음: lowPin,
@@ -51,6 +52,7 @@ export function addApplicationMarker({
   image.width = 32;
   image.height = 36;
   image.alt = "";
+  if (application.risk === "미입력") image.style.filter = "grayscale(1)";
   image.className = "max-w-none";
   const number = document.createElement("span");
 
