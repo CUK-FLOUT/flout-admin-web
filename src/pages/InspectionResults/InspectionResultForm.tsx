@@ -1,3 +1,4 @@
+import { resultFeedbacks } from "./apiContent";
 import ResultFeedback, {
   GrowingTextarea,
 } from "../../components/inspection-results/ResultFeedback";
@@ -30,6 +31,7 @@ export default function InspectionResultForm({ editor }: Props) {
     busy,
     toggleCategory,
     update,
+    updateFeedback,
     setDialog,
     upload,
     persist,
@@ -48,7 +50,7 @@ export default function InspectionResultForm({ editor }: Props) {
             전문가 점검 결과 입력
           </h2>
           <fieldset
-            disabled={busy}
+            disabled={busy || readOnly}
             className="flex w-[calc(100%_-_8px)] min-w-0 flex-col gap-3"
           >
             <p className="text-sm font-bold leading-[21px]">
@@ -86,16 +88,16 @@ export default function InspectionResultForm({ editor }: Props) {
               onChange={(value) => update("summary", value)}
               readOnly={readOnly}
             />
-            {content.selected.map((category, index) => (
+            {resultFeedbacks(content).map(({ category, feedback }, index) => (
               <ResultFeedback
-                key={category}
+                key={index}
                 category={category}
                 index={index}
-                feedback={content.details[category]}
+                feedback={feedback}
                 readOnly={readOnly}
                 editingPublished={editingPublished}
                 onChange={(feedback) =>
-                  update("details", { ...draft.details, [category]: feedback })
+                  updateFeedback(index, feedback)
                 }
                 onPhoto={(event, type) => {
                   void upload(event, type);
@@ -163,16 +165,13 @@ export default function InspectionResultForm({ editor }: Props) {
                 <>
                   <button
                     type="button"
-                    aria-disabled="true"
-                    aria-describedby="region-registration-unavailable"
-                    title="지역·공공문제 등록 API 연결 준비 중"
+                    onClick={() => setDialog("region")}
+                    disabled={busy}
                     className={`${resultPrimary} w-[176px]`}
                   >
                     지역 문제 등록
                   </button>
-                  <p id="region-registration-unavailable" className="w-full text-xs text-[#64748b]">
-                    지역·공공문제 등록은 API 연결 준비 중으로 현재 사용할 수 없습니다.
-                  </p>
+
                 </>
               )}
             </div>

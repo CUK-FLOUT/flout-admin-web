@@ -68,7 +68,7 @@ export interface ResultRequest {
     fieldFindings: string;
   }[];
   recommendedActions: { description: string }[];
-  followUpType: "INDIVIDUAL_HOUSE" | "PUBLIC_AREA";
+  followUpType: "INDIVIDUAL_HOUSE" | "PUBLIC_AREA" | null;
   internalMemo: string;
 }
 export interface UploadedPhoto {
@@ -77,6 +77,37 @@ export interface UploadedPhoto {
   url: string;
   size: number;
   contentType: string;
+}
+export interface InspectionResult extends Omit<
+  ResultRequest,
+  "summary" | "internalMemo"
+> {
+  inspectionId: number;
+  resultId: number;
+  resultStatus: "DRAFT" | "PUBLISHED";
+  summary: string | null;
+  internalMemo: string | null;
+  savedAt: string;
+  publishedAt: string | null;
+  photos: UploadedPhoto[];
+}
+export type PublicIssueType =
+  | "REPEATED_FLOODING"
+  | "SEWAGE_BACKFLOW"
+  | "POOR_ROAD_DRAINAGE"
+  | "BLOCKED_STORM_DRAIN";
+export interface PublicIssueRequest {
+  inspectionId: number;
+  address?: string;
+  issueType: PublicIssueType;
+  description: string;
+  fieldFindings: string;
+}
+export interface PublicIssueResponse extends PublicIssueRequest {
+  publicIssueId: number;
+  address: string;
+  status: "RECEIVED";
+  createdAt: string;
 }
 interface Envelope<T> {
   isSuccess: boolean;
@@ -143,18 +174,56 @@ export async function assignInspection(id: number, body: AssignmentRequest) {
   return result(data);
 }
 
-export async function changeInspectionStatus(
-  id: number,
-  status: Exclude<InspectionApiStatus, "RECEIVED">,
-) {
-  const { data } = await apiClient.patch<
-    Envelope<{
-      inspectionId: number;
-      receiptNo: string;
-      status: InspectionApiStatus;
-      updatedAt: string;
-    }>
-  >(`${root}/${id}/status`, { status });
+export async function getInspectionResult(id: number, signal?: AbortSignal) {
+  const { data } = await apiClient.get<Envelope<InspectionResult>>(
+    `${root}/${id}/result`,
+    { signal },
+  );
+
+  if (!data.isSuccess)
+    throw new Error(data.message || "점검 결과를 불러오지 못했습니다.");
+
+  return data.result;
+}
+
+export async function deleteInspectionPhoto(id: number, photoId: number) {
+  if (!Number.isSafeInteger(photoId) || photoId <= 0)
+    throw new Error("올바른 사진 ID가 아닙니다.");
+  const { data } = await apiClient.delete<
+    Envelope<{ inspectionId: number; photoId: number }>
+  >(`${root}/${id}/attachments/${photoId}`);
+
+  return result(data);
+}
+
+export async function createPublicIssue(body: PublicIssueRequest) {
+  if (!Number.isSafeInteger(body.inspectionId) || body.inspectionId <= 0)
+    throw new Error("올바른 점검 ID가 아닙니다.");
+  if (
+    ![
+      "REPEATED_FLOODING",
+      "SEWAGE_BACKFLOW",
+      "POOR_ROAD_DRAINAGE",
+      "BLOCKED_STORM_DRAIN",
+    ].includes(body.issueType)
+  )
+    throw new Error("문제 유형을 선택해 주세요.");
+  if (
+    !body.description.trim() ||
+    !body.fieldFindings.trim() ||
+    body.description.length > 4000 ||
+    body.fieldFindings.length > 4000
+  )
+    throw new Error("문제 내용과 현장 확인 내용을 1~4000자로 입력해 주세요.");
+  if (
+    body.address !== undefined &&
+    (!body.address.trim() || body.address.length > 255)
+  )
+    throw new Error("위치를 1~255자로 입력해 주세요.");
+  const { data } = await apiClient.post<Envelope<PublicIssueResponse>>(
+    "/api/admin/public-issues",
+    body,
+  );
 
   return result(data);
 }
@@ -206,6 +275,38 @@ export async function uploadInspectionPhotos(id: number, files: File[]) {
     headers: { "Content-Type": undefined },
     timeout: 120000,
   });
+
+  return result(data);
+}
+
+export interface AddressSearchResponse {
+  addresses: {
+    roadAddress: string;
+    jibunAddress: string;
+    buildingName: string | null;
+    zipCode: string;
+  }[];
+  currentPage: number;
+  countPerPage: number;
+  hasMore: boolean;
+  nextPage: number | null;
+}
+
+export async function searchInspectionAddresses(
+  keyword: string,
+  currentPage = 1,
+  signal?: AbortSignal,
+) {
+  const search = keyword.trim();
+
+  if (!search || search.length > 100)
+    throw new Error("검색할 주소를 1~100자로 입력해 주세요.");
+  if (!Number.isSafeInteger(currentPage) || currentPage < 1)
+    throw new Error("올바른 주소 검색 페이지가 아닙니다.");
+  const { data } = await apiClient.get<Envelope<AddressSearchResponse>>(
+    "/api/resident/addresses/search",
+    { params: { keyword: search, currentPage }, signal },
+  );
 
   return result(data);
 }

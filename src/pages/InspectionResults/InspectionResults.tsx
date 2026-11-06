@@ -73,6 +73,10 @@ function ResultEditor({
   const editor = useInspectionResultEditor(a);
   const {
     params,
+    loading,
+    loaded,
+    retry,
+    removePhoto,
     setParams,
     draft,
     error,
@@ -115,11 +119,16 @@ function ResultEditor({
       >
         {a.id} · {a.resident} · {a.address} · {a.assignee}
       </div>
-      <p className="my-3 text-xs text-[#64748b]">
-        결과 조회 API는 준비 중입니다. 기존 초안·공개 결과·사진은 재조회되지
-        않으며, 현재 탭에서 입력한 내용만 표시됩니다. 업로드한 사진의 서버
-        삭제·공개 결과 재수정은 아직 지원하지 않습니다.
-      </p>
+      {loading && (
+        <p role="status" className="my-3 text-xs text-[#64748b]">
+          저장된 점검 결과를 불러오는 중…
+        </p>
+      )}
+      {!loading && !loaded && (
+        <button type="button" onClick={retry} className={resultSecondary}>
+          다시 시도
+        </button>
+      )}
       {error && (
         <p role="alert" className="my-3 text-sm leading-[21px] text-[#a53632]">
           {error}
@@ -137,13 +146,10 @@ function ResultEditor({
             onUpload={(event) => {
               void upload(event);
             }}
-            allowRemove={false}
-            onRemove={(id) =>
-              update(
-                "photos",
-                draft.photos.filter((p) => p.id !== id),
-              )
-            }
+            allowRemove={true}
+            onRemove={(id) => {
+              void removePhoto(id);
+            }}
             onSave={() => persist(false)}
             onPublish={() => persist(true)}
           />
@@ -151,6 +157,7 @@ function ResultEditor({
       </div>
       {dialog && (
         <ResultsDialogs
+          busy={busy}
           kind={dialog}
           application={a}
           content={draft}
@@ -159,6 +166,7 @@ function ResultEditor({
             update("actions", actions);
             setDialog(null);
           }}
+          readOnly={readOnly}
           onRegion={registerRegion}
           addressQuery={params.get("addressQuery") || ""}
           onSearchAddress={(query) => {

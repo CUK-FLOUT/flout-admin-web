@@ -11,7 +11,8 @@
     "test:auth": "node --test tests/auth.test.mjs",
     "test:photo": "node --experimental-strip-types --test tests/photoStorage.test.mjs",
     "test:priority": "node --experimental-strip-types --test tests/priorityUtils.test.mjs tests/priorityApi.test.mjs tests/priorityOrderModal.test.mjs tests/priorityManagement.test.mjs",
-    "test:support": "node --test tests/supportApi.test.mjs"
+    "test:support": "node --test tests/supportApi.test.mjs",
+    "test:inspection": "node --test tests/inspections.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

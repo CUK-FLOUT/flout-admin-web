@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { resultFeedbacks } from "../../pages/InspectionResults/apiContent";
+import { inspectionError, searchInspectionAddresses } from "../../api/inspections";
+import type { AddressSearchResponse } from "../../api/inspections";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { InspectionApplication } from "../../pages/Inspection/mockData";
 import type {
@@ -6,20 +9,21 @@ import type {
   ResultContent,
   ResultsDialogKind,
 } from "../../pages/InspectionResults/types";
-import { addressExamples } from "../../pages/InspectionResults/fixtures";
 import ResultDialog from "./ResultDialog";
 import { GrowingTextarea } from "./ResultFeedback";
 import { resultInput, resultPrimary, resultSecondary } from "./styles";
 
 type Props = {
   kind: ResultsDialogKind;
+  busy?: boolean;
+  readOnly?: boolean;
   application: InspectionApplication;
   content: ResultContent;
   setDialog: (kind: ResultsDialogKind | null) => void;
   onActions: (actions: string[]) => void;
   onRegion: (
     issue: Omit<RegionIssue, "id" | "source" | "status" | "applicationId">,
-  ) => boolean;
+  ) => Promise<boolean>;
   addressQuery: string;
   onSearchAddress: (query: string) => void;
 };
@@ -91,44 +95,98 @@ function RegionForm({
   onRegion,
   addressQuery,
   onSearchAddress,
+  busy = false,
+  readOnly = false,
+  content,
 }: Props) {
-  const [location, setLocation] = useState(`원미구 ${a.address}`);
+  const [location, setLocation] = useState(a.address);
   const [postcode, setPostcode] = useState("");
   const [type, setType] = useState("반복 침수");
-  const [description, setDescription] = useState(
-    "빗물받이 막힘 및 주변 도로 배수 상태 확인 필요",
-  );
+  const [description, setDescription] = useState(content.summary);
   const [findings, setFindings] = useState(
-    "같은 골목에 배수구 덮개 주변에 이물질이 쌓여 있고, 역류방지 장치는 설치되어 있지 않아요.",
+    resultFeedbacks(content)
+      .map(({ feedback }) => feedback.findings)
+      .filter(Boolean)
+      .join("\n"),
   );
+
+  const [initializedContent, setInitializedContent] = useState(content);
+
+  if (initializedContent !== content) {
+    setInitializedContent(content);
+    setDescription(content.summary);
+    setFindings(resultFeedbacks(content).map(({ feedback }) => feedback.findings).filter(Boolean).join("\n"));
+  }
+
   const [query, setQuery] = useState(addressQuery);
   const [addressError, setAddressError] = useState("");
   const [error, setError] = useState("");
   const addressOpen = kind === "address" || kind === "address-results";
-  const results = addressExamples.filter((a) =>
-    `${a.road} ${a.lot} ${a.postcode} ${a.building} ${a.keywords.join(" ")}`.includes(
-      addressQuery.trim(),
-    ),
-  );
+  const [addressPage, setAddressPage] = useState(1);
+  const [addressData, setAddressData] = useState<AddressSearchResponse | null>(null);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [searchRevision, setSearchRevision] = useState(0);
+  const results = addressData?.addresses ?? [];
 
-  function submit(e: FormEvent) {
+  useEffect(() => {
+    if (kind !== "address-results" || !addressQuery.trim()) return;
+    const controller = new AbortController();
+
+    async function search() {
+      setAddressLoading(true);
+      setAddressError("");
+      setAddressData(null);
+      try {
+        const response = await searchInspectionAddresses(
+          addressQuery, addressPage, controller.signal,
+        );
+
+        if (!controller.signal.aborted) setAddressData(response);
+      } catch (cause) {
+        if (!controller.signal.aborted) setAddressError(inspectionError(cause));
+      } finally {
+        if (!controller.signal.aborted) setAddressLoading(false);
+      }
+    }
+
+    void search();
+
+    return () => controller.abort();
+  }, [kind, addressQuery, addressPage, searchRevision]);
+
+  async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    if (readOnly) {
+      setError("공개된 점검 결과에서는 지역 문제를 등록할 수 없습니다.");
+
+      return;
+    }
+
     if (!location.trim() || !description.trim() || !findings.trim()) {
       setError("위치, 문제 내용, 현장 확인 내용을 모두 입력해 주세요.");
 
       return;
     }
 
-    if (
-      !onRegion({
+    setError("");
+    try {
+      const registered = await onRegion({
         location: location.trim(),
         postcode,
         kind: type,
         description: description.trim(),
         findings: findings.trim(),
-      })
-    )
-      setError("저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.");
+      });
+
+      if (!registered) setError("등록할 수 없는 상태입니다. 점검 결과의 공개 여부와 처리 상태를 확인해 주세요.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "지역 문제를 등록하지 못했습니다.",
+      );
+    }
   }
 
   return (
@@ -136,38 +194,46 @@ function RegionForm({
       <ResultDialog
         size="region"
         title="지역·공공 문제 등록"
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          if (!busy) setDialog(null);
+        }}
       >
         <form onSubmit={submit} className="flex flex-col gap-3">
-          <label
-            htmlFor="region-location"
-            className="text-sm font-bold leading-[21px]"
-          >
-            위치
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="region-location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className={`${resultInput} h-10 flex-1 px-[15px] py-0`}
-            />
-            <button
-              type="button"
-              onClick={() => setDialog("address")}
-              className={`${resultSecondary} w-[112px] shrink-0 text-[#234f73]`}
+          <fieldset disabled={busy || readOnly} className="contents">
+            <label
+              htmlFor="region-location"
+              className="text-sm font-bold leading-[21px]"
             >
-              주소 검색
-            </button>
-          </div>
-          <p className="text-sm font-bold leading-[21px]">문제 유형</p>
-          <div
-            className="grid grid-cols-2 gap-2"
-            role="group"
-            aria-label="지역 문제 유형"
-          >
-            {["반복 침수", "하수 역류", "도로 배수 불량", "빗물받이 막힘"].map(
-              (value) => (
+              위치
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="region-location"
+                maxLength={255}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className={`${resultInput} h-10 flex-1 px-[15px] py-0`}
+              />
+              <button
+                type="button"
+                onClick={() => setDialog("address")}
+                className={`${resultSecondary} w-[112px] shrink-0 text-[#234f73]`}
+              >
+                주소 검색
+              </button>
+            </div>
+            <p className="text-sm font-bold leading-[21px]">문제 유형</p>
+            <div
+              className="grid grid-cols-2 gap-2"
+              role="group"
+              aria-label="지역 문제 유형"
+            >
+              {[
+                "반복 침수",
+                "하수 역류",
+                "도로 배수 불량",
+                "빗물받이 막힘",
+              ].map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -177,51 +243,51 @@ function RegionForm({
                 >
                   {value}
                 </button>
-              ),
+              ))}
+            </div>
+            <label
+              htmlFor="region-description"
+              className="text-sm font-bold leading-[21px]"
+            >
+              문제 내용
+            </label>
+            <input
+              id="region-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className={`${resultInput} h-10 px-[15px] py-0`}
+            />
+            <p className="text-sm font-bold leading-[21px]">현장 확인 내용</p>
+            <GrowingTextarea
+              label="지역 문제 현장 확인 내용"
+              value={findings}
+              onChange={setFindings}
+              minHeight={62}
+            />
+            {error && (
+              <p role="alert" className="text-sm leading-[21px] text-[#a53632]">
+                {error}
+              </p>
             )}
-          </div>
-          <label
-            htmlFor="region-description"
-            className="text-sm font-bold leading-[21px]"
-          >
-            문제 내용
-          </label>
-          <input
-            id="region-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className={`${resultInput} h-10 px-[15px] py-0`}
-          />
-          <p className="text-sm font-bold leading-[21px]">현장 확인 내용</p>
-          <GrowingTextarea
-            label="지역 문제 현장 확인 내용"
-            value={findings}
-            onChange={setFindings}
-            minHeight={62}
-          />
-          {error && (
-            <p role="alert" className="text-sm leading-[21px] text-[#a53632]">
-              {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setDialog(null)}
-              className={`${resultSecondary} flex-1`}
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={
-                !location.trim() || !description.trim() || !findings.trim()
-              }
-              className={`${resultPrimary} flex-1`}
-            >
-              지역 문제 등록
-            </button>
-          </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDialog(null)}
+                className={`${resultSecondary} flex-1`}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  !location.trim() || !description.trim() || !findings.trim()
+                }
+                className={`${resultPrimary} flex-1`}
+              >
+                지역 문제 등록
+              </button>
+            </div>
+          </fieldset>
         </form>
       </ResultDialog>
       {addressOpen && (
@@ -239,6 +305,8 @@ function RegionForm({
               e.preventDefault();
               if (query.trim()) {
                 setAddressError("");
+                setAddressPage(1);
+                setSearchRevision((value) => value + 1);
                 onSearchAddress(query.trim());
               } else setAddressError("검색할 주소를 입력해 주세요.");
             }}
@@ -247,6 +315,7 @@ function RegionForm({
               aria-label="도로명·건물명·지번 검색"
               placeholder="예) 길주로 210, 부천시청, 중동 1156"
               value={query}
+              maxLength={100}
               onChange={(e) => {
                 setQuery(e.target.value);
                 setAddressError("");
@@ -289,54 +358,59 @@ function RegionForm({
                 className="text-sm font-bold leading-[22px]"
                 aria-live="polite"
               >
-                검색 결과 {results.length}건
+                {addressLoading ? "주소 검색 중…" : `검색 결과 ${results.length}건`}
               </p>
               <div className="flex flex-col gap-2">
                 {results.map((address) => (
                   <button
                     type="button"
-                    key={address.postcode}
+                    key={`${address.roadAddress}|${address.jibunAddress}|${address.zipCode}`}
                     onClick={() => {
-                      setLocation(address.road);
-                      setPostcode(address.postcode);
+                      setLocation(address.roadAddress);
+                      setPostcode(address.zipCode);
                       setDialog("region");
                     }}
                     className="flex min-h-[112px] flex-col gap-2 rounded-md border border-[#c8d0d7] p-[15px] text-left text-sm leading-[22px]"
                   >
                     <span className="font-bold text-[#234f73]">
-                      {address.postcode}
+                      {address.zipCode}
                     </span>
-                    <strong>{address.road}</strong>
+                    <strong>{address.roadAddress}</strong>
                     <span className="text-[13px] text-[#596672]">
-                      지번 {address.lot} · {address.building}
+                      지번 {address.jibunAddress} · {address.buildingName}
                     </span>
                   </button>
                 ))}
-                {!results.length && (
+                {!addressLoading && !addressError && addressData && !results.length && (
                   <p
                     role="status"
                     className="py-12 text-center text-sm text-[#596672]"
                   >
-                    검색 결과가 없습니다. 검색어를 변경해 주세요.
+                    검색 결과가 없습니다. 다른 검색어로 검색해 주세요.
                   </p>
                 )}
               </div>
-              {!!results.length && (
+              {addressData && (
                 <nav
                   aria-label="주소 검색 페이지"
                   className="flex justify-center gap-4 text-sm text-[#234f73]"
                 >
                   <button
                     type="button"
-                    disabled
+                    disabled={addressLoading || addressData.currentPage <= 1}
+                    onClick={() => setAddressPage(addressData.currentPage - 1)}
                     aria-label="이전 주소 검색 페이지"
                   >
                     ‹
                   </button>
-                  <span aria-current="page">1</span>
+                  <span aria-current="page">{addressData.currentPage}</span>
                   <button
                     type="button"
-                    disabled
+                    disabled={addressLoading || !addressData.hasMore || addressData.nextPage == null}
+                    onClick={() => {
+                      if (addressData.hasMore && addressData.nextPage != null)
+                        setAddressPage(addressData.nextPage);
+                    }}
                     aria-label="다음 주소 검색 페이지"
                   >
                     ›

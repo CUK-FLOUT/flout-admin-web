@@ -66,7 +66,7 @@ function harness() {
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test("seven API methods use inspection ID and exact request fields", async () => {
+test("nine API methods use inspection ID and exact request fields", async () => {
   const h = harness();
   const api = h.load("src/api/inspections.ts");
   await api.getInspections({
@@ -84,7 +84,7 @@ test("seven API methods use inspection ID and exact request fields", async () =>
     visitTime: "14:00",
     preVisitNotice: "안내",
   });
-  await api.changeInspectionStatus(91, "COMPLETED");
+  await api.getInspectionResult(91);
   const body = {
     summary: "요약",
     vulnerabilities: [],
@@ -96,16 +96,25 @@ test("seven API methods use inspection ID and exact request fields", async () =>
   await api.publishInspectionResult(91, body);
   const file = new File(["image"], "photo.jpg", { type: "image/jpeg" });
   await api.uploadInspectionPhotos(91, [file, file]);
+  await api.deleteInspectionPhoto(91, 17);
+  await api.createPublicIssue({
+    inspectionId: 91,
+    issueType: "REPEATED_FLOODING",
+    description: "문제",
+    fieldFindings: "현장",
+  });
   assert.deepEqual(
     h.requests.map((r) => [r.method, r.url]),
     [
       ["get", "/api/admin/inspections"],
       ["get", "/api/admin/inspections/91"],
       ["post", "/api/admin/inspections/91/assignment"],
-      ["patch", "/api/admin/inspections/91/status"],
+      ["get", "/api/admin/inspections/91/result"],
       ["put", "/api/admin/inspections/91/result/draft"],
       ["post", "/api/admin/inspections/91/result"],
       ["post", "/api/admin/inspections/91/attachments"],
+      ["delete", "/api/admin/inspections/91/attachments/17"],
+      ["post", "/api/admin/public-issues"],
     ],
   );
   assert.equal(h.requests[0].params.inspectorUserId, 7);
@@ -114,7 +123,7 @@ test("seven API methods use inspection ID and exact request fields", async () =>
     visitTime: "14:00",
     preVisitNotice: "안내",
   });
-  assert.deepEqual(JSON.parse(h.requests[3].data), { status: "COMPLETED" });
+  assert.equal(h.requests[3].data, undefined);
   assert.deepEqual(JSON.parse(h.requests[4].data), body);
   assert.equal(h.requests[6].data.getAll("files").length, 2);
   assert.notEqual(
@@ -196,7 +205,7 @@ test("list/detail distinguish application ID, receipt and inspection ID and null
   assert.equal(detail.address, "부천");
 });
 
-test("assignment requires scheduled state, future Korean time and one-time assignment", () => {
+test("assignment accepts received or scheduled state, future Korean time and one-time assignment", () => {
   const { validateAssignment } = harness().load(
     "src/pages/Inspection/apiModel.ts",
   );
@@ -208,7 +217,11 @@ test("assignment requires scheduled state, future Korean time and one-time assig
     notice: "방문 안내",
   };
   assert.equal(validateAssignment(base), "");
-  assert.match(validateAssignment({ ...base, status: "대기" }), /예정/);
+  assert.equal(validateAssignment({ ...base, status: "대기" }), "");
+  assert.match(
+    validateAssignment({ ...base, status: "진행" }),
+    /접수 또는 예정/,
+  );
   assert.match(
     validateAssignment({ ...base, inspectorUserId: 3 }),
     /이미 배정/,
@@ -231,7 +244,10 @@ test("empty result contains no fixture data; payload maps independent actions an
   assert.notEqual(validateResult(content, true), "");
   content.selected = ["출입구", "배수구"];
   content.summary = "요약";
-  content.memo = "내부메모";
+  content.memo = "";
+  content.photos = [
+    { id: "1", name: "현장.jpg", src: "https://example.com/1", category: null },
+  ];
   content.details.출입구 = { title: "출입구", opinion: "의견", findings: "" };
   content.details.배수구 = { title: "배수구", opinion: "의견", findings: "" };
   content.actions = ["독립 조치"];
@@ -388,4 +404,440 @@ test("inspection errors distinguish network failure from HTTP failure without a 
   );
   assert.equal(inspectionError(new Error("입력 오류")), "입력 오류");
   assert.equal(inspectionError(null), "요청을 처리하지 못했습니다.");
+});
+
+test("결과가 없는 정상 응답은 null이고 조회 실패는 빈 초안으로 대체하지 않는다", async () => {
+  const h = harness();
+  const api = h.load("src/api/inspections.ts");
+  h.setResponse(() => null);
+  assert.equal(await api.getInspectionResult(91), null);
+  h.setResponse(() => {
+    throw new Error("Forbidden");
+  });
+  await assert.rejects(api.getInspectionResult(91), /Forbidden/);
+});
+
+const savedResult = {
+  inspectionId: 91,
+  resultId: 7,
+  resultStatus: "DRAFT",
+  summary: "침수 위험",
+  internalMemo: "내부 메모",
+  vulnerabilities: [
+    {
+      type: "DRAIN",
+      title: "배수구",
+      expertOpinion: "정비 필요",
+      fieldFindings: "이물질",
+    },
+  ],
+  recommendedActions: [{ description: "청소" }],
+  followUpType: "PUBLIC_AREA",
+  photos: [
+    {
+      photoId: 17,
+      fileName: "현장.jpg",
+      url: "https://example.com/photo",
+      size: 100,
+      contentType: "image/jpeg",
+    },
+  ],
+};
+
+test("서버 결과의 순서·사진 ID·메모를 화면과 재저장 본문에 보존한다", () => {
+  const { resultContent, resultRequest, validateResult } = harness().load(
+    "src/pages/InspectionResults/apiContent.ts",
+  );
+  const content = resultContent(savedResult);
+  assert.deepEqual(plain(content.selected), ["배수구"]);
+  assert.equal(content.details.배수구.findings, "이물질");
+  assert.equal(content.photos[0].id, "17");
+  assert.equal(content.memo, "내부 메모");
+  assert.deepEqual(plain(resultRequest(content)), {
+    summary: savedResult.summary,
+    vulnerabilities: savedResult.vulnerabilities,
+    recommendedActions: savedResult.recommendedActions,
+    followUpType: "PUBLIC_AREA",
+    internalMemo: "내부 메모",
+  });
+  assert.equal(validateResult({ ...content, memo: "" }, true), "");
+  assert.match(validateResult({ ...content, photos: [] }, true), /현장사진/);
+  assert.equal(resultContent({ ...savedResult, followUpType: null }).route, "");
+  const duplicate = resultContent({
+    ...savedResult,
+    vulnerabilities: [
+      ...savedResult.vulnerabilities,
+      { ...savedResult.vulnerabilities[0], title: "다른 배수구", fieldFindings: "별도 확인" },
+    ],
+  });
+  assert.equal(duplicate.feedbackEntries.length, 2);
+  assert.equal(duplicate.feedbackEntries[1].feedback.findings, "별도 확인");
+  assert.deepEqual(plain(resultRequest(duplicate).vulnerabilities), [
+    ...savedResult.vulnerabilities,
+    { ...savedResult.vulnerabilities[0], title: "다른 배수구", fieldFindings: "별도 확인" },
+  ]);
+});
+
+test("지역 문제의 한글 유형과 점검 ID를 실제 요청으로 변환하고 유효하지 않은 요청은 차단한다", async () => {
+  const h = harness();
+  const { publicIssueRequest } = h.load(
+    "src/pages/InspectionResults/apiContent.ts",
+  );
+  const api = h.load("src/api/inspections.ts");
+  const labels = {
+    "반복 침수": "REPEATED_FLOODING",
+    "하수 역류": "SEWAGE_BACKFLOW",
+    "도로 배수 불량": "POOR_ROAD_DRAINAGE",
+    "빗물받이 막힘": "BLOCKED_STORM_DRAIN",
+  };
+  for (const [kind, code] of Object.entries(labels)) {
+    const body = publicIssueRequest(91, {
+      location: " 부천시 ",
+      kind,
+      description: " 문제 ",
+      findings: " 현장 ",
+    });
+    assert.equal(body.inspectionId, 91);
+    assert.equal(body.issueType, code);
+    assert.equal(body.address, "부천시");
+    await api.createPublicIssue(body);
+  }
+  assert.equal(
+    publicIssueRequest(91, {
+      location: "",
+      kind: "반복 침수",
+      description: "문제",
+      findings: "현장",
+    }).address,
+    undefined,
+  );
+  await assert.rejects(
+    api.createPublicIssue({
+      inspectionId: 91,
+      issueType: "NO",
+      description: "문제",
+      fieldFindings: "현장",
+    }),
+    /유형/,
+  );
+  await assert.rejects(
+    api.createPublicIssue({
+      inspectionId: 91,
+      issueType: "REPEATED_FLOODING",
+      description: " ",
+      fieldFindings: "현장",
+    }),
+    /문제 내용/,
+  );
+  await assert.rejects(api.deleteInspectionPhoto(91, NaN), /사진 ID/);
+  assert.equal(h.requests.length, 4);
+});
+
+function editorHarness(overrides = {}) {
+  const slots = [],
+    effects = [],
+    calls = [];
+  let index = 0,
+    generation = 1,
+    params = new URLSearchParams();
+  const api = {
+    getInspectionResult: async () => savedResult,
+    saveInspectionDraft: async () => ({ resultStatus: "DRAFT" }),
+    publishInspectionResult: async () => ({ inspectionStatus: "COMPLETED" }),
+    uploadInspectionPhotos: async () => ({
+      photos: [
+        { photoId: 18, fileName: "추가.png", url: "https://example.com/18" },
+      ],
+    }),
+    deleteInspectionPhoto: async () => ({ photoId: 17 }),
+    createPublicIssue: async () => ({ publicIssueId: 2 }),
+    inspectionError: (e) => e.message,
+    ...overrides,
+  };
+  for (const name of Object.keys(api)) {
+    if (name === "inspectionError") continue;
+    const fn = api[name];
+    api[name] = (...args) => {
+      calls.push({ name, args });
+      return fn(...args);
+    };
+  }
+  const module = { exports: {} };
+  const source = ts.transpileModule(
+    readFileSync(
+      "src/pages/InspectionResults/useInspectionResultEditor.ts",
+      "utf8",
+    ),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2023,
+      },
+    },
+  ).outputText;
+  vm.runInNewContext(source, {
+    module,
+    exports: module.exports,
+    AbortController,
+    structuredClone,
+    URLSearchParams,
+    Error,
+    require(name) {
+      if (name === "react")
+        return {
+          useState(initial) {
+            const i = index++;
+            if (!(i in slots))
+              slots[i] = typeof initial === "function" ? initial() : initial;
+            return [
+              slots[i],
+              (v) => {
+                slots[i] = typeof v === "function" ? v(slots[i]) : v;
+              },
+            ];
+          },
+          useRef(initial) {
+            const i = index++;
+            return (slots[i] ??= { current: initial });
+          },
+          useEffect(effect, deps) {
+            const i = index++,
+              old = slots[i];
+            if (!old || deps.some((v, j) => v !== old.deps[j]))
+              effects.push(() => {
+                old?.cleanup?.();
+                slots[i] = { deps, cleanup: effect() };
+              });
+          },
+        };
+      if (name === "react-router-dom")
+        return {
+          useSearchParams: () => [
+            params,
+            (p) => {
+              params = p;
+            },
+          ],
+        };
+      if (name.endsWith("/session"))
+        return { getSessionGeneration: () => generation };
+      if (name.endsWith("/inspections")) return api;
+      return harness().load(`src/pages/InspectionResults/${name.slice(2)}`);
+    },
+  });
+  function render(inspectionId = 91) {
+    index = 0;
+    const result = module.exports.default({ inspectionId, status: "대기" });
+    for (const effect of effects.splice(0)) effect();
+    return result;
+  }
+  return {
+    render,
+    calls,
+    params: () => params,
+    remount: () => {
+      for (const value of slots) value?.cleanup?.();
+      slots.length = 0;
+      effects.length = 0;
+    },
+    changeSession: () => {
+      generation++;
+    },
+    unmount: () => {
+      for (const value of slots) value?.cleanup?.();
+    },
+  };
+}
+const settle = () => new Promise(setImmediate);
+
+test("초안 조회 후 사진 삭제·업로드·임시저장·공개는 서버 요청과 동기화된다", async () => {
+  const h = editorHarness();
+  assert.equal(h.render().busy, true);
+  await settle();
+  assert.equal(h.render().loaded, true);
+  assert.equal(h.render().draft.photos.length, 1);
+  await h.render().removePhoto("17");
+  assert.equal(h.render().draft.photos.length, 0);
+  await h
+    .render()
+    .upload({
+      target: {
+        files: [new File(["x"], "추가.png", { type: "image/png" })],
+        value: "file",
+      },
+    });
+  assert.equal(h.render().draft.photos[0].id, "18");
+  await h.render().persist(false);
+  assert.equal(h.params().get("dialog"), "draft-saved");
+  await h.render().persist(true);
+  assert.equal(h.params().get("dialog"), "published");
+  assert.equal(h.render().readOnly, true);
+  assert.equal(
+    h.calls.some((c) => c.name === "changeInspectionStatus"),
+    false,
+  );
+  assert.deepEqual(
+    h.calls.filter((c) => c.name === "deleteInspectionPhoto")[0].args,
+    [91, 17],
+  );
+});
+
+test("조회 실패는 저장과 업로드를 막고 재시도로 정상 결과를 불러온다", async () => {
+  let fail = true;
+  const h = editorHarness({
+    getInspectionResult: async () => {
+      if (fail) throw new Error("조회 실패");
+      return null;
+    },
+  });
+  h.render();
+  await settle();
+  assert.equal(h.render().loaded, false);
+  assert.equal(h.render().error, "조회 실패");
+  await h.render().persist(false);
+  assert.equal(h.calls.length, 1);
+  fail = false;
+  h.render().retry();
+  h.render();
+  await settle();
+  assert.equal(h.render().loaded, true);
+  assert.equal(h.render().draft.photos.length, 0);
+});
+
+test("공개본은 읽기 전용이며 삭제 실패 시 기존 사진을 유지한다", async () => {
+  const published = editorHarness({
+    getInspectionResult: async () => ({
+      ...savedResult,
+      resultStatus: "PUBLISHED",
+    }),
+  });
+  published.render();
+  await settle();
+  assert.equal(published.render().readOnly, true);
+  await published.render().removePhoto("17");
+  await published.render().persist(false);
+  assert.equal(published.calls.length, 1);
+  const h = editorHarness({
+    deleteInspectionPhoto: async () => {
+      throw new Error("공개 사진은 삭제 불가");
+    },
+  });
+  h.render();
+  await settle();
+  await h.render().removePhoto("17");
+  assert.equal(h.render().draft.photos.length, 1);
+  assert.match(h.render().error, /삭제 불가/);
+});
+
+test("등록 중 중복 요청과 닫기를 막고 서버 성공 시 기존 완료 모달을 연다", async () => {
+  let resolve;
+  const h = editorHarness({
+    createPublicIssue: () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  });
+  h.render();
+  await settle();
+  h.render().setDialog("region");
+  const issue = {
+    location: "부천시",
+    postcode: "",
+    kind: "반복 침수",
+    description: "문제",
+    findings: "현장",
+  };
+  const pending = h.render().registerRegion(issue);
+  assert.equal(await h.render().registerRegion(issue), false);
+  h.render().setDialog(null);
+  assert.equal(h.params().get("dialog"), "region");
+  resolve({ publicIssueId: 2 });
+  await pending;
+  assert.equal(h.params().get("dialog"), "region-saved");
+  assert.equal(h.calls.filter((c) => c.name === "createPublicIssue").length, 1);
+});
+
+test("화면 이탈 후 공개 응답은 완료 모달을 열지 않는다", async () => {
+  let resolve;
+  const h = editorHarness({
+    publishInspectionResult: () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  });
+  h.render();
+  await settle();
+  const pending = h.render().persist(true);
+  h.unmount();
+  resolve({ inspectionStatus: "COMPLETED" });
+  await pending;
+  assert.equal(h.params().get("dialog"), null);
+});
+
+test("주소 검색은 ADMIN 클라이언트로 검색어와 1부터 시작하는 페이지를 전달하고 빈 페이지의 다음 이동 정보를 보존한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/inspections.ts");
+  const response = {
+    addresses: [], currentPage: 2, countPerPage: 10, hasMore: true, nextPage: 3,
+  };
+  h.setResponse(() => response);
+  const controller = new AbortController();
+  assert.deepEqual(plain(await api.searchInspectionAddresses("  지봉로  ", 2, controller.signal)), response);
+  assert.equal(h.requests[0].url, "/api/resident/addresses/search");
+  assert.deepEqual(plain(h.requests[0].params), {keyword: "지봉로", currentPage: 2});
+  assert.equal(h.requests[0].signal, controller.signal);
+  await assert.rejects(api.searchInspectionAddresses(" "));
+  await assert.rejects(api.searchInspectionAddresses("가".repeat(101)));
+  await assert.rejects(api.searchInspectionAddresses("지봉로", 0));
+  assert.equal(h.requests.length, 1);
+  h.setResponse(() => ({
+    ...response, addresses: [{roadAddress: "도로명", jibunAddress: "지번", buildingName: null, zipCode: "14662"}],
+    currentPage: 3, hasMore: false, nextPage: null,
+  }));
+  const selected = await api.searchInspectionAddresses("지봉로", 3);
+  assert.equal(selected.addresses[0].roadAddress, "도로명");
+  assert.equal(selected.addresses[0].zipCode, "14662");
+});
+
+test("점검별 미저장 초안을 복원하고 저장·세션 변경 후에는 이전 초안을 적용하지 않는다", async () => {
+  const h = editorHarness();
+  h.render(91);
+  await settle();
+  h.render(91).update("summary", "미저장 91");
+  h.remount();
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, "미저장 91");
+  h.render(92);
+  await settle();
+  h.render(92).update("summary", "미저장 92");
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, "미저장 91");
+  await h.render(91).persist(false);
+  h.render(92);
+  await settle();
+  assert.equal(h.render(92).draft.summary, "미저장 92");
+  h.render(91);
+  await settle();
+  assert.equal(h.render(91).draft.summary, savedResult.summary);
+  h.changeSession();
+  h.render(92);
+  await settle();
+  assert.equal(h.render(92).draft.summary, savedResult.summary);
+});
+
+test("같은 유형의 두 취약지점 편집이 다른 항목을 덮어쓰지 않는다", async () => {
+  const h = editorHarness({getInspectionResult: async () => ({
+    ...savedResult, vulnerabilities: [...savedResult.vulnerabilities,
+      {...savedResult.vulnerabilities[0], title: "두번째 배수구"}],
+  })});
+  h.render();
+  await settle();
+  h.render().updateFeedback(1, {title: "두번째 수정", opinion: "별도 의견", findings: "별도 확인"});
+  await h.render().persist(false);
+  const request = h.calls.find(c => c.name === "saveInspectionDraft").args[1];
+  assert.equal(request.vulnerabilities.length, 2);
+  assert.equal(request.vulnerabilities[0].title, savedResult.vulnerabilities[0].title);
+  assert.equal(request.vulnerabilities[1].title, "두번째 수정");
 });

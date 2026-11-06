@@ -1,3 +1,4 @@
+import { getSessionGeneration } from "../../auth/session";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -16,13 +17,14 @@ import {
 } from "../../components/inspection/styles";
 import {
   assignInspection,
-  changeInspectionStatus,
   getInspections,
   inspectionError,
 } from "../../api/inspections";
 import type { InspectionPage } from "../../api/inspections";
 import { loadInspection } from "./loadInspection";
-import { apiStatuses, inspectionRow, inspectionSearch } from "./apiModel";
+import { inspectionRow, inspectionSearch } from "./apiModel";
+
+let pendingAssignment: { inspectionId: number; generation: number } | null = null;
 
 export default function InspectionManagement() {
   const navigate = useNavigate();
@@ -35,6 +37,21 @@ export default function InspectionManagement() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  const active = useRef(true);
+  const generation = getSessionGeneration();
+
+  useEffect(() => {
+    active.current = true;
+    const pending = pendingAssignment;
+
+    pendingAssignment = null;
+    if (pending && pending.generation === getSessionGeneration())
+      navigate(`/inspection/${pending.inspectionId}?dialog=assignment-saved&target=예정`, { replace: true });
+
+    return () => {
+      active.current = false;
+    };
+  }, [navigate]);
   const [revision, setRevision] = useState(0);
   const [inspectors, setInspectors] = useState<{ id: number; name: string }[]>(
     [],
@@ -57,9 +74,7 @@ export default function InspectionManagement() {
       params.get("q"),
     );
   const kind = params.get("dialog");
-  const modal = ["confirm", "status-saved", "assignment-saved"].includes(
-    kind || "",
-  )
+  const modal = ["assignment-saved"].includes(kind || "")
     ? (kind as InspectionDialogState)
     : null;
   const targetStatus: EditableStatus = inspectionStatuses.includes(
@@ -199,7 +214,12 @@ export default function InspectionManagement() {
     application: InspectionApplication,
     dialog: InspectionDialogState,
   ) {
-    if (saving.current || !application.inspectionId) return false;
+    if (
+      saving.current ||
+      !application.inspectionId ||
+      dialog !== "assignment-saved"
+    )
+      return false;
     saving.current = true;
     setBusy(true);
     setStorageError("");
@@ -213,6 +233,14 @@ export default function InspectionManagement() {
           preVisitNotice: application.notice,
         });
 
+        if (!active.current) {
+          if (generation === getSessionGeneration())
+            pendingAssignment = { inspectionId: application.inspectionId, generation };
+
+          return false;
+        }
+
+        if (generation !== getSessionGeneration()) return false;
         saved = {
           ...application,
           assignee: response.inspectorName,
@@ -229,11 +257,6 @@ export default function InspectionManagement() {
           visitTime: saved.visitTime,
           notice: saved.notice,
         });
-      } else {
-        await changeInspectionStatus(
-          application.inspectionId,
-          apiStatuses[application.status as EditableStatus],
-        );
       }
 
       setSelected(saved);
@@ -255,6 +278,7 @@ export default function InspectionManagement() {
 
       return true;
     } catch (error) {
+      if (!active.current) return false;
       setStorageError(inspectionError(error));
       const query = new URLSearchParams(params);
 
@@ -265,7 +289,7 @@ export default function InspectionManagement() {
       return false;
     } finally {
       saving.current = false;
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
 
@@ -355,9 +379,9 @@ export default function InspectionManagement() {
             application={selected}
             busy={busy}
             onSave={save}
-            onStatus={(status) =>
-              changeParams({ dialog: "confirm", target: status })
-            }
+            onRefresh={() => {
+              if (!saving.current) setRevision((value) => value + 1);
+            }}
           />
         ) : (
           <section
@@ -383,9 +407,7 @@ export default function InspectionManagement() {
           targetStatus={targetStatus}
           busy={busy}
           onClose={closeDialog}
-          onConfirm={() => {
-            void save({ ...selected, status: targetStatus }, "status-saved");
-          }}
+          onConfirm={closeDialog}
         />
       )}
     </div>
