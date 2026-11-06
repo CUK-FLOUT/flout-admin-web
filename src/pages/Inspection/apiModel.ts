@@ -101,8 +101,8 @@ export function inspectionDetail(
 export function validateAssignment(application: InspectionApplication) {
   if (application.inspectorUserId != null)
     return "이미 배정된 점검입니다. 현재 API는 재배정·일정 변경을 지원하지 않습니다.";
-  if (application.status !== "예정")
-    return "점검 상태를 예정으로 저장한 후 배정과 일정을 저장해 주세요.";
+  if (!["대기", "예정"].includes(application.status))
+    return "접수 또는 예정 상태의 미배정 점검만 배정할 수 있습니다.";
   if (
     !application.visitDate ||
     !application.visitTime ||

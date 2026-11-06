@@ -23,7 +23,7 @@ type Props = {
     kind: InspectionDialogState,
   ) => Promise<boolean>;
   busy: boolean;
-  onStatus: (status: AssignmentDraft["status"]) => void;
+  onRefresh: () => void;
 };
 const input =
   "h-10 w-full min-w-0 rounded-md border border-[#c8d0d7] bg-white px-3 text-[13px] font-medium leading-[19px]";
@@ -31,7 +31,7 @@ const input =
 export default function AssignmentPanel({
   application: a,
   onSave,
-  onStatus,
+  onRefresh,
   busy,
 }: Props) {
   const [draft, setDraft] = useState(() => ({
@@ -184,30 +184,17 @@ export default function AssignmentPanel({
         </label>
         <div className="flex gap-2">
           <StatusDropdown
-            value={draft.status}
+            value={a.status}
+            disabled
             onChange={(value) => update("status", value)}
           />
           <button
             type="button"
             disabled={busy}
-            onClick={() => {
-              if (
-                a.inspectorUserId != null &&
-                (draft.visitDate !== a.visitDate ||
-                  draft.visitTime !== a.visitTime ||
-                  draft.notice !== a.notice)
-              ) {
-                setError("변경한 배정·일정을 먼저 저장해 주세요.");
-
-                return;
-              }
-
-              setError("");
-              onStatus(draft.status);
-            }}
+            onClick={onRefresh}
             className="h-10 w-[88px] shrink-0 rounded-md bg-[#234f73] px-3 text-sm font-semibold text-white"
           >
-            상태 저장
+            상태 확인
           </button>
         </div>
       </div>
@@ -222,8 +209,9 @@ export default function AssignmentPanel({
         주민과 변경 일정 협의 후 최종 알림
       </label>
       <p className="text-xs text-[#64748b]">
-        본인에게 최초 1회 배정할 수 있습니다. 일정 변경·알림 발송은 현재 API에서
-        지원하지 않습니다. 저장된 확정 일정은 재조회 응답에 포함되지 않습니다.
+        본인에게 최초 1회 배정할 수 있습니다. 배정 시 예정, 방문 시간이 되면
+        진행, 결과 공개 시 완료로 자동 변경됩니다. 일정 변경·알림 발송과 저장된
+        확정 일정 재조회는 현재 API에서 지원하지 않습니다.
       </p>
       {error && (
         <p role="alert" className="text-[13px] leading-[19px] text-[#a53632]">

@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import type { EditableStatus } from "../../pages/Inspection/mockData";
+import type {
+  EditableStatus,
+  InspectionStatus,
+} from "../../pages/Inspection/mockData";
 import { inspectionStatuses } from "../../pages/Inspection/mockData";
 
 type Props = {
-  value: EditableStatus;
+  value: InspectionStatus;
+  disabled?: boolean;
   onChange: (status: EditableStatus) => void;
 };
-export default function StatusDropdown({ value, onChange }: Props) {
+export default function StatusDropdown({
+  value,
+  onChange,
+  disabled = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const closeOutside = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -23,7 +31,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
       ?.focus();
 
     return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [open, value]);
+  }, [open, value, disabled]);
   function close() {
     setOpen(false);
     trigger.current?.focus();
@@ -37,6 +45,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
       onKeyDown={(event) => {
+        if (disabled) return;
         if (event.key === "Escape") {
           event.stopPropagation();
           close();
@@ -74,6 +83,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
     >
       <button
         type="button"
+        disabled={disabled}
         ref={trigger}
         id="inspection-status"
         aria-label="점검 상태"
@@ -88,7 +98,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
           ⌄
         </span>
       </button>
-      {open && (
+      {open && !disabled && (
         <div
           id="inspection-status-options"
           role="listbox"

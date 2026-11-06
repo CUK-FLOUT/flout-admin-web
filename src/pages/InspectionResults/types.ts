@@ -17,7 +17,7 @@ export type ResultContent = {
   summary: string;
   details: Record<Category, Feedback>;
   actions: string[];
-  route: "개별 주택" | "지역·공공";
+  route: "개별 주택" | "지역·공공" | "";
   memo: string;
   photos: ResultPhoto[];
   notify: boolean;

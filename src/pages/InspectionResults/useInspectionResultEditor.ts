@@ -4,6 +4,9 @@ import { useSearchParams } from "react-router-dom";
 import type { InspectionApplication } from "../Inspection/mockData";
 import { getSessionGeneration } from "../../auth/session";
 import {
+  createPublicIssue,
+  deleteInspectionPhoto,
+  getInspectionResult,
   inspectionError,
   publishInspectionResult,
   saveInspectionDraft,
@@ -11,46 +14,41 @@ import {
 } from "../../api/inspections";
 import {
   emptyResultContent,
+  publicIssueRequest,
+  resultContent,
   resultRequest,
   validateResult,
 } from "./apiContent";
 import { categories, resultsDialogKinds } from "./types";
-import type { Category, ResultContent, ResultsDialogKind } from "./types";
-
-const sessionDrafts = new Map<
-  number,
-  {
-    generation: number;
-    content: ResultContent;
-    published: boolean;
-    acknowledged: boolean;
-  }
->();
+import type {
+  Category,
+  RegionIssue,
+  ResultContent,
+  ResultsDialogKind,
+} from "./types";
 
 export default function useInspectionResultEditor(a: InspectionApplication) {
   const [params, setParams] = useSearchParams();
   const id = a.inspectionId!;
   const generation = getSessionGeneration();
-  const cached = sessionDrafts.get(id);
-  const validCache = cached?.generation === generation ? cached : undefined;
-  const [draft, setDraft] = useState<ResultContent>(() =>
-    validCache ? structuredClone(validCache.content) : emptyResultContent(),
-  );
-  const [readOnly, setReadOnly] = useState(validCache?.published || false);
-  const acknowledged = useRef(validCache?.acknowledged || false);
+  const [draft, setDraft] = useState<ResultContent>(emptyResultContent);
+  const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
   const active = useRef(true);
+  const current = () => active.current && generation === getSessionGeneration();
+  const busy = saving || loading || !loaded;
   const editingPublished = false;
   const content = draft;
   const expanded = content.selected.length > 1;
   const requestedDialog = params.get("dialog") as ResultsDialogKind;
-  const dialog =
-    resultsDialogKinds.includes(requestedDialog) &&
-    ["actions", "draft-saved", "published"].includes(requestedDialog)
-      ? requestedDialog
-      : null;
+  const dialog = resultsDialogKinds.includes(requestedDialog)
+    ? requestedDialog
+    : null;
 
   useEffect(() => {
     active.current = true;
@@ -59,38 +57,51 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
       active.current = false;
     };
   }, []);
+
   useEffect(() => {
-    sessionDrafts.set(id, {
-      generation,
-      content: structuredClone(draft),
-      published: readOnly,
-      acknowledged: acknowledged.current,
-    });
-    for (const [key, value] of sessionDrafts)
-      if (value.generation !== generation) sessionDrafts.delete(key);
-  }, [id, generation, draft, readOnly]);
+    const controller = new AbortController();
+
+    async function load() {
+      setLoading(true);
+      setLoaded(false);
+      setError("");
+      try {
+        const result = await getInspectionResult(id, controller.signal);
+        const content = resultContent(result);
+
+        if (controller.signal.aborted || generation !== getSessionGeneration())
+          return;
+        setDraft(content);
+        setReadOnly(result?.resultStatus === "PUBLISHED");
+        setLoaded(true);
+      } catch (cause) {
+        if (!controller.signal.aborted && generation === getSessionGeneration())
+          setError(inspectionError(cause));
+      } finally {
+        if (!controller.signal.aborted && generation === getSessionGeneration())
+          setLoading(false);
+      }
+    }
+
+    void load();
+
+    return () => controller.abort();
+  }, [id, generation, revision]);
 
   function setDialog(kind: ResultsDialogKind | null) {
+    if (inFlight.current) return;
     const next = new URLSearchParams(params);
 
     if (kind) next.set("dialog", kind);
     else next.delete("dialog");
-    setParams(next);
+    setParams(next, { replace: true });
   }
 
   function update<K extends keyof ResultContent>(
     key: K,
     value: ResultContent[K],
   ) {
-    if (inFlight.current || readOnly) return;
-    if (key === "photos") {
-      setError(
-        "사진 삭제 API는 이번 범위에 포함되지 않아 업로드한 사진을 삭제할 수 없습니다.",
-      );
-
-      return;
-    }
-
+    if (busy || inFlight.current || readOnly || !current()) return;
     setDraft((current) => ({ ...current, [key]: value }));
     setError("");
   }
@@ -107,7 +118,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   }
 
   async function persist(publish: boolean) {
-    if (inFlight.current || readOnly) return;
+    if (busy || inFlight.current || readOnly || !current()) return;
     const problem = validateResult(draft, publish);
 
     if (problem) {
@@ -116,48 +127,71 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
       return;
     }
 
-    if (publish && a.status !== "완료") {
-      setError("현장점검 관리에서 점검 상태를 완료로 저장한 후 공개해 주세요.");
-
-      return;
-    }
-
-    if (
-      !acknowledged.current &&
-      !window.confirm(
-        "결과 조회 API가 아직 연결되지 않아 기존 서버 초안을 불러올 수 없습니다. 현재 입력 내용 전체로 서버 초안을 교체할까요? 기존 사진은 유지됩니다.",
-      )
-    )
-      return;
-    acknowledged.current = true;
     inFlight.current = true;
-    setBusy(true);
+    setSaving(true);
+    setError("");
     try {
       if (publish) await publishInspectionResult(id, resultRequest(draft));
       else await saveInspectionDraft(id, resultRequest(draft));
-      if (generation !== getSessionGeneration()) return;
-      sessionDrafts.set(id, {
-        generation,
-        content: structuredClone(draft),
-        published: publish,
-        acknowledged: true,
-      });
-      if (!active.current) return;
+      if (!current()) return;
       setReadOnly(publish);
-      setError("");
+      inFlight.current = false;
       setDialog(publish ? "published" : "draft-saved");
-    } catch (error) {
-      if (active.current) setError(inspectionError(error));
+    } catch (cause) {
+      if (current()) setError(inspectionError(cause));
     } finally {
       inFlight.current = false;
-      if (active.current) setBusy(false);
+      if (current()) setSaving(false);
     }
   }
 
-  function registerRegion() {
-    setError("지역·공공문제 등록 API는 수정 완료 후 별도로 연결할 예정입니다.");
+  async function registerRegion(
+    issue: Omit<RegionIssue, "id" | "source" | "status" | "applicationId">,
+  ) {
+    if (busy || inFlight.current || readOnly || !current()) return false;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      await createPublicIssue(
+        publicIssueRequest(id, {
+          ...issue,
+          location: issue.location.trim() === a.address ? "" : issue.location,
+        }),
+      );
+      if (!current()) return false;
+      inFlight.current = false;
+      setError("");
+      setDialog("region-saved");
 
-    return false;
+      return true;
+    } catch (cause) {
+      if (current()) throw new Error(inspectionError(cause), { cause });
+
+      return false;
+    } finally {
+      inFlight.current = false;
+      if (current()) setSaving(false);
+    }
+  }
+
+  async function removePhoto(photoId: string) {
+    if (busy || inFlight.current || readOnly || !current()) return;
+    inFlight.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await deleteInspectionPhoto(id, Number(photoId));
+      if (current())
+        setDraft((value) => ({
+          ...value,
+          photos: value.photos.filter((photo) => photo.id !== photoId),
+        }));
+    } catch (cause) {
+      if (current()) setError(inspectionError(cause));
+    } finally {
+      inFlight.current = false;
+      if (current()) setSaving(false);
+    }
   }
 
   async function upload(
@@ -167,33 +201,28 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     const files = Array.from(event.target.files || []);
 
     event.target.value = "";
-    if (!files.length || inFlight.current || readOnly) return;
+    if (!files.length || busy || inFlight.current || readOnly || !current())
+      return;
     inFlight.current = true;
-    setBusy(true);
+    setSaving(true);
     setError("");
     try {
       const response = await uploadInspectionPhotos(id, files);
+
+      if (!current()) return;
       const photos = response.photos.map((photo) => ({
         id: String(photo.photoId),
         name: photo.fileName,
         src: photo.url,
         category,
       }));
-      const next = { ...draft, photos: [...draft.photos, ...photos] };
 
-      if (generation !== getSessionGeneration()) return;
-      sessionDrafts.set(id, {
-        generation,
-        content: structuredClone(next),
-        published: false,
-        acknowledged: acknowledged.current,
-      });
-      if (active.current) setDraft(next);
-    } catch (error) {
-      if (active.current) setError(inspectionError(error));
+      setDraft((value) => ({ ...value, photos: [...value.photos, ...photos] }));
+    } catch (cause) {
+      if (current()) setError(inspectionError(cause));
     } finally {
       inFlight.current = false;
-      if (active.current) setBusy(false);
+      if (current()) setSaving(false);
     }
   }
 
@@ -203,6 +232,11 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     draft,
     error,
     busy,
+    loading,
+    loaded,
+    retry: () => {
+      if (!inFlight.current) setRevision((value) => value + 1);
+    },
     editingPublished,
     readOnly,
     content,
@@ -214,5 +248,6 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     persist,
     registerRegion,
     upload,
+    removePhoto,
   };
 }
