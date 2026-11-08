@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { addressExamples } from "../../pages/InspectionResults/fixtures";
 import { registrationTypes } from "../../pages/Infrastructure/types";
@@ -17,7 +17,7 @@ type Props = {
   kind: InfrastructureDialogKind;
   onDialog: (kind: InfrastructureDialogKind) => void;
   onClose: () => void;
-  onRegister: (draft: RegistrationDraft) => void;
+  onRegister: (draft: RegistrationDraft) => Promise<void>;
   error: string;
 };
 export default function InfrastructureRegistration({
@@ -37,6 +37,8 @@ export default function InfrastructureRegistration({
     [query, setQuery] = useState(""),
     [searched, setSearched] = useState(""),
     [addressError, setAddressError] = useState("");
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const addressOpen = kind === "address" || kind === "address-results";
 
   function update(key: keyof RegistrationDraft, value: string) {
@@ -105,7 +107,13 @@ export default function InfrastructureRegistration({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onRegister(draft);
+          if (submitting.current) return;
+          submitting.current = true;
+          setBusy(true);
+          void onRegister(draft).finally(() => {
+            submitting.current = false;
+            setBusy(false);
+          });
         }}
         className="flex flex-col gap-3"
       >
@@ -192,7 +200,7 @@ export default function InfrastructureRegistration({
           >
             취소
           </button>
-          <button type="submit" className={infrastructurePrimary + " h-10"}>
+          <button type="submit" disabled={busy} className={infrastructurePrimary + " h-10"}>
             지역 문제 등록
           </button>
         </div>

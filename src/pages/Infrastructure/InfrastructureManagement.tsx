@@ -137,8 +137,8 @@ function InfrastructureList({
     });
   }
 
-  function register(draft: RegistrationDraft) {
-    const created = data.register(draft);
+  async function register(draft: RegistrationDraft) {
+    const created = await data.register(draft);
 
     if (created) {
       const p = new URLSearchParams({
