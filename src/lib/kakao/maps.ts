@@ -16,6 +16,13 @@ export interface KakaoOverlay {
   setMap(map: KakaoMap | null): void;
 }
 export interface KakaoMaps {
+  services?: {
+    Status: { OK: string };
+    AnalyzeType: { EXACT: string };
+    Geocoder: new () => {
+      addressSearch(address: string, callback: (results: { x: string; y: string }[], status: string) => void, options: { analyze_type: string }) : void;
+    };
+  };
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => LatLng;
   Map: new (
@@ -103,7 +110,7 @@ export function loadKakaoMaps(): Promise<KakaoMaps> {
       script = document.createElement("script");
       script.id = scriptId;
       script.async = true;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false&libraries=services`;
     }
 
     script.addEventListener("load", ready);

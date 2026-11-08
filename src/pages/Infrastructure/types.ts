@@ -52,6 +52,7 @@ export type InfrastructureIssue = {
   target: string;
   requirements: string;
   action: { result: string; photos: InfrastructurePhoto[]; verified: boolean };
+  coordinates?: { latitude: number; longitude: number };
   marker: { x: number; y: number; labelBefore?: boolean };
   revision: number;
 };
