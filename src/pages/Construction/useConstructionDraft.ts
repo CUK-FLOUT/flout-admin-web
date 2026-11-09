@@ -37,7 +37,9 @@ export function useConstructionDraft(
       ...state,
       record,
       draft: state.draft
-        ? mergeConstructionDraft(record, state.draft)
+        ? record.draft === state.record?.draft
+          ? state.draft
+          : mergeConstructionDraft(record, state.draft)
         : structuredClone(record.draft),
     });
   }
