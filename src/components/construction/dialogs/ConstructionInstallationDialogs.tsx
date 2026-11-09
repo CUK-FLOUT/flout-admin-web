@@ -79,6 +79,7 @@ export default function ConstructionInstallationDialogs({
           </span>
           <textarea
             aria-label="주민에게 공개할 설치 결과"
+            readOnly={busy}
             value={draft.note}
             onChange={(e) =>
               onChange({ ...draft, note: e.target.value, verified: false })

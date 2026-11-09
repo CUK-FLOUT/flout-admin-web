@@ -1,10 +1,8 @@
 import type {
   ConstructionRecord,
-  EditableConstructionStatus,
   InstallationDraft,
 } from "../../pages/Construction/types";
 import ConstructionEmpty from "./ConstructionEmpty";
-import ConstructionStatusSelect from "./ConstructionStatusSelect";
 import ConstructionPhotos from "./ConstructionPhotos";
 import calendar from "../../assets/construction/calendar.svg";
 import chevron from "../../assets/construction/chevron.svg";
@@ -13,12 +11,9 @@ import { constructionInput, constructionPrimary } from "./styles";
 type Props = {
   application?: ConstructionRecord;
   draft: InstallationDraft | null;
-  target: EditableConstructionStatus | "";
   busy: boolean;
   loading?: boolean;
   onChange: (draft: InstallationDraft) => void;
-  onTarget: (target: EditableConstructionStatus) => void;
-  onStatus: () => void;
   onSchedule: () => void;
   onUpload: (files: File[]) => void;
   onFinish: () => void;
@@ -27,12 +22,9 @@ type Props = {
 export default function ConstructionDetail({
   application: a,
   draft,
-  target,
   busy,
   loading,
   onChange,
-  onTarget,
-  onStatus,
   onSchedule,
   onUpload,
   onFinish,
@@ -126,24 +118,10 @@ export default function ConstructionDetail({
               </span>
             </label>
           </div>
-          <div className="mt-[17px] grid grid-cols-[minmax(0,200fr)_minmax(0,196fr)] gap-[10px]">
-            <ConstructionStatusSelect
-              value={target}
-              disabled={readOnly || busy}
-              onChange={onTarget}
-            />
-            <button
-              type="button"
-              disabled={readOnly || busy}
-              onClick={onStatus}
-              className={
-                constructionPrimary +
-                " h-[46px] rounded-md text-[15px] font-semibold"
-              }
-            >
-              상태 저장
-            </button>
-          </div>
+          <p className="mt-[17px] text-xs leading-[18px] text-[#596672]">
+            시공 상태는 일정 저장, 방문 시간 도래 및 전체 완료에 따라 자동으로
+            변경됩니다.
+          </p>
           <button
             type="button"
             disabled={readOnly || busy || a.scheduleEditable === false}

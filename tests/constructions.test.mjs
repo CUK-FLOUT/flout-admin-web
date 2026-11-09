@@ -8,7 +8,7 @@ import axios from "axios";
 import { randomUUID } from "node:crypto";
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
-function harness(overrides = {}) {
+function harness(overrides = {}, environment = {}) {
   const client = axios.create({
     headers: { "Content-Type": "application/json" },
   });
@@ -52,6 +52,7 @@ function harness(overrides = {}) {
       URLSearchParams,
       URL,
       crypto: { randomUUID },
+      ...environment,
       require(name) {
         if (name in overrides) return overrides[name];
         if (name === "axios") return axios;
@@ -375,7 +376,7 @@ test("list and detail load independently, old detail responses are ignored, refr
   state = render();
   assert.equal(state.totalElements, 40);
   assert.equal(state.records[0].id, "91");
-  state.refresh();
+  state.refresh("92");
   render();
   assert.equal(reads.length, 2);
   reads[1].reject(new Error("목록 조회 실패"));
@@ -387,7 +388,7 @@ test("list and detail load independently, old detail responses are ignored, refr
   assert.equal(detailReads.at(-1).args[1].aborted, true);
 });
 
-function workspace(record, apiOverrides = {}) {
+async function workspace(record, apiOverrides = {}) {
   const react = { useEffect() {}, useRef: () => ({ current: false }) };
   const requests = [],
     navigations = [];
@@ -445,6 +446,10 @@ function workspace(record, apiOverrides = {}) {
     },
     "../../api/constructions": api,
     "./useConstructionData": { useConstructionData: () => data },
+    "./draftStorage": {
+      readConstructionDraft: async () => null,
+      writeConstructionDraft: async () => {},
+    },
     "./model": { displayDate: (value) => value },
     "../../components/construction/styles": {
       constructionFocus: "",
@@ -472,6 +477,10 @@ function workspace(record, apiOverrides = {}) {
     const children = [node.props?.children].flat(Infinity);
     return children.map((child) => find(child, type)).find(Boolean);
   }
+  render();
+  await tick();
+  render();
+
   return {
     data,
     requests,
@@ -489,7 +498,7 @@ test("workspace prevents double schedule submission and preserves draft on API f
     .constructionDetailRecord(detail);
   const pending = deferred();
   let saves = 0;
-  const w = workspace(record, {
+  const w = await workspace(record, {
     saveConstructionSchedule: () => {
       saves++;
       return pending.promise;
@@ -530,7 +539,7 @@ test("workspace selects photos locally and uploads only on confirmed completion"
     });
   const completion = deferred();
   const calls = [];
-  const w = workspace(record, {
+  const w = await workspace(record, {
     completeConstruction: (...args) => {
       calls.push(args);
       return completion.promise;
@@ -567,7 +576,7 @@ test("workspace selects photos locally and uploads only on confirmed completion"
   w.unmount();
 });
 
-test("missing schedule/photos and already completed records never send a completion request", () => {
+test("missing schedule/photos and already completed records never send a completion request", async () => {
   const map = harness().load(
     "src/pages/Construction/apiMapping.ts",
   ).constructionDetailRecord;
@@ -580,7 +589,7 @@ test("missing schedule/photos and already completed records never send a complet
       scheduledConstructionTime: "10:00",
     },
   ]) {
-    const w = workspace(map(source));
+    const w = await workspace(map(source));
     const panel = w.panel();
     panel.onChange({ ...panel.draft, note: "결과" });
     w.panel().onFinish();
@@ -588,7 +597,7 @@ test("missing schedule/photos and already completed records never send a complet
     assert.ok(w.data.error);
     w.unmount();
   }
-  const w = workspace(
+  const w = await workspace(
     map({ ...detail, status: "COMPLETED", resultPublished: true }),
   );
   w.panel().onFinish();
@@ -610,7 +619,9 @@ test("unmounting during completion never navigates an inactive workspace", async
       ],
     });
   const pending = deferred();
-  const w = workspace(record, { completeConstruction: () => pending.promise });
+  const w = await workspace(record, {
+    completeConstruction: () => pending.promise,
+  });
   const panel = w.panel();
   panel.onChange({ ...panel.draft, note: "설치 완료" });
   w.panel().onFinish();
@@ -642,7 +653,7 @@ function confirmWorkspace(w) {
 }
 
 test("local deletion sends no API request and only retained files are uploaded", async () => {
-  const w = workspace(scheduledRecord());
+  const w = await workspace(scheduledRecord());
   const files = [
     new File(["a"], "remove.jpg", { type: "image/jpeg" }),
     new File(["b"], "keep.png", { type: "image/png" }),
@@ -650,10 +661,9 @@ test("local deletion sends no API request and only retained files are uploaded",
   w.panel().onUpload(files);
   const removed = w.panel().draft.photos[0];
   w.panel().onRemovePhoto(removed.id);
-  assert.deepEqual(
-    plain(w.panel().draft.photos.map((photo) => photo.name)),
-    ["keep.png"],
-  );
+  assert.deepEqual(plain(w.panel().draft.photos.map((photo) => photo.name)), [
+    "keep.png",
+  ]);
   assert.equal(w.requests.length, 0);
   confirmWorkspace(w);
   await tick();
@@ -661,16 +671,15 @@ test("local deletion sends no API request and only retained files are uploaded",
     w.requests.map((request) => request[0]),
     ["upload", "complete"],
   );
-  assert.deepEqual(
-    plain(w.requests[0][2].map((file) => file.name)),
-    ["keep.png"],
-  );
+  assert.deepEqual(plain(w.requests[0][2].map((file) => file.name)), [
+    "keep.png",
+  ]);
   w.unmount();
 });
 
 test("upload failure blocks completion and preserves removable selections", async () => {
   let completed = false;
-  const w = workspace(scheduledRecord(), {
+  const w = await workspace(scheduledRecord(), {
     uploadConstructionPhotos: async () => {
       throw new Error("사진 업로드 실패");
     },
@@ -691,7 +700,7 @@ test("upload failure blocks completion and preserves removable selections", asyn
 
 test("completion failure after successful upload retries completion without uploading twice", async () => {
   let completed = 0;
-  const w = workspace(scheduledRecord(), {
+  const w = await workspace(scheduledRecord(), {
     completeConstruction: async () => {
       if (++completed === 1) throw new Error("일시 오류");
     },
@@ -714,4 +723,327 @@ test("completion failure after successful upload retries completion without uplo
   );
   assert.equal(w.dialog().kind, "overall-saved");
   w.unmount();
+});
+
+function fakeDraftDatabase() {
+  const databases = new Map();
+  return {
+    open(name) {
+      const db = {
+        createObjectStore() {
+          databases.set(name, new Map());
+        },
+        transaction() {
+          const transaction = {
+            objectStore() {
+              const values = databases.get(name);
+              return {
+                get(key) {
+                  const request = {};
+                  queueMicrotask(() => {
+                    request.result = values.get(key);
+                    request.onsuccess?.();
+                  });
+                  return request;
+                },
+                put(value, key) {
+                  values.set(key, value);
+                  queueMicrotask(() => transaction.oncomplete?.());
+                },
+                delete(key) {
+                  values.delete(key);
+                  queueMicrotask(() => transaction.oncomplete?.());
+                },
+              };
+            },
+          };
+          return transaction;
+        },
+      };
+      const request = { result: db };
+      queueMicrotask(() => {
+        if (!databases.has(name)) request.onupgradeneeded?.();
+        request.onsuccess?.();
+      });
+      return request;
+    },
+  };
+}
+
+test("draft storage survives module reload with File data, serializes updates, scopes by operator and removes completed drafts", async () => {
+  const indexedDB = fakeDraftDatabase();
+  let userId = 7;
+  const makeStore = () =>
+    harness(
+      { "../../auth/session": { getSession: () => ({ userId }) } },
+      { indexedDB },
+    ).load("src/pages/Construction/draftStorage.ts");
+  const store = makeStore();
+  const draft = {
+    ...scheduledRecord().draft,
+    note: "남길 메모",
+    photos: [
+      {
+        id: "local-1",
+        name: "local.jpg",
+        src: "blob:expired",
+        file: new File(["image"], "local.jpg", { type: "image/jpeg" }),
+      },
+    ],
+  };
+  const first = store.writeConstructionDraft("91", draft);
+  const last = store.writeConstructionDraft("91", {
+    ...draft,
+    note: "최신 메모",
+  });
+  await Promise.all([first, last]);
+  const reloaded = makeStore();
+  const restored = await reloaded.readConstructionDraft("91");
+  assert.equal(restored.note, "최신 메모");
+  assert.equal(await restored.photos[0].file.text(), "image");
+  assert.equal(restored.photos[0].src, undefined);
+  userId = 8;
+  assert.equal(await reloaded.readConstructionDraft("91"), null);
+  userId = 7;
+  await reloaded.writeConstructionDraft("91", null);
+  assert.equal(await makeStore().readConstructionDraft("91"), null);
+});
+
+test("restored drafts regenerate photo URLs; schedule refresh preserves pending photos and other-record edits", async () => {
+  const store = new Map();
+  const draft = {
+    ...scheduledRecord().draft,
+    date: "2099-12-30",
+    time: "11:00",
+    note: "편집 내용",
+    photos: [
+      {
+        id: "pending",
+        name: "image.jpg",
+        file: new File(["image"], "image.jpg", { type: "image/jpeg" }),
+      },
+    ],
+  };
+  store.set("91", draft);
+  const persistence = {
+    readConstructionDraft: async (id) => store.get(id) || null,
+    writeConstructionDraft: async (id, value) => {
+      store.set(id, value);
+    },
+  };
+  const mount = (record) => {
+    const hook = hooks();
+    let currentRecord = record;
+    const errors = [];
+    const error = (value) => errors.push(value);
+    const h = harness({ react: hook.react, "./draftStorage": persistence });
+    const { useConstructionDraft } = h.load(
+      "src/pages/Construction/useConstructionDraft.ts",
+    );
+    return {
+      render: () =>
+        hook.render(() => useConstructionDraft(currentRecord, error)),
+      unmount: hook.unmount,
+      update(value) {
+        currentRecord = value;
+      },
+      errors,
+    };
+  };
+  const record = {
+    ...scheduledRecord(),
+    date: "2099-12-31",
+    time: "10:00",
+    scheduleEditable: false,
+  };
+  const first = mount(record);
+  first.render();
+  await tick();
+  let state = first.render();
+  const previousUrl = state.draft.photos[0].src;
+  assert.match(previousUrl, /^blob:/);
+  assert.equal(state.draft.date, "2099-12-31");
+  assert.equal(state.draft.note, "편집 내용");
+  first.update({ ...record, revision: 1 });
+  first.render();
+  state = first.render();
+  assert.equal(state.draft.photos[0].src, previousUrl);
+  first.unmount();
+  const second = mount(record);
+  second.render();
+  await tick();
+  state = second.render();
+  assert.notEqual(state.draft.photos[0].src, previousUrl);
+  assert.equal(state.draft.photos[0].file.name, "image.jpg");
+  second.unmount();
+});
+
+test("refresh for an old mutation does not refetch or clear the currently selected construction", async () => {
+  const hook = hooks();
+  const listReads = [],
+    detailReads = [];
+  const api = {
+    getConstructions: async (...args) => {
+      listReads.push(args);
+      return { constructions: [item], totalElements: 1, totalPages: 1 };
+    },
+    getConstructionDetail: async (id) => {
+      detailReads.push(id);
+      return { ...detail, constructionId: id };
+    },
+    constructionError: (error) => error.message,
+  };
+  const { useConstructionData } = harness({
+    react: hook.react,
+    "../../api/constructions": api,
+  }).load("src/pages/Construction/useConstructionData.ts");
+  const render = () =>
+    hook.render(() =>
+      useConstructionData({ keyword: "", page: 0, selectedId: "92" }),
+    );
+  render();
+  await tick();
+  let state = render();
+  const selected = state.selected;
+  state.refresh("91");
+  state = render();
+  assert.equal(state.selected, selected);
+  await tick();
+  render();
+  assert.deepEqual(detailReads, [92]);
+  assert.equal(listReads.length, 2);
+  hook.unmount();
+});
+
+function pageHarness() {
+  const hook = hooks();
+  let params = new URLSearchParams("tab=진행&keyword=김&page=3");
+  const requests = [],
+    navigations = [];
+  const record = scheduledRecord();
+  const data = {
+    selected: record,
+    records: [],
+    revision: 0,
+    totalPages: 2,
+    totalElements: 6,
+    listLoading: false,
+    listError: undefined,
+  };
+  const navigate = (to, options) => {
+    navigations.push({ to, options });
+    params = new URLSearchParams(to.search);
+  };
+  const jsx = (type, props, key) => ({ type, props, key });
+  const overrides = {
+    react: hook.react,
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "react-router-dom": {
+      useParams: () => ({ requestId: "91" }),
+      useSearchParams: () => [params],
+      useNavigate: () => navigate,
+    },
+    "./useConstructionData": {
+      useConstructionData: (query) => {
+        requests.push(query);
+        return data;
+      },
+    },
+    "./useConstructionDraft": {},
+    "./draftStorage": {},
+    "./model": {},
+    "../../components/construction/styles": {},
+  };
+  for (const name of [
+    "ConstructionBadge",
+    "ConstructionDetail",
+    "ConstructionDialogs",
+    "ConstructionEmpty",
+  ])
+    overrides[`../../components/construction/${name}`] = name;
+  const Component = harness(overrides).load(
+    "src/pages/Construction/ConstructionManagement.tsx",
+  ).default;
+  return {
+    data,
+    requests,
+    navigations,
+    render: () => hook.render(Component),
+    unmount: hook.unmount,
+  };
+}
+
+test("out-of-range page is replaced and re-queried while URL filters and stable workspace key are retained", () => {
+  const page = pageHarness();
+  const first = page.render();
+  assert.equal(page.navigations.length, 1);
+  assert.equal(page.navigations[0].options.replace, true);
+  assert.equal(
+    new URLSearchParams(page.navigations[0].to.search).get("page"),
+    "2",
+  );
+  assert.equal(
+    new URLSearchParams(page.navigations[0].to.search).get("keyword"),
+    "김",
+  );
+  const next = page.render();
+  assert.equal(page.requests.at(-1).page, 1);
+  page.data.revision++;
+  assert.equal(page.render().key, next.key);
+  assert.equal(next.key, first.key);
+  page.unmount();
+  for (const state of [{ listLoading: true }, { listError: "서버 오류" }]) {
+    const blocked = pageHarness();
+    Object.assign(blocked.data, state);
+    blocked.render();
+    assert.equal(blocked.navigations.length, 0);
+    blocked.unmount();
+  }
+});
+
+test("installation dialog locks its result textarea only while a request is busy", () => {
+  const jsx = (type, props) => ({ type, props });
+  const overrides = {
+    react: { useRef: () => ({ current: null }) },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "../../support/SupportDialog": "Dialog",
+    "../../../pages/Construction/model": { displayDate: (value) => value },
+    "../ConstructionBadge": "Badge",
+    "../ConstructionImage": "Image",
+    "../styles": {},
+    "./ConstructionDialogShared": { Row: "Row", fit: "" },
+  };
+  const Component = harness(overrides).load(
+    "src/components/construction/dialogs/ConstructionInstallationDialogs.tsx",
+  ).default;
+  const find = (node) =>
+    node?.type === "textarea"
+      ? node
+      : [node?.props?.children]
+          .flat(Infinity)
+          .map((child) =>
+            typeof child === "object" && child ? find(child) : undefined,
+          )
+          .find(Boolean);
+  const record = scheduledRecord();
+  for (const busy of [true, false]) {
+    const tree = Component({
+      kind: "installation",
+      application: record,
+      draft: record.draft,
+      busy,
+    });
+    assert.equal(find(tree).props.readOnly, busy);
+  }
+});
+
+test("server refresh retains unsaved date/time and local files for a still-unassigned construction", () => {
+  const { mergeConstructionDraft } = harness({ react: {}, "./draftStorage": {} }).load("src/pages/Construction/useConstructionDraft.ts");
+  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord({ ...detail, constructionId: 92 });
+  const draft = { ...record.draft, date: "2099-12-31", time: "11:30", note: "다른 시공 편집 중", photos: [{ id: "pending-b", name: "b.jpg", src: "blob:preview", file: new File(["b"], "b.jpg", { type: "image/jpeg" }) }] };
+  const merged = mergeConstructionDraft({ ...record, revision: 2 }, draft);
+  assert.equal(merged.date, draft.date);
+  assert.equal(merged.time, draft.time);
+  assert.equal(merged.note, draft.note);
+  assert.equal(merged.photos[0].file, draft.photos[0].file);
 });

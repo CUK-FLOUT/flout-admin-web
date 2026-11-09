@@ -15,8 +15,6 @@ import type {
   ConstructionDialogKind,
   ConstructionRecord,
   ConstructionTab,
-  EditableConstructionStatus,
-  InstallationDraft,
 } from "./types";
 import {
   completeConstruction,
@@ -28,14 +26,16 @@ import {
 } from "../../api/constructions";
 import type { ConstructionListStatus } from "../../api/constructions";
 import { useConstructionData } from "./useConstructionData";
+import { useConstructionDraft } from "./useConstructionDraft";
+import { writeConstructionDraft } from "./draftStorage";
 
 const tabs: ConstructionTab[] = ["전체", "예정", "진행", "완료"];
-const emptyPanelDraft = null;
 
 export default function ConstructionManagement() {
   const { requestId } = useParams();
   const [params] = useSearchParams();
   const keyboardTab = useRef(false);
+  const navigate = useNavigate();
   const tab = tabs.includes(params.get("tab") as ConstructionTab)
     ? (params.get("tab") as ConstructionTab)
     : "전체";
@@ -61,7 +61,31 @@ export default function ConstructionManagement() {
     selectedId: requestId || (params.has("requestId") ? "" : undefined),
   });
   const selected = data.selected;
-  const key = [selected?.id || "none", data.revision, tab, page].join(":");
+  const key = selected?.id || "none";
+
+  useEffect(() => {
+    const lastPage = Math.max(1, data.totalPages);
+
+    if (data.listLoading || data.listError || page <= lastPage) return;
+    const next = new URLSearchParams(params);
+
+    next.set("page", String(lastPage));
+    navigate(
+      {
+        pathname: "/construction" + (requestId ? "/" + requestId : ""),
+        search: next.toString(),
+      },
+      { replace: true },
+    );
+  }, [
+    page,
+    data.totalPages,
+    data.listLoading,
+    data.listError,
+    params,
+    navigate,
+    requestId,
+  ]);
 
   return (
     <ConstructionWorkspace
@@ -108,44 +132,16 @@ function ConstructionWorkspace({
 }: Props) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<InstallationDraft | null>(() =>
-    a
-      ? {
-          ...structuredClone(a.draft),
-          note:
-            a.status === "전체 완료"
-              ? a.draft.note
-              : (data.noteDrafts.current.get(a.id) ?? a.draft.note),
-        }
-      : emptyPanelDraft,
-  );
-
-  useEffect(() => {
-    if (!a || !draft) return;
-    if (a.status === "전체 완료") data.noteDrafts.current.delete(a.id);
-    else data.noteDrafts.current.set(a.id, draft.note);
-  }, [a, draft, data.noteDrafts]);
-  const [target, setTarget] = useState<EditableConstructionStatus | "">(() =>
-    ["예정", "진행", "완료"].includes(params.get("target") || "")
-      ? (params.get("target") as EditableConstructionStatus)
-      : "",
+  const { draft, setDraft, restoring, photoUrls } = useConstructionDraft(
+    a,
+    data.setError,
   );
   const [candidateId, setCandidateId] = useState(params.get("candidate") || "");
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const active = useRef(false);
-  const photoUrls = useRef(new Set<string>());
   const uploadedPhotoIds = useRef(new Set<string>());
-
-  useEffect(() => {
-    const urls = photoUrls.current;
-
-    return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
-      urls.clear();
-    };
-  }, []);
 
   useEffect(() => {
     active.current = true;
@@ -155,11 +151,12 @@ function ConstructionWorkspace({
     };
   }, []);
   const requested = params.get("dialog");
-  const kind = constructionDialogKinds.includes(
-    requested as ConstructionDialogKind,
-  )
-    ? (requested as ConstructionDialogKind)
-    : null;
+  const kind =
+    constructionDialogKinds.includes(requested as ConstructionDialogKind) &&
+    requested !== "status-confirm" &&
+    requested !== "status-saved"
+      ? (requested as ConstructionDialogKind)
+      : null;
   const candidate =
     candidates.find((c) => c.id === candidateId) ||
     candidates.find((c) => c.eligible);
@@ -182,15 +179,10 @@ function ConstructionWorkspace({
     );
   }
 
-  function show(
-    value: ConstructionDialogKind | null,
-    id = a?.id,
-    state?: EditableConstructionStatus,
-  ) {
+  function show(value: ConstructionDialogKind | null, id = a?.id) {
     const p = query();
 
     if (value) p.set("dialog", value);
-    if (state) p.set("target", state);
     go(p, id, true);
   }
 
@@ -221,13 +213,13 @@ function ConstructionWorkspace({
     action: () => Promise<unknown>,
     success?: ConstructionDialogKind,
   ) {
-    if (submitting.current || !a) return;
+    if (submitting.current || restoring || !a) return;
     submitting.current = true;
     setBusy(true);
     data.setError("");
     try {
       await action();
-      data.refresh();
+      data.refresh(a.id);
       if (active.current && success) show(success);
     } catch (cause) {
       if (active.current) data.setError(constructionError(cause));
@@ -275,12 +267,6 @@ function ConstructionWorkspace({
     void request(
       () => saveConstructionSchedule(Number(a.id), draft.date, draft.time),
       "schedule-saved",
-    );
-  }
-
-  function status() {
-    data.setError(
-      "시공 상태는 일정 저장·방문 시간 도래·전체 완료 시 서버에서 변경됩니다. 별도의 상태 저장 API는 제공되지 않습니다.",
     );
   }
 
@@ -381,6 +367,17 @@ function ConstructionWorkspace({
       }));
 
       pending.forEach((photo) => uploadedPhotoIds.current.add(photo.id));
+      const savedDraft = {
+        ...draft,
+        photos: [
+          ...draft.photos.filter(
+            (photo) => !pending.some((item) => item.id === photo.id),
+          ),
+          ...uploaded,
+        ],
+      };
+
+      await writeConstructionDraft(a.id, savedDraft);
       if (active.current)
         setDraft((current) =>
           current
@@ -398,7 +395,17 @@ function ConstructionWorkspace({
     }
 
     try {
-      return await completeConstruction(Number(a.id), draft.note);
+      const result = await completeConstruction(Number(a.id), draft.note);
+
+      await writeConstructionDraft(a.id, null).catch((cause) => {
+        if (active.current)
+          data.setError(
+            "전체 완료는 처리되었지만 기기의 초안을 정리하지 못했습니다. " +
+              constructionError(cause),
+          );
+      });
+
+      return result;
     } catch (cause) {
       if (pending.length || uploadedPhotoIds.current.size) {
         throw new Error(
@@ -449,12 +456,6 @@ function ConstructionWorkspace({
     }
 
     if (!a || !draft) return;
-    if (kind === "status-confirm") {
-      status();
-
-      return;
-    }
-
     if (kind !== "completion-review" && kind !== "installation") return;
     if (!hasSavedSchedule() || a.status === "전체 완료") return;
     if (!(kind === "completion-review" ? checked : draft.verified)) {
@@ -694,13 +695,10 @@ function ConstructionWorkspace({
         <ConstructionDetail
           application={a}
           draft={draft}
-          target={target}
-          busy={busy || data.detailLoading}
-          loading={data.detailLoading}
+          busy={busy || restoring}
+          loading={restoring || (!a && data.detailLoading)}
           onChange={setDraft}
-          onTarget={setTarget}
           onSchedule={schedule}
-          onStatus={status}
           onUpload={(files) => {
             void upload(files);
           }}
@@ -727,10 +725,10 @@ function ConstructionWorkspace({
           candidate={candidate}
           candidates={candidates}
           draft={draft}
-          target={target}
+          target=""
           checked={checked}
           error={data.error}
-          busy={busy}
+          busy={busy || restoring}
           onClose={close}
           onConfirm={confirm}
           onInstall={install}
