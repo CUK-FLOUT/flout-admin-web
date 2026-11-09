@@ -1,10 +1,7 @@
 import { useRef } from "react";
 
 import Dialog from "../../support/SupportDialog";
-import {
-  displayDate,
-  installationIssue,
-} from "../../../pages/Construction/model";
+import { displayDate } from "../../../pages/Construction/model";
 import ConstructionBadge from "../ConstructionBadge";
 import ConstructionImage from "../ConstructionImage";
 import {
@@ -31,7 +28,7 @@ export default function ConstructionInstallationDialogs({
   onUpload,
 }: DetailConstructionDialogProps) {
   const file = useRef<HTMLInputElement>(null);
-  const name = a.id + " · " + a.resident;
+  const name = (a.receiptNo || a.id) + " · " + a.resident;
   const alert = error ? (
     <p role="alert" className="text-sm leading-[21px] text-[#a53632]">
       {error}
@@ -39,11 +36,17 @@ export default function ConstructionInstallationDialogs({
   ) : null;
 
   if (kind === "installation") {
-    const issue = installationIssue(draft);
+    const issue = !draft.note.trim()
+      ? "주민에게 공개할 설치 결과를 입력해 주세요."
+      : !draft.photos.length
+        ? "시공 사진을 1장 이상 업로드해 주세요."
+        : !draft.verified
+          ? "설치 내용·사진 확인 완료 항목을 선택해 주세요."
+          : null;
 
     return (
       <Dialog
-        title={"설치 결과 등록 " + a.id}
+        title={"설치 결과 등록 " + (a.receiptNo || a.id)}
         width="max-w-[580px]"
         height="min-h-[502px]"
         onClose={onClose}
@@ -56,6 +59,8 @@ export default function ConstructionInstallationDialogs({
             <input
               aria-label="설치 완료일"
               type="date"
+              readOnly
+              title="완료 시각은 서버에서 전체 완료 시 기록합니다."
               value={draft.completionDate}
               onChange={(e) =>
                 onChange({
@@ -208,7 +213,9 @@ export default function ConstructionInstallationDialogs({
         <Row label="주소">{a.address}</Row>
         <Row label="설치 시설">{a.facility}</Row>
         <Row label="설치 완료일">
-          {displayDate(a.published?.completionDate || "")}
+          {reviewing
+            ? "전체 완료 시 서버에 기록"
+            : displayDate(a.published?.completionDate || "")}
         </Row>
         <Row label="시공 상태">{a.status}</Row>
         <Row label="설치 결과">

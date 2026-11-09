@@ -1,72 +1,109 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  assertCurrentRevision,
-  constructionStorageKey,
-  enrollConstruction,
-  readConstructionRecords,
-  writeConstructionRecords,
-} from "./model";
+  constructionError,
+  getConstructionDetail,
+  getConstructions,
+} from "../../api/constructions";
+import type {
+  ConstructionListStatus,
+  ConstructionPage,
+} from "../../api/constructions";
+import { constructionDetailRecord, constructionListRecord } from "./apiMapping";
 import type { ConstructionRecord } from "./types";
 
-export function useConstructionData() {
-  const [records, setRecords] = useState(readConstructionRecords);
+type Query = {
+  keyword: string;
+  page: number;
+  status?: ConstructionListStatus;
+  selectedId?: string | null;
+};
+export function useConstructionData({
+  keyword,
+  page,
+  status,
+  selectedId,
+}: Query) {
+  const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
+  const mounted = useRef(false);
+  const noteDrafts = useRef(new Map<string, string>());
+  const key = JSON.stringify([keyword, page, status, revision]);
+  const [list, setList] = useState<{
+    key: string;
+    data?: ConstructionPage;
+    error?: string;
+  }>({ key: "" });
+  const records =
+    list.key === key
+      ? (list.data?.constructions || []).map(constructionListRecord)
+      : [];
+  const id = selectedId == null ? records[0]?.id : selectedId;
+  const detailKey = JSON.stringify([id, revision]);
+  const [detail, setDetail] = useState<{
+    key: string;
+    record?: ConstructionRecord;
+    error?: string;
+  }>({ key: "" });
 
   useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key === constructionStorageKey || event.key === null)
-        setRecords(readConstructionRecords());
+    mounted.current = true;
+
+    return () => {
+      mounted.current = false;
     };
-
-    window.addEventListener("storage", sync);
-
-    return () => window.removeEventListener("storage", sync);
   }, []);
-  function commit(
-    id: string,
-    revision: number,
-    update: (record: ConstructionRecord) => ConstructionRecord,
-  ) {
-    try {
-      const latest = readConstructionRecords(),
-        original = latest.find((a) => a.id === id);
 
-      if (!original) throw new Error("시공 신청 정보를 찾을 수 없습니다.");
-      assertCurrentRevision(original, revision);
-      const updated = update(original);
-      const next = latest.map((a) => (a.id === id ? updated : a));
+  useEffect(() => {
+    const controller = new AbortController();
 
-      writeConstructionRecords(next);
-      setRecords(next);
-      setError("");
+    void getConstructions(keyword, page, status, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setList({ key, data });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setList({ key, error: constructionError(cause) });
+      });
 
-      return updated;
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "저장하지 못했습니다. 다시 시도해 주세요.",
-      );
+    return () => controller.abort();
+  }, [keyword, page, status, key]);
 
-      return null;
-    }
+  useEffect(() => {
+    if (!id) return;
+    const controller = new AbortController();
+
+    void getConstructionDetail(Number(id), controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setDetail({ key: detailKey, record: constructionDetailRecord(data) });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setDetail({ key: detailKey, error: constructionError(cause) });
+      });
+
+    return () => controller.abort();
+  }, [id, detailKey]);
+
+  function refresh() {
+    if (mounted.current) setRevision((value) => value + 1);
   }
 
-  function register(id: string) {
-    try {
-      const next = enrollConstruction(readConstructionRecords(), id);
-
-      writeConstructionRecords(next);
-      setRecords(next);
-      setError("");
-
-      return next.find((a) => a.id === id)!;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "등록하지 못했습니다.");
-
-      return null;
-    }
-  }
-
-  return { records, error, setError, commit, register };
+  return {
+    records,
+    noteDrafts,
+    selected: detail.key === detailKey ? detail.record : undefined,
+    error:
+      error ||
+      (list.key === key ? list.error : "") ||
+      (detail.key === detailKey ? detail.error : "") ||
+      "",
+    setError,
+    refresh,
+    revision,
+    listLoading: list.key !== key,
+    detailLoading: !!id && detail.key !== detailKey,
+    totalElements: list.key === key ? list.data?.totalElements || 0 : 0,
+    totalPages: list.key === key ? list.data?.totalPages || 0 : 0,
+  };
 }

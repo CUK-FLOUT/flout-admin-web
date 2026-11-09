@@ -8,7 +8,12 @@ export const constructionStatuses = [
 export type ConstructionStatus = (typeof constructionStatuses)[number];
 export type EditableConstructionStatus = "예정" | "진행" | "완료";
 export type ConstructionTab = "전체" | "예정" | "진행" | "완료";
-export type ConstructionPhoto = { id: string; name: string; src: string };
+export type ConstructionPhoto = {
+  id: string;
+  name: string;
+  src: string;
+  file?: File;
+};
 export type InstallationDraft = {
   date: string;
   time: string;
@@ -22,6 +27,9 @@ export type PublishedInstallation = Pick<
   "completionDate" | "note" | "photos"
 >;
 export type ConstructionRecord = {
+  receiptNo?: string;
+  supportStatus?: string;
+  scheduleEditable?: boolean;
   id: string;
   resident: string;
   address: string;

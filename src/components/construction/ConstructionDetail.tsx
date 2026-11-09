@@ -15,24 +15,28 @@ type Props = {
   draft: InstallationDraft | null;
   target: EditableConstructionStatus | "";
   busy: boolean;
+  loading?: boolean;
   onChange: (draft: InstallationDraft) => void;
   onTarget: (target: EditableConstructionStatus) => void;
   onStatus: () => void;
   onSchedule: () => void;
   onUpload: (files: File[]) => void;
   onFinish: () => void;
+  onRemovePhoto: (id: string) => void;
 };
 export default function ConstructionDetail({
   application: a,
   draft,
   target,
   busy,
+  loading,
   onChange,
   onTarget,
   onStatus,
   onSchedule,
   onUpload,
   onFinish,
+  onRemovePhoto,
 }: Props) {
   const readOnly = a?.status === "전체 완료";
 
@@ -42,15 +46,19 @@ export default function ConstructionDetail({
       className="flex min-h-[656px] min-w-0 flex-col overflow-y-auto rounded-lg border-[0.75px] border-[#c8d0d7] bg-white px-[19.25px] pt-[15.25px] pb-[20.75px] min-[1102px]:h-[calc(100dvh_-_244px)] min-[1102px]:min-h-[360px] [&>*]:shrink-0"
     >
       <h2 className="text-[19px] font-bold leading-[25px]">
-        {a ? a.id + " · 시공 상세" : "시공 상세"}
+        {a ? (a.receiptNo || a.id) + " · 시공 상세" : "시공 상세"}
       </h2>
-      {!a || !draft ? (
+      {loading ? (
+        <p role="status" className="py-6 text-center text-sm">
+          시공 상세를 불러오는 중입니다.
+        </p>
+      ) : !a || !draft ? (
         <ConstructionEmpty detail />
       ) : (
         <>
           <dl className="mt-[15px] flex min-h-24 flex-col justify-center gap-[11px] rounded-lg bg-[#f4f5f6] px-3 py-[10px]">
             {[
-              ["지원 / 동의", "승인 / " + a.consent],
+              ["지원 / 동의", (a.supportStatus || "승인") + " / " + a.consent],
               ["시설 / 자료 형태", a.facility + " / " + a.scope],
               ["주민 시공 희망", a.preferred],
             ].map(([label, value], i) => (
@@ -77,7 +85,7 @@ export default function ConstructionDetail({
                 <input
                   aria-label="확정 시공일"
                   type="date"
-                  readOnly={readOnly}
+                  readOnly={readOnly || busy || a.scheduleEditable === false}
                   value={draft.date}
                   onChange={(e) => onChange({ ...draft, date: e.target.value })}
                   className={
@@ -100,7 +108,7 @@ export default function ConstructionDetail({
                 <input
                   aria-label="확정 시간"
                   type="time"
-                  readOnly={readOnly}
+                  readOnly={readOnly || busy || a.scheduleEditable === false}
                   value={draft.time}
                   onChange={(e) => onChange({ ...draft, time: e.target.value })}
                   className={
@@ -138,7 +146,12 @@ export default function ConstructionDetail({
           </div>
           <button
             type="button"
-            disabled={readOnly || busy}
+            disabled={readOnly || busy || a.scheduleEditable === false}
+            title={
+              a.scheduleEditable === false
+                ? "확정된 시공 일정은 변경할 수 없습니다."
+                : undefined
+            }
             onClick={onSchedule}
             className={constructionPrimary + " mt-[22px] h-10 rounded-md"}
           >
@@ -148,7 +161,7 @@ export default function ConstructionDetail({
             최종 설치 결과 · 주민 공개
             <textarea
               aria-label="최종 설치 결과 · 주민 공개"
-              readOnly={readOnly}
+              readOnly={readOnly || busy}
               value={draft.note}
               onChange={(e) =>
                 onChange({ ...draft, note: e.target.value, verified: false })
@@ -168,13 +181,7 @@ export default function ConstructionDetail({
             disabled={readOnly}
             busy={busy}
             onUpload={onUpload}
-            onRemove={(id) =>
-              onChange({
-                ...draft,
-                photos: draft.photos.filter((p) => p.id !== id),
-                verified: false,
-              })
-            }
+            onRemove={onRemovePhoto}
           />
           <button
             type="button"
