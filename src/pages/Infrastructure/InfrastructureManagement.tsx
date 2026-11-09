@@ -104,6 +104,12 @@ function InfrastructureList({
     if (filters.status !== emptyFilters.status) p.set("status", filters.status);
     if (filters.kind !== emptyFilters.kind) p.set("kind", filters.kind);
     if (filters.query.trim()) p.set("q", filters.query.trim());
+    if (
+      page === 1 &&
+      JSON.stringify(infrastructureApiFilters(filters)) ===
+        JSON.stringify(infrastructureApiFilters(applied))
+    )
+      data.refresh();
     go(p);
   }
 

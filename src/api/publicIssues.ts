@@ -363,6 +363,7 @@ export async function savePublicIssueReview(
           ...body,
           reviewTarget: body.reviewTarget.trim(),
           inspectionNotes: body.inspectionNotes.trim(),
+          reviewReason: body.reviewReason?.trim() ?? body.reviewReason,
         },
       )
     ).data,

@@ -29,6 +29,10 @@ type ListData = {
 };
 type Query = { filters: PublicIssueFilters; page: number };
 export function useInfrastructureData(query?: Query, issueId?: string) {
+  const normalizedIssueId =
+    issueId && Number.isSafeInteger(Number(issueId)) && Number(issueId) > 0
+      ? String(Number(issueId))
+      : issueId;
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const mounted = useRef(false);
@@ -132,7 +136,8 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
           setDetail((current) => ({
             key: detailKey,
             error: publicIssueError(cause),
-            data: current.data?.id === issueId ? current.data : undefined,
+            data:
+              current.data?.id === normalizedIssueId ? current.data : undefined,
           }));
       });
     void getPublicIssueApplications(id, controller.signal)
@@ -152,7 +157,7 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
       });
 
     return () => controller.abort();
-  }, [issueId, detailKey]);
+  }, [issueId, normalizedIssueId, detailKey]);
 
   function refresh() {
     if (mounted.current) setRevision((value) => value + 1);
@@ -206,7 +211,7 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
     records: list.key === listKey ? list.data?.records || [] : [],
     markers: map.key === mapKey ? map.data || [] : [],
     counts: counts.key === mapKey ? counts.data : undefined,
-    issue: detail.data?.id === issueId ? detail.data : undefined,
+    issue: detail.data?.id === normalizedIssueId ? detail.data : undefined,
     related: related.key === detailKey ? related.data?.records || [] : [],
     relatedTotal: related.key === detailKey ? related.data?.total || 0 : 0,
     relatedLoading: !!issueId && related.key !== detailKey,

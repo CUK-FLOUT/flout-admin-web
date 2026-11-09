@@ -19,6 +19,7 @@ import {
 import { facilityDraft } from "./model";
 import {
   completePublicIssueAction,
+  getPublicIssue,
   publicIssueError,
   savePublicIssueReview,
   uploadPublicIssueImages,
@@ -91,6 +92,8 @@ function FacilityWorkspace({
       ...current,
       result:
         issue.status === "조치 완료" ? issue.action.result : current.result,
+      verified:
+        issue.status === "조치 완료" ? issue.action.verified : current.verified,
       photos: Array.from(
         new Map(
           [...current.photos, ...issue.action.photos].map((photo) => [
@@ -113,7 +116,10 @@ function FacilityWorkspace({
   const readOnly = issue.status === "조치 완료";
   const active = useRef(false);
   const submitting = useRef(false);
-  const completedActionId = useRef<number | undefined>(issue.actionId);
+  const completedActionId = useRef<number | undefined>(
+    readOnly ? issue.actionId : undefined,
+  );
+  const completionUncertain = useRef(false);
   const photoUrls = useRef(new Set<string>());
 
   useEffect(() => {
@@ -162,7 +168,9 @@ function FacilityWorkspace({
     setDraft((d) => ({
       ...d,
       [key]: value,
-      ...(["result", "photos"].includes(key) ? { verified: false } : {}),
+      ...(!readOnly && ["result", "photos"].includes(key)
+        ? { verified: false }
+        : {}),
     }));
     data.setError("");
   }
@@ -259,18 +267,52 @@ function FacilityWorkspace({
       setDraft((current) => ({
         ...current,
         photos: [...current.photos, ...photos],
-        verified: false,
+        verified: readOnly ? current.verified : false,
       }));
     } catch (cause) {
       data.setError(publicIssueError(cause));
     }
   }
 
+  async function reconcileCompletion() {
+    try {
+      const latest = await getPublicIssue(Number(issue.id));
+
+      if (!active.current) return;
+      const action = latest.actions
+        .filter((item) => item.status === "COMPLETED")
+        .sort((a, b) => b.actionId - a.actionId)[0];
+
+      if (latest.status === "COMPLETED" && action) {
+        completedActionId.current = action.actionId;
+        data.setError(
+          "서버의 조치 완료를 확인했습니다. 남은 사진이 있으면 사진만 다시 저장해 주세요.",
+        );
+      } else if (latest.status === "COMPLETED") {
+        data.setError(
+          "조치는 완료되었지만 사진 저장에 필요한 조치 ID를 확인하지 못했습니다. 다시 확인해 주세요.",
+        );
+        data.refresh();
+
+        return;
+      }
+
+      completionUncertain.current = false;
+      data.refresh();
+    } catch {
+      if (active.current)
+        data.setError(
+          "완료 여부를 확인하지 못했습니다. 완료 버튼을 누르면 상태부터 다시 확인합니다.",
+        );
+    }
+  }
+
   async function finishAction() {
     if (submitting.current) return;
     if (
+      !completionUncertain.current &&
       !completedActionId.current &&
-      !issue.actionId &&
+      !readOnly &&
       (!issue.reviewId ||
         !draft.verified ||
         !draft.result.trim() ||
@@ -284,10 +326,19 @@ function FacilityWorkspace({
     submitting.current = true;
     setBusy(true);
     data.setError("");
-    let actionId = completedActionId.current || issue.actionId;
+    let actionId = readOnly
+      ? issue.actionId || completedActionId.current
+      : completedActionId.current;
 
     try {
+      if (completionUncertain.current) {
+        await reconcileCompletion();
+
+        return;
+      }
+
       if (!actionId) {
+        completionUncertain.current = true;
         const completed = await completePublicIssueAction(
           Number(issue.id),
           draft.result,
@@ -295,6 +346,7 @@ function FacilityWorkspace({
 
         actionId = completed.actionId;
         completedActionId.current = actionId;
+        completionUncertain.current = false;
         if (active.current) {
           data.applyCompletion(completed);
           data.refresh();
@@ -318,16 +370,20 @@ function FacilityWorkspace({
         if (active.current)
           setDraft((current) => ({
             ...current,
-            photos: [
-              ...current.photos.filter(
-                (photo) => !pending.some((item) => item.id === photo.id),
-              ),
-              ...uploaded.images.map((image) => ({
-                id: String(image.imageId),
-                name: `조치 사진 ${image.imageId}`,
-                src: image.imageUrl,
-              })),
-            ],
+            photos: Array.from(
+              new Map(
+                [
+                  ...current.photos.filter(
+                    (photo) => !pending.some((item) => item.id === photo.id),
+                  ),
+                  ...uploaded.images.map((image) => ({
+                    id: String(image.imageId),
+                    name: `조치 사진 ${image.imageId}`,
+                    src: image.imageUrl,
+                  })),
+                ].map((photo) => [photo.id, photo]),
+              ).values(),
+            ),
           }));
       }
 
@@ -344,6 +400,7 @@ function FacilityWorkspace({
             : "") + publicIssueError(cause),
         );
         if (actionId) data.refresh();
+        else if (completionUncertain.current) await reconcileCompletion();
       }
     } finally {
       submitting.current = false;
@@ -390,6 +447,7 @@ function FacilityWorkspace({
           <FacilityReferenceInformation issue={issue} />
           <RelatedApplications
             issue={{ ...issue, related: data.related }}
+            relatedTotal={data.relatedTotal}
             loading={data.relatedLoading}
             error={data.relatedError}
             page={page}

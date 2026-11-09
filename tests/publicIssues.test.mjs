@@ -564,6 +564,7 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
     navigations = [];
   let params = new URLSearchParams();
   const api = {
+    getPublicIssue: async () => original,
     publicIssueError: (cause) => cause.message,
     validatePublicIssueImages: apiHarness().api.validatePublicIssueImages,
     savePublicIssueReview: async (id, body) => {
@@ -833,4 +834,135 @@ test("map overlays use actual response coordinates, link to publicIssueId and cl
   remove();
   assert.equal(elements[0].listeners.size, 0);
   assert.equal(overlays[0].map, null);
+});
+
+test("review reasons are trimmed while null and absent values remain unset", async () => {
+  const h = apiHarness();
+  for (const reason of ["  기존 사유  ", null, undefined]) {
+    await h.api.savePublicIssueReview(9, {
+      reviewTarget: " 대상 ",
+      inspectionNotes: " 확인 ",
+      reviewStatus: "PENDING",
+      reviewReason: reason,
+    });
+    const body = JSON.parse(h.requests.at(-1).data);
+    assert.equal(body.reviewReason, reason == null ? reason : reason.trim());
+    assert.equal(body.reviewTarget, "대상");
+  }
+});
+
+test("an existing unfinished action still sends the entered completion result", async () => {
+  const w = reviewWorkspace(
+    {},
+    {
+      ...detail,
+      actions: [
+        {
+          actionId: 50,
+          status: "IN_PROGRESS",
+          actionDescription: "작업 중",
+          images: [],
+        },
+      ],
+    },
+  );
+  prepareAction(w);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(w.requests[0][0], "complete");
+  assert.equal(w.requests[0][2], "정비 완료");
+  assert.equal(w.data.completions, 1);
+  w.unmount();
+});
+
+test("completed photos preserve verification and use the latest server action ID without duplicate image IDs", async () => {
+  const w = reviewWorkspace(
+    {},
+    {
+      ...detail,
+      status: "COMPLETED",
+      actions: [
+        {
+          actionId: 50,
+          status: "COMPLETED",
+          actionDescription: "완료",
+          images: [],
+        },
+      ],
+    },
+  );
+  w.panel();
+  w.data.issue = {
+    ...w.data.issue,
+    actionId: 72,
+    action: {
+      ...w.data.issue.action,
+      photos: [{ id: "31", src: "https://example.com/old.jpg", name: "사진" }],
+    },
+  };
+  w.panel();
+  await w
+    .panel()
+    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  assert.equal(w.panel().draft.verified, true);
+  w.panel().onUpdate(
+    "photos",
+    w.panel().draft.photos.filter((p) => !p.file),
+  );
+  assert.equal(w.panel().draft.verified, true);
+  await w
+    .panel()
+    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  w.panel().onComplete();
+  await tick();
+  assert.equal(w.requests[0][0], "images");
+  assert.equal(w.requests[0][2], 72);
+  assert.equal(w.panel().draft.photos.filter((p) => p.id === "31").length, 1);
+  w.unmount();
+});
+
+test("uncertain completion never resends until server state is confirmed", async () => {
+  let completions = 0,
+    lookups = 0;
+  const w = reviewWorkspace({
+    completePublicIssueAction: async () => {
+      completions++;
+      throw new Error("응답 유실");
+    },
+    getPublicIssue: async () => {
+      lookups++;
+      if (lookups < 2) throw new Error("연결 실패");
+      return {
+        ...detail,
+        status: "COMPLETED",
+        actions: [{ actionId: 71, status: "COMPLETED" }],
+      };
+    },
+  });
+  prepareAction(w);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(completions, 1);
+  assert.match(w.data.error, /완료 여부를 확인하지/);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(completions, 1);
+  assert.equal(lookups, 2);
+  assert.match(w.data.error, /서버의 조치 완료/);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(completions, 1);
+  w.unmount();
+});
+
+test("detail IDs are normalized but mismatched server IDs remain hidden", async () => {
+  const h = dataHarness();
+  h.detail("009");
+  h.render();
+  h.calls.detail[0].resolve(detail);
+  await tick();
+  assert.equal(h.render().issue.id, "9");
+  h.detail("10");
+  assert.equal(h.render().issue, undefined);
+  h.unmount();
 });

@@ -93,11 +93,13 @@ export function RelatedApplications({
   onPageChange,
   loading,
   error,
+  relatedTotal,
 }: {
   issue: InfrastructureIssue;
   page: number;
   totalPages: number;
   onPageChange: Dispatch<SetStateAction<number>>;
+  relatedTotal?: number;
   loading?: boolean;
   error?: string;
 }) {
@@ -109,7 +111,7 @@ export function RelatedApplications({
       className={infrastructureCard + " h-[265px] min-w-0 p-[15.25px]"}
     >
       <h2 id="facility-related-title" className="text-base font-bold leading-6">
-        관련 주민 신청 · {issue.related.length}건
+        관련 주민 신청 · {relatedTotal ?? issue.related.length}건
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[710px] table-fixed text-left">
@@ -174,7 +176,10 @@ export function RelatedApplications({
         )
       )}
       <div className="relative flex h-11 items-center text-xs leading-[18px]">
-        <p>총 {issue.related.length}건 표시</p>
+        <p>
+          전체 {relatedTotal ?? issue.related.length}건 · {issue.related.length}
+          건 조회
+        </p>
         <nav
           aria-label="관련 주민 신청 페이지"
           className="absolute left-1/2 flex -translate-x-1/2 items-center gap-3"
