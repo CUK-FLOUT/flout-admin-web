@@ -31,6 +31,8 @@ export type SupportCounts = {
   approvedCount: number;
 };
 export type SupportDetails = {
+  landlordConsentRequired?: boolean;
+  landlordConsentDocumentSubmitted?: boolean;
   supportApplicationId: number;
   receiptNo: string;
   applicantName: string;

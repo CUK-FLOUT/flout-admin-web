@@ -89,3 +89,17 @@ export function constructionDetailRecord(
     published: detail.resultPublished ? installation : null,
   };
 }
+
+export function constructionConsentLabel(
+  required: unknown,
+  submitted: unknown,
+) {
+  if (typeof required !== "boolean" || typeof submitted !== "boolean")
+    throw new Error("동의 필요 여부 또는 동의서 제출 여부가 응답에 없습니다.");
+
+  return !required
+    ? "불필요"
+    : submitted
+      ? "필요 · 확인 완료"
+      : "필요 · 미확인";
+}

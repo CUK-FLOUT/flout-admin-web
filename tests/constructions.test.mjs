@@ -1038,12 +1038,165 @@ test("installation dialog locks its result textarea only while a request is busy
 });
 
 test("server refresh retains unsaved date/time and local files for a still-unassigned construction", () => {
-  const { mergeConstructionDraft } = harness({ react: {}, "./draftStorage": {} }).load("src/pages/Construction/useConstructionDraft.ts");
-  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord({ ...detail, constructionId: 92 });
-  const draft = { ...record.draft, date: "2099-12-31", time: "11:30", note: "다른 시공 편집 중", photos: [{ id: "pending-b", name: "b.jpg", src: "blob:preview", file: new File(["b"], "b.jpg", { type: "image/jpeg" }) }] };
+  const { mergeConstructionDraft } = harness({
+    react: {},
+    "./draftStorage": {},
+  }).load("src/pages/Construction/useConstructionDraft.ts");
+  const record = harness()
+    .load("src/pages/Construction/apiMapping.ts")
+    .constructionDetailRecord({ ...detail, constructionId: 92 });
+  const draft = {
+    ...record.draft,
+    date: "2099-12-31",
+    time: "11:30",
+    note: "다른 시공 편집 중",
+    photos: [
+      {
+        id: "pending-b",
+        name: "b.jpg",
+        src: "blob:preview",
+        file: new File(["b"], "b.jpg", { type: "image/jpeg" }),
+      },
+    ],
+  };
   const merged = mergeConstructionDraft({ ...record, revision: 2 }, draft);
   assert.equal(merged.date, draft.date);
   assert.equal(merged.time, draft.time);
   assert.equal(merged.note, draft.note);
   assert.equal(merged.photos[0].file, draft.photos[0].file);
+});
+
+test("consent label uses explicit need/submission booleans without assuming missing values are false", () => {
+  const { constructionConsentLabel: label } = harness().load(
+    "src/pages/Construction/apiMapping.ts",
+  );
+  assert.equal(label(false, false), "불필요");
+  assert.equal(label(false, true), "불필요");
+  assert.equal(label(true, true), "필요 · 확인 완료");
+  assert.equal(label(true, false), "필요 · 미확인");
+  assert.throws(() => label(undefined, false), /응답/);
+  assert.throws(() => label(true, undefined), /응답/);
+});
+
+function consentHook() {
+  const hook = hooks();
+  const reads = [];
+  const api = {
+    getConstructions: async () => ({
+      constructions: [item],
+      totalElements: 1,
+      totalPages: 1,
+    }),
+    getConstructionDetail: async (id) => ({
+      ...detail,
+      constructionId: id,
+      supportApplicationId: id + 100,
+    }),
+    constructionError: (error) => error.message,
+  };
+  const support = {
+    getSupportDetail(id, signal) {
+      const next = deferred();
+      reads.push({ id, signal, ...next });
+      return next.promise;
+    },
+  };
+  const { useConstructionData } = harness({
+    react: hook.react,
+    "../../api/constructions": api,
+    "../../api/supportApplications": support,
+  }).load("src/pages/Construction/useConstructionData.ts");
+  let selectedId = "91";
+  return {
+    reads,
+    render: () =>
+      hook.render(() =>
+        useConstructionData({ keyword: "", page: 0, selectedId }),
+      ),
+    select(id) {
+      selectedId = id;
+    },
+    unmount: hook.unmount,
+  };
+}
+
+test("construction consent reads the linked support ID and updates independently of detail loading", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  let state = h.render();
+  assert.equal(h.reads[0].id, 191);
+  assert.equal(state.selected.id, "91");
+  assert.equal(state.detailLoading, false);
+  assert.equal(state.selected.consent, "동의 정보 조회 중");
+  h.reads[0].resolve({
+    supportApplicationId: 191,
+    landlordConsentRequired: true,
+    landlordConsentDocumentSubmitted: true,
+  });
+  await tick();
+  state = h.render();
+  assert.equal(state.selected.consent, "필요 · 확인 완료");
+  assert.equal(state.error, "");
+  h.unmount();
+});
+
+test("late consent responses cannot affect another construction; failed consent preserves its detail", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  h.render();
+  h.select("92");
+  h.render();
+  await tick();
+  h.render();
+  assert.equal(h.reads[0].signal.aborted, true);
+  h.reads[0].resolve({
+    supportApplicationId: 191,
+    landlordConsentRequired: false,
+    landlordConsentDocumentSubmitted: false,
+  });
+  h.reads[1].reject(new Error("권한 오류"));
+  await tick();
+  const state = h.render();
+  assert.equal(state.selected.id, "92");
+  assert.equal(state.selected.consent, "동의 정보 조회 실패");
+  assert.match(state.error, /임대인 동의.*권한 오류/);
+  h.unmount();
+});
+
+test("consent metadata update preserves locally edited schedule and newly uploaded photo state", async () => {
+  const hook = hooks();
+  const onError = () => {};
+  const { useConstructionDraft } = harness({
+    react: hook.react,
+    "./draftStorage": {
+      readConstructionDraft: async () => null,
+      writeConstructionDraft: async () => {},
+    },
+  }).load("src/pages/Construction/useConstructionDraft.ts");
+  let record = harness()
+    .load("src/pages/Construction/apiMapping.ts")
+    .constructionDetailRecord(detail);
+  const render = () => hook.render(() => useConstructionDraft(record, onError));
+  render();
+  await tick();
+  let state = render();
+  state.setDraft({
+    ...state.draft,
+    date: "2099-12-31",
+    time: "11:30",
+    note: "입력 내용",
+    photos: [
+      { id: "uploaded", name: "image.jpg", src: "https://example.com/new" },
+    ],
+  });
+  render();
+  record = { ...record, consent: "필요 · 확인 완료" };
+  render();
+  state = render();
+  assert.equal(state.draft.date, "2099-12-31");
+  assert.equal(state.draft.note, "입력 내용");
+  assert.equal(state.draft.photos[0].id, "uploaded");
+  hook.unmount();
 });

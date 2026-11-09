@@ -8,7 +8,12 @@ import type {
   ConstructionListStatus,
   ConstructionPage,
 } from "../../api/constructions";
-import { constructionDetailRecord, constructionListRecord } from "./apiMapping";
+import { getSupportDetail } from "../../api/supportApplications";
+import {
+  constructionConsentLabel,
+  constructionDetailRecord,
+  constructionListRecord,
+} from "./apiMapping";
 import type { ConstructionRecord } from "./types";
 
 type Query = {
@@ -47,6 +52,7 @@ export function useConstructionData({
     key: string;
     record?: ConstructionRecord;
     error?: string;
+    consentError?: string;
   }>({ key: "" });
 
   useEffect(() => {
@@ -79,8 +85,51 @@ export function useConstructionData({
 
     void getConstructionDetail(Number(id), controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted)
-          setDetail({ key: detailKey, record: constructionDetailRecord(data) });
+        if (controller.signal.aborted) return;
+        setDetail({
+          key: detailKey,
+          record: {
+            ...constructionDetailRecord(data),
+            consent: "동의 정보 조회 중",
+          },
+        });
+        void getSupportDetail(data.supportApplicationId, controller.signal)
+          .then((support) => {
+            if (controller.signal.aborted) return;
+            if (support.supportApplicationId !== data.supportApplicationId)
+              throw new Error("지원 신청의 동의 정보가 일치하지 않습니다.");
+            const consent = constructionConsentLabel(
+              support.landlordConsentRequired,
+              support.landlordConsentDocumentSubmitted,
+            );
+
+            setDetail((current) =>
+              current.key === detailKey && current.record
+                ? {
+                    ...current,
+                    record: { ...current.record, consent },
+                    consentError: undefined,
+                  }
+                : current,
+            );
+          })
+          .catch((cause) => {
+            if (controller.signal.aborted) return;
+            setDetail((current) =>
+              current.key === detailKey && current.record
+                ? {
+                    ...current,
+                    record: {
+                      ...current.record,
+                      consent: "동의 정보 조회 실패",
+                    },
+                    consentError:
+                      "임대인 동의 정보를 조회하지 못했습니다. " +
+                      constructionError(cause),
+                  }
+                : current,
+            );
+          });
       })
       .catch((cause) => {
         if (!controller.signal.aborted)
@@ -103,7 +152,7 @@ export function useConstructionData({
     error:
       error ||
       (list.key === key ? list.error : "") ||
-      (detail.key === detailKey ? detail.error : "") ||
+      (detail.key === detailKey ? detail.error || detail.consentError : "") ||
       "",
     setError,
     refresh,
