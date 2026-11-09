@@ -279,6 +279,7 @@ function FacilityWorkspace({
       const latest = await getPublicIssue(Number(issue.id));
 
       if (!active.current) return;
+      if (latest.status === "COMPLETED") data.applyDetail(latest);
       const action = latest.actions
         .filter((item) => item.status === "COMPLETED")
         .sort((a, b) => b.actionId - a.actionId)[0];
@@ -331,7 +332,7 @@ function FacilityWorkspace({
       : completedActionId.current;
 
     try {
-      if (completionUncertain.current) {
+      if (completionUncertain.current || (readOnly && !actionId)) {
         await reconcileCompletion();
 
         return;

@@ -536,6 +536,9 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
     refresh() {
       data.refreshes++;
     },
+    applyDetail(saved) {
+      data.issue = mapping.publicIssueDetailRecord(saved);
+    },
     applyReview(saved) {
       data.reviews++;
       data.issue = {
@@ -935,7 +938,14 @@ test("uncertain completion never resends until server state is confirmed", async
       return {
         ...detail,
         status: "COMPLETED",
-        actions: [{ actionId: 71, status: "COMPLETED" }],
+        actions: [
+          {
+            actionId: 71,
+            status: "COMPLETED",
+            actionDescription: "서버 완료 결과",
+            images: [],
+          },
+        ],
       };
     },
   });
@@ -949,6 +959,8 @@ test("uncertain completion never resends until server state is confirmed", async
   assert.equal(completions, 1);
   assert.equal(lookups, 2);
   assert.match(w.data.error, /서버의 조치 완료/);
+  assert.equal(w.panel().readOnly, true);
+  assert.equal(w.data.issue.action.result, "서버 완료 결과");
   w.dialog().onConfirm();
   await tick();
   assert.equal(completions, 1);
@@ -965,4 +977,70 @@ test("detail IDs are normalized but mismatched server IDs remain hidden", async 
   h.detail("10");
   assert.equal(h.render().issue, undefined);
   h.unmount();
+});
+
+test("reconciled completion detail survives a failed refresh and ignores other issue IDs", async () => {
+  const h = dataHarness();
+  h.detail("9");
+  h.render();
+  h.calls.detail[0].resolve(detail);
+  await tick();
+  let state = h.render();
+  const confirmed = {
+    ...detail,
+    status: "COMPLETED",
+    actions: [
+      {
+        actionId: 71,
+        status: "COMPLETED",
+        actionDescription: "확인된 결과",
+        images: [{ imageId: 31, imageUrl: "https://example.com/photo.jpg" }],
+      },
+    ],
+  };
+  state.applyDetail(confirmed);
+  state = h.render();
+  assert.equal(state.issue.status, "조치 완료");
+  assert.equal(state.issue.actionId, 71);
+  assert.equal(state.issue.action.result, "확인된 결과");
+  assert.equal(state.issue.action.photos[0].id, "31");
+  state.applyDetail({ ...detail, publicIssueId: 10 });
+  state = h.render();
+  assert.equal(state.issue.id, "9");
+  assert.equal(state.issue.status, "조치 완료");
+  state.refresh();
+  h.render();
+  h.calls.detail[1].reject(new Error("후속 갱신 실패"));
+  await tick();
+  state = h.render();
+  assert.equal(state.issue.status, "조치 완료");
+  assert.equal(state.issue.action.result, "확인된 결과");
+  h.unmount();
+});
+
+test("completed issue without an action ID only reconciles and never posts completion", async () => {
+  let lookups = 0;
+  const w = reviewWorkspace(
+    {
+      getPublicIssue: async () => {
+        lookups++;
+        return { ...detail, status: "COMPLETED", actions: [] };
+      },
+    },
+    { ...detail, status: "COMPLETED", actions: [] },
+  );
+  await w
+    .panel()
+    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  w.panel().onComplete();
+  await tick();
+  assert.equal(lookups, 1);
+  assert.equal(w.requests.length, 0);
+  assert.equal(w.panel().readOnly, true);
+  assert.match(w.data.error, /조치 ID를 확인하지/);
+  w.panel().onComplete();
+  await tick();
+  assert.equal(lookups, 2);
+  assert.equal(w.requests.length, 0);
+  w.unmount();
 });

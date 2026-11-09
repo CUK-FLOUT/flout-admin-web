@@ -11,6 +11,7 @@ import type {
   FacilityReviewResponse,
   PublicIssueCompletion,
   PublicIssueCounts,
+  PublicIssueDetail,
   PublicIssueFilters,
 } from "../../api/publicIssues";
 import {
@@ -207,6 +208,15 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
     );
   }
 
+  function applyDetail(response: PublicIssueDetail) {
+    if (!mounted.current) return;
+    setDetail((current) =>
+      current.data?.id === String(response.publicIssueId)
+        ? { ...current, data: publicIssueDetailRecord(response) }
+        : current,
+    );
+  }
+
   return {
     records: list.key === listKey ? list.data?.records || [] : [],
     markers: map.key === mapKey ? map.data || [] : [],
@@ -232,5 +242,6 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
     refresh,
     applyReview,
     applyCompletion,
+    applyDetail,
   };
 }
