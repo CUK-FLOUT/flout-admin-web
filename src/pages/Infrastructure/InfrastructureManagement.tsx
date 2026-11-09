@@ -1,11 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import InfrastructureSelect from "../../components/infrastructure/InfrastructureSelect";
 import InfrastructureMap from "../../components/infrastructure/InfrastructureMap";
 import InfrastructureBadge from "../../components/infrastructure/InfrastructureBadge";
 import InfrastructureEmpty from "../../components/infrastructure/InfrastructureEmpty";
-import InfrastructureDialogs from "../../components/infrastructure/InfrastructureDialogs";
-import InfrastructureRegistration from "../../components/infrastructure/InfrastructureRegistration";
 import {
   infrastructureCard,
   infrastructureFocus,
@@ -13,28 +11,35 @@ import {
   infrastructureSecondary,
 } from "../../components/infrastructure/styles";
 import { infrastructureAssets as assets } from "./assets";
-import { emptyFilters, filterInfrastructure } from "./model";
-import { infrastructureDialogs, problemTypes, reviewStatuses } from "./types";
-import type {
-  InfrastructureDialogKind,
-  InfrastructureFilters,
-  InfrastructureIssue,
-  RegistrationDraft,
-} from "./types";
+import { emptyFilters } from "./model";
+import { registrationTypes, reviewStatuses } from "./types";
+import type { InfrastructureFilters, InfrastructureIssue } from "./types";
 import { useInfrastructureData } from "./useInfrastructureData";
+import { infrastructureApiFilters } from "./apiMapping";
+import type { PublicIssueCounts } from "../../api/publicIssues";
 
 function filtersFrom(params: URLSearchParams): InfrastructureFilters {
   return {
-    district: params.get("district") || emptyFilters.district,
-    status: params.get("status") || emptyFilters.status,
-    kind: params.get("kind") || emptyFilters.kind,
+    district:
+      ["원미구", "소사구", "오정구"].find(
+        (value) => value === params.get("district"),
+      ) || emptyFilters.district,
+    status:
+      reviewStatuses.find((value) => value === params.get("status")) ||
+      emptyFilters.status,
+    kind:
+      registrationTypes.find((value) => value === params.get("kind")) ||
+      emptyFilters.kind,
     query: params.get("q") || "",
   };
 }
 
 export default function InfrastructureManagement() {
   const [params] = useSearchParams();
-  const data = useInfrastructureData();
+  const data = useInfrastructureData({
+    filters: infrastructureApiFilters(filtersFrom(params)),
+    page: Math.max(0, (Math.floor(Number(params.get("page"))) || 1) - 1),
+  });
 
   return (
     <InfrastructureList
@@ -59,23 +64,19 @@ function InfrastructureList({
   const applied = filtersFrom(params);
   const [filters, setFilters] = useState(applied),
     [showMarkers, setShowMarkers] = useState(true);
-  const source = params.get("dataset") === "empty" ? [] : data.records;
-  const filtered =
-    params.get("dataset") === "no-results"
-      ? []
-      : filterInfrastructure(source, applied);
-  const pages = Math.max(1, Math.ceil(filtered.length / 5)),
-    page = Math.min(
-      pages,
-      Math.max(1, Math.floor(Number(params.get("page"))) || 1),
-    );
-  const visible = filtered.slice((page - 1) * 5, page * 5);
+  const pages = Math.max(1, data.totalPages);
+  const page = Math.max(1, Math.floor(Number(params.get("page"))) || 1);
+  const visible = data.records;
   const selected =
-    filtered.find((issue) => issue.id === params.get("selected")) || visible[0];
-  const requested = params.get("dialog"),
-    kind = infrastructureDialogs.includes(requested as InfrastructureDialogKind)
-      ? (requested as InfrastructureDialogKind)
-      : null;
+    visible.find((issue) => issue.id === params.get("selected")) || visible[0];
+
+  useEffect(() => {
+    if (data.loading || data.listError || page <= pages) return;
+    const next = new URLSearchParams(params);
+
+    next.set("page", String(pages));
+    navigate({ search: next.toString() }, { replace: true });
+  }, [data.loading, data.listError, page, pages, params, navigate]);
 
   function clean() {
     const p = new URLSearchParams(params);
@@ -92,14 +93,6 @@ function InfrastructureList({
     );
   }
 
-  function dialog(value: InfrastructureDialogKind | null) {
-    data.setError("");
-    const p = clean();
-
-    if (value) p.set("dialog", value);
-    go(p, true);
-  }
-
   function search() {
     const p = clean();
 
@@ -111,11 +104,18 @@ function InfrastructureList({
     if (filters.status !== emptyFilters.status) p.set("status", filters.status);
     if (filters.kind !== emptyFilters.kind) p.set("kind", filters.kind);
     if (filters.query.trim()) p.set("q", filters.query.trim());
+    if (
+      page === 1 &&
+      JSON.stringify(infrastructureApiFilters(filters)) ===
+        JSON.stringify(infrastructureApiFilters(applied))
+    )
+      data.refresh();
     go(p);
   }
 
   function reset() {
     data.setError("");
+    data.refresh();
     setFilters({ ...emptyFilters });
     go(new URLSearchParams());
   }
@@ -124,9 +124,6 @@ function InfrastructureList({
     const p = clean();
 
     p.set("selected", id);
-    const index = filtered.findIndex((issue) => issue.id === id);
-
-    if (index >= 0) p.set("page", String(Math.floor(index / 5) + 1));
     go(p, true);
   }
 
@@ -135,20 +132,6 @@ function InfrastructureList({
       pathname: "/infrastructure/" + id + "/review",
       search: clean().toString(),
     });
-  }
-
-  async function register(draft: RegistrationDraft) {
-    const created = await data.register(draft);
-
-    if (created) {
-      const p = new URLSearchParams({
-        selected: created.id,
-        dialog: "registered",
-        page: String(Math.ceil((data.records.length + 1) / 5)),
-      });
-
-      go(p, true);
-    }
   }
 
   return (
@@ -164,7 +147,11 @@ function InfrastructureList({
           지역·공공 인프라 관리
         </h1>
         <button
-          onClick={() => dialog("register")}
+          onClick={() =>
+            data.setError(
+              "지역 문제는 현장점검 결과 등록 화면에서 원본 점검과 연결해 등록해 주세요.",
+            )
+          }
           className={infrastructureSecondary + " h-10 px-4"}
         >
           지역 문제 등록
@@ -192,7 +179,7 @@ function InfrastructureList({
         <InfrastructureSelect
           label="문제 유형 필터"
           value={filters.kind}
-          options={["문제 유형 전체", ...problemTypes]}
+          options={["문제 유형 전체", ...registrationTypes]}
           onChange={(v) => setFilters((f) => ({ ...f, kind: v }))}
         />
         <label className="flex h-12 min-w-0 items-center gap-[10px] rounded-md border border-[#c8d0d7] bg-white px-[14px]">
@@ -227,7 +214,7 @@ function InfrastructureList({
           초기화
         </button>
       </form>
-      <InfrastructureMetrics issues={source} />
+      <InfrastructureMetrics counts={data.counts} />
       {data.error && (
         <p role="alert" className="mt-3 text-sm text-[#a53632]">
           {data.error}
@@ -235,10 +222,14 @@ function InfrastructureList({
       )}
       <div className="mt-4 grid grid-cols-[minmax(0,678fr)_minmax(0,490fr)] items-stretch gap-[14px] min-[1102px]:min-h-[240px] min-[1102px]:flex-1 max-[1101px]:grid-cols-1">
         <InfrastructureMap
-          issues={filtered}
+          issues={data.markers}
           selectedId={selected?.id}
           showMarkers={showMarkers}
-          onSelect={select}
+          onSelect={(id) =>
+            visible.some((issue) => issue.id === id)
+              ? select(id)
+              : openDetail(id)
+          }
         />
         <section
           aria-labelledby="infra-list-title"
@@ -258,7 +249,11 @@ function InfrastructureList({
           </div>
           <div className="mt-[17px] h-px shrink-0 bg-[#c8d0d7]" />
           <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-            {visible.length ? (
+            {data.loading ? (
+              <p role="status" className="py-10 text-center text-sm">
+                지역 문제를 불러오는 중입니다.
+              </p>
+            ) : visible.length ? (
               visible.map((issue) => (
                 <InfrastructureIssueRow
                   key={issue.id}
@@ -268,9 +263,14 @@ function InfrastructureList({
                   onOpenDetail={openDetail}
                 />
               ))
-            ) : (
-              <InfrastructureEmpty search={source.length > 0} onReset={reset} />
-            )}
+            ) : !data.listError ? (
+              <InfrastructureEmpty
+                search={Object.values(infrastructureApiFilters(applied)).some(
+                  Boolean,
+                )}
+                onReset={reset}
+              />
+            ) : null}
           </div>
           <div className="flex h-10 shrink-0 items-center justify-between gap-1 px-[7px]">
             <label className="flex items-center gap-2 text-[13px] leading-[18px] tracking-[-0.078px]">
@@ -335,55 +335,31 @@ function InfrastructureList({
           </div>
         </section>
       </div>
-      {kind && ["register", "address", "address-results"].includes(kind) && (
-        <InfrastructureRegistration
-          kind={kind}
-          error={data.error}
-          onDialog={dialog}
-          onClose={() => dialog(null)}
-          onRegister={register}
-        />
-      )}
-      {kind &&
-        selected &&
-        !["register", "address", "address-results"].includes(kind) && (
-          <InfrastructureDialogs
-            key={kind}
-            kind={kind}
-            issue={selected}
-            onClose={() => dialog(null)}
-            onConfirm={() => dialog("summary")}
-          />
-        )}
     </div>
   );
 }
 
-function InfrastructureMetrics({ issues }: { issues: InfrastructureIssue[] }) {
+function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
   const metrics = [
     {
       label: "등록된 지역 문제",
       icon: assets.metricLocation,
-      count: issues.length,
+      count: counts?.registeredCount,
     },
     {
       label: "검토 대기·검토 중",
       icon: assets.metricReview,
-      count: issues.filter((issue) =>
-        ["검토 대기", "검토 중"].includes(issue.status),
-      ).length,
+      count: counts?.pendingOrUnderReviewCount,
     },
     {
       label: "조치 진행",
       icon: assets.metricProgress,
-      count: issues.filter((issue) =>
-        ["점검 필요", "조치 진행"].includes(issue.status),
-      ).length,
+      count: counts?.actionInProgressCount,
     },
     {
       label: "조치 완료",
       icon: assets.metricCompleted,
-      count: issues.filter((issue) => issue.status === "조치 완료").length,
+      count: counts?.completedCount,
     },
   ];
 
@@ -412,7 +388,7 @@ function InfrastructureMetrics({ issues }: { issues: InfrastructureIssue[] }) {
             {label}
           </p>
           <p className="absolute top-[40.25px] left-[67.25px] text-2xl font-bold leading-9">
-            {count}건
+            {count === undefined ? "—" : count + "건"}
           </p>
         </div>
       ))}
@@ -454,7 +430,7 @@ function InfrastructureIssueRow({
           {issue.number + ". " + issue.kind}
         </strong>
         <span className="mt-1 block text-sm leading-[19px]">
-          관련 신청 {issue.related.length}건 ·{" "}
+          관련 신청 {issue.relatedCount ?? issue.related.length}건 ·{" "}
           {issue.history === null
             ? "이력 확인 필요"
             : "침수 이력 " + issue.history + "건"}

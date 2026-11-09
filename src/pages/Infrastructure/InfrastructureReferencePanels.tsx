@@ -91,11 +91,17 @@ export function RelatedApplications({
   page,
   totalPages,
   onPageChange,
+  loading,
+  error,
+  relatedTotal,
 }: {
   issue: InfrastructureIssue;
   page: number;
   totalPages: number;
   onPageChange: Dispatch<SetStateAction<number>>;
+  relatedTotal?: number;
+  loading?: boolean;
+  error?: string;
 }) {
   const visible = issue.related.slice((page - 1) * 3, page * 3);
 
@@ -104,11 +110,8 @@ export function RelatedApplications({
       aria-labelledby="facility-related-title"
       className={infrastructureCard + " h-[265px] min-w-0 p-[15.25px]"}
     >
-      <h2
-        id="facility-related-title"
-        className="text-base font-bold leading-6"
-      >
-        관련 주민 신청 · {issue.related.length}건
+      <h2 id="facility-related-title" className="text-base font-bold leading-6">
+        관련 주민 신청 · {relatedTotal ?? issue.related.length}건
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[710px] table-fixed text-left">
@@ -120,13 +123,11 @@ export function RelatedApplications({
           </colgroup>
           <thead className="h-9 bg-[#f4f5f6] text-xs font-normal leading-[18px]">
             <tr>
-              {["접수번호", "주소", "취약도", "현장 확인"].map(
-                (label) => (
-                  <th key={label} className="px-3 font-normal">
-                    {label}
-                  </th>
-                ),
-              )}
+              {["접수번호", "주소", "취약도", "현장 확인"].map((label) => (
+                <th key={label} className="px-3 font-normal">
+                  {label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -136,7 +137,7 @@ export function RelatedApplications({
                 className="h-[49px] border-b border-[#f4f5f6]"
               >
                 <td className="px-3 text-sm font-bold leading-[21px]">
-                  {application.id}
+                  {application.receiptNo || application.id}
                 </td>
                 <td className="px-3 text-[13px] leading-5">
                   {application.address}
@@ -159,13 +160,26 @@ export function RelatedApplications({
           </tbody>
         </table>
       </div>
-      {!visible.length && (
-        <p className="py-10 text-center text-sm text-[#596672]">
-          연결된 주민 신청이 없습니다.
+      {loading ? (
+        <p role="status" className="py-10 text-center text-sm">
+          관련 주민 신청을 불러오는 중입니다.
         </p>
+      ) : error ? (
+        <p role="alert" className="py-6 text-sm text-[#a53632]">
+          {error}
+        </p>
+      ) : (
+        !visible.length && (
+          <p className="py-10 text-center text-sm text-[#596672]">
+            연결된 주민 신청이 없습니다.
+          </p>
+        )
       )}
       <div className="relative flex h-11 items-center text-xs leading-[18px]">
-        <p>총 {issue.related.length}건 표시</p>
+        <p>
+          전체 {relatedTotal ?? issue.related.length}건 · {issue.related.length}
+          건 조회
+        </p>
         <nav
           aria-label="관련 주민 신청 페이지"
           className="absolute left-1/2 flex -translate-x-1/2 items-center gap-3"

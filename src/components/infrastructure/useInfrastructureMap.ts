@@ -30,9 +30,7 @@ export function useInfrastructureMap({
   const location = selectedIssue && getInfrastructureLocation(selectedIssue);
   const latitude = location?.latitude;
   const longitude = location?.longitude;
-  const hasDemoLocations = issues.some(
-    (issue) => getInfrastructureLocation(issue)?.source === "demo",
-  );
+  const hasDemoLocations = false;
 
   useEffect(() => {
     const container = mapContainerRef.current;
