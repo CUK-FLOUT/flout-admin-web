@@ -19,9 +19,10 @@ export const problemTypes = [
   "시설 파손",
   "기타",
 ] as const;
-export type InfrastructurePhoto = { id: string; name: string; src: string };
+export type InfrastructurePhoto = { id: string; name: string; src: string; file?: File };
 export type RelatedResident = {
   id: string;
+  receiptNo?: string;
   address: string;
   risk: "높음" | "주의" | "낮음" | "미확인";
   findings: string;
@@ -29,12 +30,17 @@ export type RelatedResident = {
 export type FacilityDraft = {
   target: string;
   requirements: string;
-  status: "검토 대기" | "검토 중";
+  status: "검토 대기" | "검토 중" | "점검 필요";
   result: string;
   photos: InfrastructurePhoto[];
   verified: boolean;
 };
 export type InfrastructureIssue = {
+  relatedCount?: number;
+  reviewId?: number;
+  reviewState?: "PENDING" | "UNDER_REVIEW" | "INSPECTION_REQUIRED" | "ACTION_IN_PROGRESS" | "COMPLETED";
+  reviewReason?: string | null;
+  actionId?: number;
   id: string;
   code: string;
   number: number;

@@ -14,7 +14,8 @@
     "test:support": "node --test tests/supportApi.test.mjs",
     "test:inspection": "node --test tests/inspections.test.mjs",
     "test:gis": "node --test tests/gisApi.test.mjs",
-    "test:construction": "node --test tests/constructions.test.mjs"
+    "test:construction": "node --test tests/constructions.test.mjs",
+    "test:infrastructure": "node --test tests/publicIssues.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

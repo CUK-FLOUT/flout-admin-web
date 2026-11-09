@@ -1,114 +1,231 @@
 import { useEffect, useRef, useState } from "react";
-import { resultsStorageKey } from "../InspectionResults/storage";
 import {
-  checkRevision,
-  createInfrastructureIssue,
-  infrastructureStorageKey,
-  readInfrastructureIssues,
-  writeInfrastructureIssues,
-} from "./model";
-import { applyInfrastructureCoordinates, resolveInfrastructureCoordinates, validCoordinates } from "./coordinates";
-import type { InfrastructureIssue, RegistrationDraft } from "./types";
+  getPublicIssue,
+  getPublicIssueApplications,
+  getPublicIssueCounts,
+  getPublicIssueMap,
+  getPublicIssues,
+  publicIssueError,
+} from "../../api/publicIssues";
+import type {
+  FacilityReviewResponse,
+  PublicIssueCompletion,
+  PublicIssueCounts,
+  PublicIssueFilters,
+} from "../../api/publicIssues";
+import {
+  publicIssueDetailRecord,
+  publicIssueMapRecord,
+  publicIssueRecord,
+  publicIssueResidents,
+} from "./apiMapping";
+import type { InfrastructureIssue, RelatedResident } from "./types";
 
-export function useInfrastructureData() {
-  const [records, setRecords] = useState(readInfrastructureIssues),
-    [error, setError] = useState("");
-
-  const attemptedLocations = useRef(new Set<string>());
+type Resource<T> = { key: string; data?: T; error?: string };
+type ListData = {
+  records: InfrastructureIssue[];
+  totalPages: number;
+  totalElements: number;
+};
+type Query = { filters: PublicIssueFilters; page: number };
+export function useInfrastructureData(query?: Query, issueId?: string) {
+  const [revision, setRevision] = useState(0);
+  const [error, setError] = useState("");
   const mounted = useRef(false);
+  const queryKey = query ? JSON.stringify([query.filters, query.page]) : "";
+  const listKey = queryKey ? queryKey + ":" + revision : "";
+  const filterKey = query ? JSON.stringify(query.filters) : "";
+  const mapKey = filterKey ? filterKey + ":" + revision : "";
+  const detailKey = issueId ? issueId + ":" + revision : "";
+  const [list, setList] = useState<Resource<ListData>>({ key: "" });
+  const [counts, setCounts] = useState<Resource<PublicIssueCounts>>({
+    key: "",
+  });
+  const [map, setMap] = useState<Resource<InfrastructureIssue[]>>({ key: "" });
+  const [detail, setDetail] = useState<Resource<InfrastructureIssue>>({
+    key: "",
+  });
+  const [related, setRelated] = useState<
+    Resource<{ records: RelatedResident[]; total: number }>
+  >({ key: "" });
 
   useEffect(() => {
     mounted.current = true;
 
-    return () => { mounted.current = false; };
-  }, []);
-
-  useEffect(() => {
-
-    for (const issue of records) {
-      const key = JSON.stringify([issue.id, issue.location]);
-
-      if (validCoordinates(issue.coordinates) || /[○〇]/.test(issue.location) || attemptedLocations.current.has(key)) continue;
-      attemptedLocations.current.add(key);
-      void resolveInfrastructureCoordinates(issue.location).then(coordinates => {
-        if (!mounted.current) {
-          attemptedLocations.current.delete(key);
-
-          return;
-        }
-
-        const latest = readInfrastructureIssues();
-        const next = applyInfrastructureCoordinates(latest, issue.id, issue.location, coordinates);
-
-        if (next.some((record, index) => record !== latest[index])) {
-          writeInfrastructureIssues(next);
-          setRecords(next);
-        }
-      }).catch(() => {
-        if (!mounted.current) attemptedLocations.current.delete(key);
-      });
-    }
-
-
-  }, [records]);
-
-  useEffect(() => {
-    const sync = (e: StorageEvent) => {
-      if (
-        e.key === null ||
-        [infrastructureStorageKey, resultsStorageKey].includes(e.key)
-      )
-        setRecords(readInfrastructureIssues());
+    return () => {
+      mounted.current = false;
     };
-
-    window.addEventListener("storage", sync);
-
-    return () => window.removeEventListener("storage", sync);
   }, []);
-  function commit(
-    id: string,
-    revision: number,
-    update: (a: InfrastructureIssue) => InfrastructureIssue,
-  ) {
-    try {
-      const latest = readInfrastructureIssues(),
-        original = latest.find((a) => a.id === id);
 
-      if (!original) throw new Error("지역 문제를 찾을 수 없습니다.");
-      checkRevision(original, revision);
-      const updated = update(original),
-        next = latest.map((a) => (a.id === id ? updated : a));
+  useEffect(() => {
+    if (!queryKey) return;
+    const controller = new AbortController();
+    const [filters, page] = JSON.parse(queryKey) as [
+      PublicIssueFilters,
+      number,
+    ];
 
-      writeInfrastructureIssues(next);
-      setRecords(next);
-      setError("");
+    void getPublicIssues(filters, page, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setList({
+            key: listKey,
+            data: {
+              records: data.publicIssues.map(publicIssueRecord),
+              totalElements: data.totalElements,
+              totalPages: data.totalPages,
+            },
+          });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setList({ key: listKey, error: publicIssueError(cause) });
+      });
 
-      return updated;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    return () => controller.abort();
+  }, [queryKey, listKey]);
 
-      return null;
-    }
+  useEffect(() => {
+    if (!filterKey) return;
+    const controller = new AbortController();
+    const filters = JSON.parse(filterKey) as PublicIssueFilters;
+
+    void getPublicIssueCounts(filters, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCounts({ key: mapKey, data });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setCounts({
+            key: mapKey,
+            error: "현황 조회: " + publicIssueError(cause),
+          });
+      });
+    void getPublicIssueMap(filters, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setMap({ key: mapKey, data: data.map(publicIssueMapRecord) });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setMap({
+            key: mapKey,
+            error: "지도 위치 조회: " + publicIssueError(cause),
+          });
+      });
+
+    return () => controller.abort();
+  }, [filterKey, mapKey]);
+
+  useEffect(() => {
+    if (!issueId) return;
+    const controller = new AbortController();
+    const id = Number(issueId);
+
+    void getPublicIssue(id, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setDetail({ key: detailKey, data: publicIssueDetailRecord(data) });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setDetail((current) => ({
+            key: detailKey,
+            error: publicIssueError(cause),
+            data: current.data?.id === issueId ? current.data : undefined,
+          }));
+      });
+    void getPublicIssueApplications(id, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setRelated({
+            key: detailKey,
+            data: {
+              records: publicIssueResidents(data),
+              total: data.totalCount,
+            },
+          });
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setRelated({ key: detailKey, error: publicIssueError(cause) });
+      });
+
+    return () => controller.abort();
+  }, [issueId, detailKey]);
+
+  function refresh() {
+    if (mounted.current) setRevision((value) => value + 1);
   }
 
-  async function register(draft: RegistrationDraft) {
-    try {
-      const coordinates = await resolveInfrastructureCoordinates(draft.location);
-      const latest = readInfrastructureIssues(),
-        created = { ...createInfrastructureIssue(latest, draft), coordinates },
-        next = [...latest, created];
-
-      writeInfrastructureIssues(next);
-      setRecords(next);
-      setError("");
-
-      return created;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "등록하지 못했습니다.");
-
-      return null;
-    }
+  function applyReview(response: FacilityReviewResponse) {
+    if (!mounted.current) return;
+    setDetail((current) =>
+      current.data?.id === String(response.publicIssueId)
+        ? {
+            ...current,
+            data: {
+              ...current.data,
+              reviewId: response.reviewId,
+              reviewState: response.reviewStatus,
+              target: response.reviewTarget,
+              requirements: response.inspectionNotes,
+              reviewReason: response.reviewReason,
+              status: publicIssueRecord({
+                publicIssueId: response.publicIssueId,
+                status: response.publicIssueStatus,
+              }).status,
+            },
+          }
+        : current,
+    );
   }
 
-  return { records, error, setError, commit, register };
+  function applyCompletion(response: PublicIssueCompletion) {
+    if (!mounted.current) return;
+    setDetail((current) =>
+      current.data?.id === String(response.publicIssueId)
+        ? {
+            ...current,
+            data: {
+              ...current.data,
+              status: "조치 완료",
+              actionId: response.actionId,
+              action: {
+                ...current.data.action,
+                result: response.actionDescription,
+                verified: true,
+              },
+            },
+          }
+        : current,
+    );
+  }
+
+  return {
+    records: list.key === listKey ? list.data?.records || [] : [],
+    markers: map.key === mapKey ? map.data || [] : [],
+    counts: counts.key === mapKey ? counts.data : undefined,
+    issue: detail.data?.id === issueId ? detail.data : undefined,
+    related: related.key === detailKey ? related.data?.records || [] : [],
+    relatedTotal: related.key === detailKey ? related.data?.total || 0 : 0,
+    relatedLoading: !!issueId && related.key !== detailKey,
+    relatedError: related.key === detailKey ? related.error : undefined,
+    loading: !!queryKey && list.key !== listKey,
+    detailLoading: !!issueId && detail.key !== detailKey,
+    listError: list.key === listKey ? list.error : undefined,
+    totalPages: list.key === listKey ? list.data?.totalPages || 0 : 0,
+    totalElements: list.key === listKey ? list.data?.totalElements || 0 : 0,
+    error:
+      error ||
+      (list.key === listKey ? list.error : "") ||
+      (counts.key === mapKey ? counts.error : "") ||
+      (map.key === mapKey ? map.error : "") ||
+      (detail.key === detailKey ? detail.error : "") ||
+      "",
+    setError,
+    refresh,
+    applyReview,
+    applyCompletion,
+  };
 }
