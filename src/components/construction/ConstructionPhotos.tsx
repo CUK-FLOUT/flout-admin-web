@@ -15,7 +15,7 @@ export default function ConstructionPhotos({
   disabled: boolean;
   busy: boolean;
   onUpload: (files: File[]) => void;
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
 
@@ -34,9 +34,14 @@ export default function ConstructionPhotos({
                 {!disabled && (
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={busy || !onRemove || !photo.file}
+                    title={
+                      !photo.file
+                        ? "이미 서버에 업로드된 사진입니다."
+                        : undefined
+                    }
                     aria-label={photo.name + " 삭제"}
-                    onClick={() => onRemove(photo.id)}
+                    onClick={() => onRemove?.(photo.id)}
                     className="absolute top-[7px] right-[7px] size-6 rounded-full disabled:opacity-40"
                   >
                     <img src={removeIcon} alt="" width={24} height={24} />

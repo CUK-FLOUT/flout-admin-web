@@ -21,7 +21,7 @@ export default function ConstructionStatusDialogs({
   onConfirm,
   onInstall,
 }: DetailConstructionDialogProps) {
-  const name = a.id + " · " + a.resident;
+  const name = (a.receiptNo || a.id) + " · " + a.resident;
   const schedule = displayDate(a.date) + (a.time ? " · " + a.time : "");
   const alert = error ? (
     <p role="alert" className="text-sm leading-[21px] text-[#a53632]">

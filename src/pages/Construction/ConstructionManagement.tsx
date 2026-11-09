@@ -8,37 +8,34 @@ import {
   constructionFocus,
   constructionSecondary,
 } from "../../components/construction/styles";
-import {
-  changeConstructionStatus,
-  constructionCandidates,
-  displayDate,
-  finishConstruction,
-  publishInstallation,
-  sameInstallation,
-  saveConstructionSchedule,
-  saveInstallationDraft,
-  scheduleIssue,
-} from "./model";
+import { displayDate } from "./model";
 import { constructionDialogKinds } from "./types";
 import type {
   ConstructionCandidate,
   ConstructionDialogKind,
   ConstructionRecord,
   ConstructionTab,
-  EditableConstructionStatus,
-  InstallationDraft,
 } from "./types";
-import { uploadConstructionPhotos } from "./photos";
+import {
+  completeConstruction,
+  constructionError,
+  constructionScheduleError,
+  saveConstructionSchedule,
+  validateConstructionPhotos,
+  uploadConstructionPhotos,
+} from "../../api/constructions";
+import type { ConstructionListStatus } from "../../api/constructions";
 import { useConstructionData } from "./useConstructionData";
+import { useConstructionDraft } from "./useConstructionDraft";
+import { writeConstructionDraft } from "./draftStorage";
 
 const tabs: ConstructionTab[] = ["전체", "예정", "진행", "완료"];
-const emptyPanelDraft = null;
 
 export default function ConstructionManagement() {
   const { requestId } = useParams();
   const [params] = useSearchParams();
-  const data = useConstructionData();
   const keyboardTab = useRef(false);
+  const navigate = useNavigate();
   const tab = tabs.includes(params.get("tab") as ConstructionTab)
     ? (params.get("tab") as ConstructionTab)
     : "전체";
@@ -51,44 +48,44 @@ export default function ConstructionManagement() {
       keyboardTab.current = false;
     }
   }, [tab]);
-  const empty = params.get("dataset") === "empty";
-  const source = empty ? [] : data.records;
-  const filtered =
-    params.get("dataset") === "no-results"
-      ? []
-      : source.filter(
-          (a) =>
-            tab === "전체" ||
-            (tab === "완료"
-              ? ["완료", "전체 완료"].includes(a.status)
-              : a.status === tab),
-        );
-  const pages = Math.max(1, Math.ceil(filtered.length / 5));
-  const page = Math.min(
-    pages,
-    Math.max(1, Math.floor(Number(params.get("page"))) || 1),
-  );
-  const visible = filtered.slice((page - 1) * 5, page * 5);
-  const incoming = params.get("requestId");
-  const selectedId = requestId || incoming;
-  const selected =
-    params.get("dataset") === "no-results"
-      ? undefined
-      : selectedId
-        ? source.find((a) => a.id === selectedId)
-        : visible[0];
-  const candidates = constructionCandidates(data.records);
-  const incomingCandidate =
-    incoming && !data.records.some((a) => a.id === incoming)
-      ? candidates.find((a) => a.id === incoming)
-      : undefined;
-  const key = [
-    selected?.id || "none",
-    incoming || "",
-    tab,
+  const page = Math.max(1, Math.floor(Number(params.get("page"))) || 1);
+  const status = (
+    { 예정: "SCHEDULED", 진행: "IN_PROGRESS", 완료: "COMPLETED" } as Partial<
+      Record<ConstructionTab, ConstructionListStatus>
+    >
+  )[tab];
+  const data = useConstructionData({
+    keyword: params.get("keyword") || "",
+    page: page - 1,
+    status,
+    selectedId: requestId || (params.has("requestId") ? "" : undefined),
+  });
+  const selected = data.selected;
+  const key = selected?.id || "none";
+
+  useEffect(() => {
+    const lastPage = Math.max(1, data.totalPages);
+
+    if (data.listLoading || data.listError || page <= lastPage) return;
+    const next = new URLSearchParams(params);
+
+    next.set("page", String(lastPage));
+    navigate(
+      {
+        pathname: "/construction" + (requestId ? "/" + requestId : ""),
+        search: next.toString(),
+      },
+      { replace: true },
+    );
+  }, [
     page,
-    params.get("dataset") || "",
-  ].join(":");
+    data.totalPages,
+    data.listLoading,
+    data.listError,
+    params,
+    navigate,
+    requestId,
+  ]);
 
   return (
     <ConstructionWorkspace
@@ -98,14 +95,13 @@ export default function ConstructionManagement() {
         keyboardTab.current = true;
       }}
       selected={selected}
-      candidates={candidates}
-      incomingCandidate={incomingCandidate}
-      visible={visible}
-      filteredCount={filtered.length}
-      hasData={source.length > 0}
+      candidates={[]}
+      visible={data.records}
+      filteredCount={data.totalElements}
+      hasData={tab !== "전체" || !!params.get("keyword")?.trim()}
       tab={tab}
       page={page}
-      pages={pages}
+      pages={Math.max(1, data.totalPages)}
     />
   );
 }
@@ -114,7 +110,6 @@ type Props = {
   onKeyboardTab: () => void;
   data: ReturnType<typeof useConstructionData>;
   selected?: ConstructionRecord;
-  incomingCandidate?: ConstructionCandidate;
   candidates: ConstructionCandidate[];
   visible: ConstructionRecord[];
   filteredCount: number;
@@ -127,7 +122,6 @@ function ConstructionWorkspace({
   data,
   onKeyboardTab,
   selected: a,
-  incomingCandidate,
   candidates,
   visible,
   filteredCount,
@@ -138,27 +132,30 @@ function ConstructionWorkspace({
 }: Props) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<InstallationDraft | null>(() =>
-    a ? structuredClone(a.draft) : emptyPanelDraft,
+  const { draft, setDraft, restoring, photoUrls } = useConstructionDraft(
+    a,
+    data.setError,
   );
-  const [revision, setRevision] = useState(a?.revision ?? 0);
-  const [target, setTarget] = useState<EditableConstructionStatus | "">(() =>
-    ["예정", "진행", "완료"].includes(params.get("target") || "")
-      ? (params.get("target") as EditableConstructionStatus)
-      : "",
-  );
-  const [candidateId, setCandidateId] = useState(
-    incomingCandidate?.id || params.get("candidate") || "000013",
-  );
+  const [candidateId, setCandidateId] = useState(params.get("candidate") || "");
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const active = useRef(false);
+  const uploadedPhotoIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    active.current = true;
+
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const requested = params.get("dialog");
-  const kind = constructionDialogKinds.includes(
-    requested as ConstructionDialogKind,
-  )
-    ? (requested as ConstructionDialogKind)
-    : incomingCandidate
-      ? "register-support"
+  const kind =
+    constructionDialogKinds.includes(requested as ConstructionDialogKind) &&
+    requested !== "status-confirm" &&
+    requested !== "status-saved"
+      ? (requested as ConstructionDialogKind)
       : null;
   const candidate =
     candidates.find((c) => c.id === candidateId) ||
@@ -182,19 +179,15 @@ function ConstructionWorkspace({
     );
   }
 
-  function show(
-    value: ConstructionDialogKind | null,
-    id = a?.id,
-    state?: EditableConstructionStatus,
-  ) {
+  function show(value: ConstructionDialogKind | null, id = a?.id) {
     const p = query();
 
     if (value) p.set("dialog", value);
-    if (state) p.set("target", state);
     go(p, id, true);
   }
 
   function close() {
+    if (submitting.current) return;
     data.setError("");
     show(null);
   }
@@ -216,27 +209,38 @@ function ConstructionWorkspace({
     go(new URLSearchParams());
   }
 
-  function apply(update: (original: ConstructionRecord) => ConstructionRecord) {
-    if (!a) return null;
-    const result = data.commit(a.id, revision, update);
-
-    if (result) setRevision(result.revision);
-
-    return result;
+  async function request(
+    action: () => Promise<unknown>,
+    success?: ConstructionDialogKind,
+  ) {
+    if (submitting.current || restoring || !a) return;
+    submitting.current = true;
+    setBusy(true);
+    data.setError("");
+    try {
+      await action();
+      data.refresh(a.id);
+      if (active.current && success) show(success);
+    } catch (cause) {
+      if (active.current) data.setError(constructionError(cause));
+    } finally {
+      submitting.current = false;
+      if (active.current) setBusy(false);
+    }
   }
 
   function hasSavedSchedule() {
     if (!a || !draft) return false;
-    if (draft.date !== a.date || draft.time !== a.time) {
-      data.setError("배정·일정 변경을 먼저 저장해 주세요.");
+    if (!a.date || !a.time) {
+      data.setError("배정·일정을 먼저 저장해 주세요.");
 
       return false;
     }
 
-    const issue = scheduleIssue(draft);
-
-    if (issue) {
-      data.setError(issue);
+    if (draft.date !== a.date || draft.time !== a.time) {
+      data.setError(
+        "저장된 시공 일정과 입력값이 다릅니다. 최신 일정을 확인해 주세요.",
+      );
 
       return false;
     }
@@ -246,42 +250,65 @@ function ConstructionWorkspace({
 
   function schedule() {
     if (!a || !draft) return;
-    if (apply((original) => saveConstructionSchedule(original, draft)))
-      show("schedule-saved");
-  }
-
-  function status() {
-    if (!a || !draft) return;
-    if (!target) {
-      data.setError("변경할 시공 상태를 선택해 주세요.");
+    if (!a.scheduleEditable) {
+      data.setError("일정은 미배정 시공에 최초 한 번만 저장할 수 있습니다.");
 
       return;
     }
 
-    if (!hasSavedSchedule()) return;
-    data.setError("");
-    show("status-confirm", a.id, target);
+    const issue = constructionScheduleError(draft.date, draft.time);
+
+    if (issue) {
+      data.setError(issue);
+
+      return;
+    }
+
+    void request(
+      () => saveConstructionSchedule(Number(a.id), draft.date, draft.time),
+      "schedule-saved",
+    );
   }
 
   function install() {
-    if (!a || !draft || a.status === "전체 완료") return;
-    setDraft({ ...draft, completionDate: draft.completionDate || a.date });
+    if (!a || !draft || a.status === "전체 완료" || submitting.current) return;
     data.setError("");
     show("installation");
   }
 
   function temporary() {
-    if (!a || !draft) return;
-    if (apply((original) => saveInstallationDraft(original, draft)))
-      show("draft-saved");
+    data.setError(
+      "설치 결과 임시 저장 API는 제공되지 않습니다. 입력 내용은 현재 화면에서 유지되며, 전체 완료 시 서버에 저장됩니다.",
+    );
   }
 
-  async function upload(files: File[]) {
-    if (!files.length || !draft || a?.status === "전체 완료" || busy) return;
-    setBusy(true);
+  function upload(files: File[]) {
+    if (
+      !files.length ||
+      !draft ||
+      !a ||
+      a.status === "전체 완료" ||
+      submitting.current
+    )
+      return;
     data.setError("");
     try {
-      const photos = await uploadConstructionPhotos(files);
+      validateConstructionPhotos([
+        ...draft.photos.flatMap((photo) => (photo.file ? [photo.file] : [])),
+        ...files,
+      ]);
+      const photos = files.map((file) => {
+        const src = URL.createObjectURL(file);
+
+        photoUrls.current.add(src);
+
+        return {
+          id: "pending-" + crypto.randomUUID(),
+          name: file.name,
+          src,
+          file,
+        };
+      });
 
       setDraft((current) =>
         current
@@ -293,24 +320,122 @@ function ConstructionWorkspace({
           : current,
       );
     } catch (cause) {
-      data.setError(
-        cause instanceof Error ? cause.message : "사진을 첨부하지 못했습니다.",
+      data.setError(constructionError(cause));
+    }
+  }
+
+  function removePhoto(id: string) {
+    if (!draft || !a || a.status === "전체 완료" || submitting.current) return;
+    const photo = draft.photos.find((item) => item.id === id);
+
+    if (!photo?.file || uploadedPhotoIds.current.has(id)) {
+      data.setError("이미 서버에 업로드된 사진은 삭제할 수 없습니다.");
+
+      return;
+    }
+
+    URL.revokeObjectURL(photo.src);
+    photoUrls.current.delete(photo.src);
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            photos: current.photos.filter((item) => item.id !== id),
+            verified: false,
+          }
+        : current,
+    );
+    setChecked(false);
+    data.setError("");
+  }
+
+  async function completeWithPhotos() {
+    if (!a || !draft) return;
+    const pending = draft.photos.filter(
+      (photo) => photo.file && !uploadedPhotoIds.current.has(photo.id),
+    );
+
+    if (pending.length) {
+      const response = await uploadConstructionPhotos(
+        Number(a.id),
+        pending.map((photo) => photo.file!),
       );
-    } finally {
-      setBusy(false);
+      const uploaded = response.photos.map((photo) => ({
+        id: String(photo.photoId),
+        name: photo.fileName,
+        src: photo.url,
+      }));
+
+      pending.forEach((photo) => uploadedPhotoIds.current.add(photo.id));
+      const savedDraft = {
+        ...draft,
+        photos: [
+          ...draft.photos.filter(
+            (photo) => !pending.some((item) => item.id === photo.id),
+          ),
+          ...uploaded,
+        ],
+      };
+
+      await writeConstructionDraft(a.id, savedDraft);
+      if (active.current)
+        setDraft((current) =>
+          current
+            ? {
+                ...current,
+                photos: [
+                  ...current.photos.filter(
+                    (photo) => !pending.some((item) => item.id === photo.id),
+                  ),
+                  ...uploaded,
+                ],
+              }
+            : current,
+        );
+    }
+
+    try {
+      const result = await completeConstruction(Number(a.id), draft.note);
+
+      await writeConstructionDraft(a.id, null).catch((cause) => {
+        if (active.current)
+          data.setError(
+            "전체 완료는 처리되었지만 기기의 초안을 정리하지 못했습니다. " +
+              constructionError(cause),
+          );
+      });
+
+      return result;
+    } catch (cause) {
+      if (pending.length || uploadedPhotoIds.current.size) {
+        throw new Error(
+          "사진 업로드는 완료되었지만 전체 완료 처리가 실패했습니다. 사진을 다시 업로드하지 않고 완료 처리를 재시도할 수 있습니다. " +
+            constructionError(cause),
+          { cause },
+        );
+      }
+
+      throw cause;
     }
   }
 
   function finish() {
-    if (!a || !draft) return;
+    if (!a || !draft || submitting.current) return;
     if (a.status === "전체 완료") {
       show("completed-view");
 
       return;
     }
 
-    if (!a.published || a.status !== "완료" || !sameInstallation(draft, a)) {
-      install();
+    if (!hasSavedSchedule()) return;
+    if (!draft.note.trim() || draft.note.trim().length > 4000) {
+      data.setError("최종 설치 결과를 1~4000자로 입력해 주세요.");
+
+      return;
+    }
+
+    if (!draft.photos.length) {
+      data.setError("시공 사진을 1장 이상 선택해 주세요.");
 
       return;
     }
@@ -321,39 +446,44 @@ function ConstructionWorkspace({
   }
 
   function confirm() {
-    if (busy) return;
+    if (submitting.current) return;
     if (kind === "register" || kind === "register-support") {
-      if (!candidate) return;
-      const record = data.register(candidate.id);
-
-      if (record) {
-        const p = new URLSearchParams();
-
-        p.set(
-          "dialog",
-          kind === "register-support" ? "registered-support" : "registered",
-        );
-        go(p, record.id, true);
-      }
+      data.setError(
+        "시공 대상은 지원 승인 시 서버에서 생성됩니다. 별도 등록 API는 제공되지 않습니다.",
+      );
 
       return;
     }
 
     if (!a || !draft) return;
-    if (kind === "status-confirm") {
-      if (!target || !hasSavedSchedule()) return;
-      if (apply((original) => changeConstructionStatus(original, target)))
-        show("status-saved");
-    } else if (kind === "installation") {
-      if (!hasSavedSchedule()) return;
-      if (apply((original) => publishInstallation(original, draft)))
-        show("published");
-    } else if (kind === "completion-review") {
-      if (apply((original) => finishConstruction(original, checked)))
-        show("overall-saved");
+    if (kind !== "completion-review" && kind !== "installation") return;
+    if (!hasSavedSchedule() || a.status === "전체 완료") return;
+    if (!(kind === "completion-review" ? checked : draft.verified)) {
+      data.setError("설치 결과·사진 확인 항목을 선택해 주세요.");
+
+      return;
     }
+
+    if (!draft.photos.length) {
+      data.setError("시공 사진을 1장 이상 선택해 주세요.");
+
+      return;
+    }
+
+    if (!draft.note.trim() || draft.note.trim().length > 4000) {
+      data.setError("최종 설치 결과를 1~4000자로 입력해 주세요.");
+
+      return;
+    }
+
+    void request(completeWithPhotos, "overall-saved");
   }
 
+  const error =
+    data.error ||
+    (params.has("requestId")
+      ? "지원 신청 번호와 시공 ID는 다릅니다. 목록에서 시공 대상을 선택해 주세요."
+      : "");
   const firstNumber = Math.min(Math.max(1, page - 1), Math.max(1, pages - 2));
   const pageNumbers = [firstNumber, firstNumber + 1, firstNumber + 2];
 
@@ -414,16 +544,18 @@ function ConstructionWorkspace({
           type="button"
           onClick={() => {
             data.setError("");
-            show("register");
+            data.setError(
+              "시공 대상은 지원 승인 시 자동 생성됩니다. 지원 신청 관리에서 승인을 진행해 주세요.",
+            );
           }}
           className={constructionSecondary + " h-[42px] w-[172px]"}
         >
           승인 대상 등록
         </button>
       </div>
-      {data.error && (
+      {error && (
         <p role="alert" className="mt-3 text-sm leading-[21px] text-[#a53632]">
-          {data.error}
+          {error}
         </p>
       )}
       <div className="mt-4 grid grid-cols-[minmax(0,720fr)_minmax(0,446fr)] items-start gap-4 max-[1101px]:grid-cols-1">
@@ -441,6 +573,7 @@ function ConstructionWorkspace({
             <p className="text-xs leading-[18px]">총 {filteredCount}건 표시</p>
           </div>
           <div
+            aria-busy={data.listLoading}
             className={
               "mt-4 min-h-0 flex-1 " +
               (visible.length
@@ -487,11 +620,16 @@ function ConstructionWorkspace({
                         go(query(), record.id);
                       }}
                       aria-label={
-                        record.id + " · " + record.resident + " 시공 선택"
+                        (record.receiptNo || record.id) +
+                        " · " +
+                        record.resident +
+                        " 시공 선택"
                       }
                       className="py-5 text-left"
                     >
-                      {record.id + " · " + record.resident}
+                      {(record.receiptNo || record.id) +
+                        " · " +
+                        record.resident}
                     </button>
                   </div>
                   <div role="cell">{record.facility}</div>
@@ -504,9 +642,13 @@ function ConstructionWorkspace({
                 </div>
               ))}
             </div>
-            {!visible.length && (
+            {data.listLoading ? (
+              <p role="status" className="py-6 text-center text-sm">
+                시공 목록을 불러오는 중입니다.
+              </p>
+            ) : !visible.length && !data.error ? (
               <ConstructionEmpty search={hasData} onReset={reset} />
-            )}
+            ) : null}
           </div>
           {visible.length > 0 && (
             <nav
@@ -553,30 +695,40 @@ function ConstructionWorkspace({
         <ConstructionDetail
           application={a}
           draft={draft}
-          target={target}
-          busy={busy}
+          busy={busy || restoring}
+          loading={restoring || (!a && data.detailLoading)}
           onChange={setDraft}
-          onTarget={setTarget}
           onSchedule={schedule}
-          onStatus={status}
           onUpload={(files) => {
             void upload(files);
           }}
           onFinish={finish}
+          onRemovePhoto={removePhoto}
         />
       </div>
       {kind && (
         <ConstructionDialogs
           key={kind}
           kind={kind}
-          application={a}
+          application={
+            a && draft && kind === "completion-review"
+              ? {
+                  ...a,
+                  published: {
+                    completionDate: draft.completionDate,
+                    note: draft.note,
+                    photos: draft.photos,
+                  },
+                }
+              : a
+          }
           candidate={candidate}
           candidates={candidates}
           draft={draft}
-          target={target}
+          target=""
           checked={checked}
           error={data.error}
-          busy={busy}
+          busy={busy || restoring}
           onClose={close}
           onConfirm={confirm}
           onInstall={install}
