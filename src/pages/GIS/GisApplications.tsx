@@ -49,19 +49,12 @@ export default function GisApplications() {
     ),
   );
   const data = useGisApi(query, requestId);
-  const filtered = (data.page?.applications ?? []).map((item) =>
-    gisApplication(
-      item,
-      gisMarkerNumber(item.applicationId, data.markers),
-    ),
-  );
-  const markers = (data.markers ?? []).map((marker, index) =>
-    gisMapApplication(
-      marker,
-      index,
-      filtered.find((item) => item.id === String(marker.applicationId)),
-    ),
-  );
+  const filtered = useMemo(() => (data.page?.applications ?? []).map((item) =>
+    gisApplication(item, gisMarkerNumber(item.applicationId, data.markers)),
+  ), [data.page, data.markers]);
+  const markers = useMemo(() => (data.markers ?? []).map((marker, index) =>
+    gisMapApplication(marker, index, filtered.find((item) => item.id === String(marker.applicationId))),
+  ), [data.markers, filtered]);
   const selected = data.record?.detail
     ? gisDetailApplication(
         data.record.detail,

@@ -65,12 +65,28 @@ function SupportManagementScreen() {
   const visible = response.page?.supportApplications.map(mapSupport) ?? [];
   const pageCount = Math.max(1, response.page?.totalPages ?? 1);
   const selectedId = requestId || params.get("selected");
+  const selectionKey = JSON.stringify([initialFilters(params), page]);
+  const [automaticSelection, setAutomaticSelection] = useState<{
+    key: string;
+    id?: number;
+  }>({ key: "" });
+  const automaticId =
+    automaticSelection.key === selectionKey
+      ? (automaticSelection.id ?? visible[0]?.apiId)
+      : visible[0]?.apiId;
+
+  if (
+    automaticSelection.key !== selectionKey ||
+    automaticSelection.id !== automaticId
+  )
+    setAutomaticSelection({ key: selectionKey, id: automaticId });
+
   const selectedApiId =
     selectedId === "none"
       ? undefined
       : selectedId
         ? Number(selectedId)
-        : visible[0]?.apiId;
+        : automaticId;
   const record = useSupportRecord(selectedApiId, true);
   const selected = record.application;
   const error = response.error || record.error || record.reviewError;
@@ -87,7 +103,7 @@ function SupportManagementScreen() {
       icon: reviewIcon,
     },
     {
-      label: "동의 확인 필요",
+      label: "미승인",
       count: response.counts?.consentRequiredCount,
       icon: clockIcon,
     },
@@ -284,7 +300,7 @@ function SupportManagementScreen() {
             </h2>
             <span className="text-xs leading-[18px]">총 {total}건</span>
           </div>
-          {response.loading || response.listError ? (
+          {response.loading || (response.listError && !response.page) ? (
             <p role="status" className="mt-[19px] text-sm">
               {response.loading
                 ? "지원 신청을 불러오는 중입니다."

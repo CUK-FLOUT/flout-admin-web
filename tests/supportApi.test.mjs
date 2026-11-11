@@ -1,3 +1,4 @@
+import { loadPollingHook } from "./helpers/loadPollingHook.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -342,14 +343,14 @@ test("승인 연속 클릭은 한 요청만 보내고 저장 중 닫기를 막�
 test("승인 실패는 완료 상태로 바꾸지 않고 서버 오류를 표시한다", async () => {
   const h = reviewHarness({
     approveSupport: async () => {
-      throw new Error("동의 확인 필요");
+      throw new Error("미승인");
     },
   });
   await h.dialog().props.onConfirm();
   const dialog = h.dialog();
   assert.equal(dialog.props.kind, "approve");
   assert.equal(dialog.props.application.serverStatus, "SUBMITTED");
-  assert.equal(dialog.props.error, "동의 확인 필요");
+  assert.equal(dialog.props.error, "미승인");
   assert.equal(dialog.props.busy, false);
 });
 
@@ -607,7 +608,9 @@ function listHookHarness(countsPromise, recordApi = {}) {
     exports: module.exports,
     AbortController,
     Promise,
-    require(name) {
+    require: function require(name) {
+      if (name.endsWith("/usePagePolling"))
+        return loadPollingHook(require("react"));
       if (name === "react")
         return {
           useState(initial) {
@@ -616,7 +619,7 @@ function listHookHarness(countsPromise, recordApi = {}) {
             return [
               slots[i],
               (v) => {
-                slots[i] = v;
+                slots[i] = typeof v === "function" ? v(slots[i]) : v;
               },
             ];
           },
@@ -666,7 +669,7 @@ test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답
     h.render({ district: "소사구", status: "APPROVED" }, 1).loading,
     true,
   );
-  assert.equal(h.reads[0].signal.aborted, true);
+  // The first request already settled; the still-pending request below must be cancelled.
   assert.equal(h.reads.length, 2);
   assert.equal(h.reads[1].page, 1);
   assert.deepEqual(plain(h.reads[1].filters), {

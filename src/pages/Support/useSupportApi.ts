@@ -7,12 +7,11 @@ import {
   supportError,
 } from "../../api/supportApplications";
 import type {
-  SupportCounts,
-  SupportPage,
   SupportSearchFilters,
   SupportDetails,
   SupportReviewDetails,
 } from "../../api/supportApplications";
+import { usePagePolling } from "../../hooks/usePagePolling";
 import { mapSupportDetail } from "./apiMapping";
 
 export function useSupportList(
@@ -21,68 +20,27 @@ export function useSupportList(
   revision = 0,
   filters: SupportSearchFilters = {},
 ) {
-  const [listState, setListState] = useState<{
-    key?: string;
-    page?: SupportPage;
-    listError: string;
-    loading: boolean;
-  }>({ listError: "", loading: true });
-  const [countState, setCountState] = useState<{
-    key?: string;
-    counts?: SupportCounts;
-    error: string;
-  }>({ error: "" });
   const { district, status, landlordConsentStatus } = filters;
-  const key = JSON.stringify([
-    keyword,
-    page,
+  const key = JSON.stringify([keyword, page, district, status, landlordConsentStatus]);
+  const list = usePagePolling({
+    queryKey: key,
     revision,
-    district,
-    status,
-    landlordConsentStatus,
-  ]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    getSupportApplications(
-      keyword,
-      page,
-      { district, status, landlordConsentStatus },
-      controller.signal,
-    )
-      .then((result) => {
-        if (!controller.signal.aborted)
-          setListState({ key, page: result, listError: "", loading: false });
-      })
-      .catch((cause) => {
-        if (!controller.signal.aborted)
-          setListState({ key, listError: supportError(cause), loading: false });
-      });
-    getSupportCounts(controller.signal)
-      .then((counts) => {
-        if (!controller.signal.aborted)
-          setCountState({ key, counts, error: "" });
-      })
-      .catch((cause) => {
-        if (!controller.signal.aborted)
-          setCountState({ key, error: supportError(cause) });
-      });
-
-    return () => controller.abort();
-  }, [keyword, page, key, district, status, landlordConsentStatus]);
-
-  const list =
-    listState.key === key
-      ? listState
-      : { listError: "", loading: true, page: undefined };
-  const counts =
-    countState.key === key ? countState : { error: "", counts: undefined };
+    load: (signal) => getSupportApplications(keyword, page, { district, status, landlordConsentStatus }, signal),
+    errorMessage: supportError,
+  });
+  const counts = usePagePolling({
+    queryKey: "support-counts",
+    revision,
+    load: getSupportCounts,
+    errorMessage: supportError,
+  });
 
   return {
-    ...list,
-    counts: counts.counts,
-    error: list.listError || counts.error,
+    page: list.data,
+    loading: list.loading,
+    listError: list.error,
+    counts: counts.data,
+    error: list.error || counts.error,
   };
 }
 

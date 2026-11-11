@@ -841,3 +841,22 @@ test("같은 유형의 두 취약지점 편집이 다른 항목을 덮어쓰지 
   assert.equal(request.vulnerabilities[0].title, savedResult.vulnerabilities[0].title);
   assert.equal(request.vulnerabilities[1].title, "두번째 수정");
 });
+
+test("known inspection row avoids a failing list search when opening detail", async () => {
+  const h = harness();
+  h.setResponse((config) => {
+    if (!config.url.endsWith("/91")) throw new Error("list search unavailable");
+    return {
+      inspectionId: 91, applicationId: 5, receiptNo: "000005",
+      applicantName: "주민", address: "부천시", inspectorId: null,
+    };
+  });
+  const { loadInspection } = h.load("src/pages/Inspection/loadInspection.ts");
+  const result = await loadInspection(91, undefined, {
+    inspectionId: 91, applicationId: 5, receiptNo: "000005",
+    status: "IN_PROGRESS", inspectorName: null,
+  });
+  assert.equal(result.status, "진행");
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests[0].url, "/api/admin/inspections/91");
+});

@@ -128,3 +128,56 @@ test("extracted marker skips records without a usable location", async () => {
   assert.equal(remove, undefined);
   assert.equal(h.overlays.length, 0);
 });
+
+test("selected map item recenters for changed coordinates, but identical polling data preserves panning", async () => {
+  const source = await readFile("src/components/gis/useApplicationMap.ts", "utf8");
+  const code = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+  }).outputText;
+  const slots = [], effects = [], moves = [];
+  let index = 0;
+  const runtime = {
+    maps: { LatLng: class { constructor(latitude, longitude) { this.latitude = latitude; this.longitude = longitude; } } },
+    map: { panTo(point) { moves.push([point.latitude, point.longitude]); } },
+  };
+  const module = { exports: {} };
+  vm.runInNewContext(code, {
+    module, exports: module.exports,
+    require(name) {
+      if (name === "react") return {
+        useRef(initial) { return slots[index++] ??= { current: initial }; },
+        useState(initial) {
+          const i = index++;
+          if (!(i in slots)) slots[i] = i === 3 ? runtime : initial;
+          return [slots[i], (value) => { slots[i] = value; }];
+        },
+        useEffect(effect, deps) {
+          const i = index++, previous = slots[i];
+          if (!previous || deps.some((value, j) => value !== previous[j])) {
+            slots[i] = deps;
+            effects.push(effect);
+          }
+        },
+      };
+      if (name.endsWith("mapLocations")) return { getMapLocation: (a) => a.coordinates };
+      if (name === "./applicationMarkers") return {};
+      if (name.endsWith("kakao/maps")) return {};
+      throw new Error(name);
+    },
+  });
+  function render(id, latitude, longitude) {
+    index = 0;
+    module.exports.useApplicationMap({
+      applications: [{ id, coordinates: { latitude, longitude } }],
+      selectedId: id, showMarkers: false, onSelect() {},
+    });
+    effects.splice(0).forEach((effect) => effect());
+  }
+  render("5", 37.5, 126.7);
+  render("5", 37.5, 126.7);
+  assert.deepEqual(moves, [[37.5, 126.7]]);
+  render("5", 37.6, 126.7);
+  render("5", 37.6, 126.8);
+  render("6", 37.6, 126.8);
+  assert.deepEqual(moves, [[37.5, 126.7], [37.6, 126.7], [37.6, 126.8], [37.6, 126.8]]);
+});

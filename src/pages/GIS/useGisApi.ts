@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePagePolling } from "../../hooks/usePagePolling";
 import * as api from "../../api/gisApplications";
 
 export interface GisRecord {
@@ -16,61 +17,27 @@ export interface GisRecord {
   >;
 }
 export function useGisApi(query: string, id: string | undefined) {
-  const [page, setPage] = useState<{
-    key: string;
-    data?: api.GisPage;
-    error?: string;
-  }>();
-  const [markers, setMarkers] = useState<{
-    key: string;
-    data?: api.GisMarker[];
-    error?: string;
-  }>();
-  const [stats, setStats] = useState<{ data?: api.GisStats; error?: string }>();
   const [record, setRecord] = useState<{ key: string; data: GisRecord }>();
   const [revision, setRevision] = useState(0);
+  const page = usePagePolling({
+    queryKey: query,
+    revision,
+    load: (signal) => api.getGisApplications(JSON.parse(query) as api.GisSearch, signal),
+    errorMessage: api.gisError,
+  });
+  const markers = usePagePolling({
+    queryKey: query,
+    revision,
+    load: async (signal) => (await api.getGisMarkers(JSON.parse(query) as api.GisSearch, signal)).applications,
+    errorMessage: api.gisError,
+  });
+  const stats = usePagePolling({
+    queryKey: "gis-stats",
+    revision,
+    load: api.getGisStats,
+    errorMessage: api.gisError,
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = JSON.parse(query) as api.GisSearch;
-
-    void api.getGisApplications(params, controller.signal).then(
-      (data) => {
-        if (!controller.signal.aborted) setPage({ key: query, data });
-      },
-      (error) => {
-        if (!controller.signal.aborted)
-          setPage({ key: query, error: api.gisError(error) });
-      },
-    );
-    void api.getGisMarkers(params, controller.signal).then(
-      (data) => {
-        if (!controller.signal.aborted)
-          setMarkers({ key: query, data: data.applications });
-      },
-      (error) => {
-        if (!controller.signal.aborted)
-          setMarkers({ key: query, error: api.gisError(error) });
-      },
-    );
-
-    return () => controller.abort();
-  }, [query, revision]);
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void api.getGisStats(controller.signal).then(
-      (data) => {
-        if (!controller.signal.aborted) setStats({ data });
-      },
-      (error) => {
-        if (!controller.signal.aborted)
-          setStats({ error: api.gisError(error) });
-      },
-    );
-
-    return () => controller.abort();
-  }, [revision]);
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -129,12 +96,12 @@ export function useGisApi(query: string, id: string | undefined) {
   }, [id, revision]);
 
   return {
-    page: page?.key === query ? page.data : undefined,
-    listError: page?.key === query ? page.error : undefined,
-    markers: markers?.key === query ? markers.data : undefined,
-    mapError: markers?.key === query ? markers.error : undefined,
-    stats: stats?.data,
-    statsError: stats?.error,
+    page: page.data,
+    listError: page.error,
+    markers: markers.data,
+    mapError: markers.error,
+    stats: stats.data,
+    statsError: stats.error,
     record: record && record.key === id ? record.data : undefined,
     reload: () => setRevision((value) => value + 1),
   };
