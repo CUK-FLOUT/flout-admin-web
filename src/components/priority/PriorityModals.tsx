@@ -12,6 +12,7 @@ const modalKinds = ["designate", "designated", "saved", "reorder"];
 
 type Props = {
   dialog: string;
+  bulkCount?: number;
   busy?: boolean;
   orderLoading?: boolean;
   error?: string;
@@ -30,6 +31,7 @@ type Props = {
 
 export default function PriorityModals({
   dialog,
+  bulkCount = 0,
   busy = false,
   orderLoading = false,
   error = "",
@@ -68,7 +70,7 @@ export default function PriorityModals({
       key={dialog}
       title={
         dialog === "designate"
-          ? selected?.designated
+          ? bulkCount === 0 && selected?.designated
             ? "우선점검 지정을 취소할까요?"
             : "우선점검 대상으로 지정할까요?"
           : dialog === "designated"
@@ -85,11 +87,13 @@ export default function PriorityModals({
       {dialog === "designate" && (
         <>
           <p className="mt-2 text-sm leading-[21px]">
-            {selected
-              ? `${selected.id} · ${selected.resident}님의 신청`
-              : "선택된 신청이 없습니다."}
+            {bulkCount > 0
+              ? `선택한 신청 ${bulkCount}건`
+              : selected
+                ? `${selected.id} · ${selected.resident}님의 신청`
+                : "선택된 신청이 없습니다."}
             <br />
-            {selected?.designated
+            {bulkCount === 0 && selected?.designated
               ? "선택한 신청의 우선점검 지정을 취소합니다."
               : "지정 후 현장점검 담당자와 방문 일정을 배정할 수 있습니다."}
           </p>
@@ -101,11 +105,15 @@ export default function PriorityModals({
               type="button"
               onClick={onDesignate}
               disabled={
-                busy || !selected || selected.designationKnown === false
+                busy ||
+                (bulkCount === 0 &&
+                  (!selected || selected.designationKnown === false))
               }
               className={primary}
             >
-              {selected?.designated ? "지정 취소" : "대상 지정"}
+              {bulkCount === 0 && selected?.designated
+                ? "지정 취소"
+                : "대상 지정"}
             </button>
           </div>
         </>
@@ -119,7 +127,9 @@ export default function PriorityModals({
             <div className="flex">
               <dt className="w-32 text-[#64748b]">접수번호</dt>
               <dd>
-                {selected?.id} · {selected?.resident}
+                {bulkCount > 0
+                  ? `선택한 신청 ${bulkCount}건`
+                  : `${selected?.id} · ${selected?.resident}`}
               </dd>
             </div>
             <div className="flex">

@@ -21,6 +21,10 @@ type Props = {
   totalPages?: number;
   onPage?: (page: number) => void;
   selectedId?: string;
+  checkedIds?: number[];
+  onToggle?: (id: number) => void;
+  onBulkDesignate?: () => void;
+  busy?: boolean;
   ordering: boolean;
   searchEmpty: boolean;
   onSelect: (application: PriorityApplication) => void;
@@ -40,6 +44,10 @@ export default function PriorityList({
   totalPages = 1,
   onPage,
   selectedId,
+  checkedIds = [],
+  onToggle,
+  onBulkDesignate,
+  busy = false,
   ordering,
   searchEmpty,
   onSelect,
@@ -59,7 +67,22 @@ export default function PriorityList({
         <h2 className="text-base font-bold leading-[23px]">
           점검 전 신청 비교
         </h2>
-        <p className="text-xs leading-[18px]">총 {total}건</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs leading-[18px]">
+            총 {total}건
+            {checkedIds.length > 0 && ` · ${checkedIds.length}건 선택`}
+          </p>
+          {checkedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={onBulkDesignate}
+              disabled={busy || loading}
+              className="h-8 rounded-md bg-[#234f73] px-3 text-xs font-bold text-white disabled:opacity-50"
+            >
+              선택 대상 지정
+            </button>
+          )}
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[780px] table-fixed border-collapse text-center text-[13px] leading-5">
@@ -129,8 +152,20 @@ export default function PriorityList({
                     <input
                       type="checkbox"
                       aria-label={`${a.id} 신청 선택`}
-                      checked={selectedId === a.id}
-                      onChange={() => onSelect(a)}
+                      checked={
+                        a.applicationId !== undefined &&
+                        checkedIds.includes(a.applicationId)
+                      }
+                      disabled={
+                        busy ||
+                        loading ||
+                        a.designated ||
+                        a.applicationId === undefined
+                      }
+                      onChange={() => {
+                        if (a.applicationId !== undefined)
+                          onToggle?.(a.applicationId);
+                      }}
                       onClick={(e) => e.stopPropagation()}
                       className="h-[17px] w-[17px] cursor-pointer rounded border-[#234f73] accent-[#234f73]"
                     />

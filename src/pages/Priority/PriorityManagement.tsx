@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import PriorityDetail from "../../components/priority/PriorityDetail";
 import PriorityFilters from "../../components/priority/PriorityFilters";
 import PriorityList from "../../components/priority/PriorityList";
@@ -50,6 +55,7 @@ function toApplication(item: PriorityItem): PriorityApplication {
 
 export default function PriorityManagement() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
   const [revision, setRevision] = useState(0);
@@ -68,6 +74,16 @@ export default function PriorityManagement() {
     value?: boolean;
     error?: string;
   }>();
+  const [selection, setSelection] = useState<{ key: string; ids: number[] }>({
+    key: "",
+    ids: [],
+  });
+  const [bulkTargets, setBulkTargets] = useState<{
+    ids: number[];
+    listKey: string;
+    token: string;
+    entryKey?: string;
+  } | null>(null);
   const [eligible, setEligible] = useState<PriorityApplication[]>([]);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -103,6 +119,30 @@ export default function PriorityManagement() {
   const listError = list?.key === listKey ? list.error : undefined;
   const loading = !data && !listError;
   const filtered = data?.applications.map(toApplication) || [];
+  const checkedIds = selection.key === listKey ? selection.ids : [];
+
+  if (selection.key !== listKey) setSelection({ key: listKey, ids: [] });
+
+  function toggleSelection(id: number) {
+    if (
+      mutation.current ||
+      !data?.applications.some(
+        (item) => item.applicationId === id && !item.designated,
+      )
+    )
+      return;
+    setSelection((current) => {
+      const ids = current.key === listKey ? current.ids : [];
+
+      return {
+        key: listKey,
+        ids: ids.includes(id)
+          ? ids.filter((value) => value !== id)
+          : [...ids, id],
+      };
+    });
+  }
+
   const selectedRow = requestId
     ? filtered.find((a) => a.applicationId === Number(requestId))
     : filtered[0];
@@ -133,6 +173,22 @@ export default function PriorityManagement() {
         designationKnown: selectedDesignation !== undefined,
       }
     : undefined;
+  const modalState: unknown = location.state;
+  const bulkToken =
+    modalState &&
+    typeof modalState === "object" &&
+    "priorityBulkToken" in modalState
+      ? modalState.priorityBulkToken
+      : null;
+
+  if (
+    bulkTargets &&
+    !bulkTargets.entryKey &&
+    dialog === "designate" &&
+    bulkToken === bulkTargets.token
+  )
+    setBulkTargets({ ...bulkTargets, entryKey: location.key });
+
   const modalOrder = normalizePriorityOrder(draftOrder, eligible);
   const searchEmpty = Boolean(data && !data.totalElements && hasFilters);
 
@@ -211,13 +267,16 @@ export default function PriorityManagement() {
     [],
   );
 
-  function patch(values: Record<string, string | null>) {
+  function patch(
+    values: Record<string, string | null>,
+    bulkToken: string | null = null,
+  ) {
     const next = new URLSearchParams(params);
 
     Object.entries(values).forEach(([key, value]) =>
       value === null ? next.delete(key) : next.set(key, value),
     );
-    setParams(next);
+    setParams(next, { state: { priorityBulkToken: bulkToken } });
   }
 
   function select(a: PriorityApplication) {
@@ -350,20 +409,40 @@ export default function PriorityManagement() {
   }
 
   async function designate() {
+    if (mutation.current) return;
+    const isBulk = bulkToken != null || bulkTargets !== null;
+
     if (
-      mutation.current ||
-      !selected?.applicationId ||
-      !selected.designationKnown
-    )
+      isBulk &&
+      (dialog !== "designate" ||
+        !bulkTargets ||
+        bulkTargets.listKey !== listKey ||
+        bulkTargets.token !== bulkToken ||
+        bulkTargets.entryKey !== location.key)
+    ) {
+      setError(
+        "선택한 목록 또는 확인 창이 변경되었습니다. 대상을 다시 선택해 주세요.",
+      );
+
       return;
+    }
+
+    const ids = isBulk
+      ? (bulkTargets?.ids ?? [])
+      : selected?.applicationId && selected.designationKnown
+        ? [selected.applicationId]
+        : [];
+
+    if (!ids.length) return;
     mutation.current = true;
     setBusy(true);
     setError("");
-    const cancel = selected.designated;
+    const cancel = !isBulk && Boolean(selected?.designated);
 
     try {
-      await setPriorityDesignation([selected.applicationId], !cancel);
-      await memoFlights.current.get(selected.applicationId);
+      await setPriorityDesignation(ids, !cancel);
+      await Promise.all(ids.map((id) => memoFlights.current.get(id)));
+      setSelection({ key: listKey, ids: [] });
       setCancelledDesignation(cancel);
       setRevision((value) => value + 1);
       setOrderReady(false);
@@ -428,6 +507,7 @@ export default function PriorityManagement() {
     orderRequest.current += 1;
     setOrderLoading(false);
     setError("");
+    setBulkTargets(null);
     patch({ dialog: null, mode: null });
   }
 
@@ -487,6 +567,17 @@ export default function PriorityManagement() {
             }
           }}
           selectedId={selected?.id}
+          checkedIds={checkedIds}
+          onToggle={toggleSelection}
+          busy={busy}
+          onBulkDesignate={() => {
+            if (mutation.current || !checkedIds.length) return;
+            const token = crypto.randomUUID();
+
+            setBulkTargets({ ids: [...checkedIds], listKey, token });
+            setError("");
+            patch({ dialog: "designate" }, token);
+          }}
           ordering={ordering}
           searchEmpty={searchEmpty}
           onSelect={select}
@@ -523,6 +614,7 @@ export default function PriorityManagement() {
           }}
           ordering={ordering}
           onDesignate={() => {
+            setBulkTargets(null);
             setError("");
             patch({ dialog: "designate" });
           }}
@@ -540,6 +632,7 @@ export default function PriorityManagement() {
         error={error}
         orderReady={orderReady}
         cancelledDesignation={cancelledDesignation}
+        bulkCount={bulkTargets?.ids.length ?? 0}
         onRetry={() => {
           setError("");
           void loadOrder();
