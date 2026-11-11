@@ -9,7 +9,7 @@ type Props = {
   params: URLSearchParams;
   inspectors: { id: number; name: string }[];
   onSearch: FormEventHandler<HTMLFormElement>;
-  onReset: () => void;
+  onReset: () => boolean;
 };
 
 export default function InspectionFilters({
@@ -95,8 +95,7 @@ export default function InspectionFilters({
       <button
         type="button"
         onClick={(event) => {
-          event.currentTarget.form?.reset();
-          onReset();
+          if (onReset()) event.currentTarget.form?.reset();
         }}
         className={`${control} w-[118px] text-sm font-bold`}
       >

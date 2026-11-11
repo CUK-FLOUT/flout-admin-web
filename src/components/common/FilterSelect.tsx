@@ -28,6 +28,7 @@ export default function FilterSelect({
   const [active, setActive] = useState(0);
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
+  const typed = useRef({ text: "", time: 0 });
   const [position, setPosition] = useState({
     left: 0,
     top: 0,
@@ -91,11 +92,12 @@ export default function FilterSelect({
     };
   }, [expanded]);
 
-  function choose(index: number) {
+  function choose(index: number, restoreFocus = true) {
     if (disabled || !options[index]) return;
     onChange(options[index].value);
     setOpen(false);
-    trigger.current?.focus();
+    typed.current.text = "";
+    if (restoreFocus) trigger.current?.focus();
   }
 
   function nextActiveIndex(key: string, currentIndex: number) {
@@ -107,15 +109,44 @@ export default function FilterSelect({
     return (currentIndex + direction + options.length) % options.length;
   }
 
+  function findByText(text: string) {
+    if (!text || disabled || !options.length) return;
+    const now = Date.now();
+    const previous = now - typed.current.time < 700 ? typed.current.text : "";
+    const query = (previous + text).normalize("NFC").toLocaleLowerCase();
+    const repeated = Array.from(query).every((letter) => letter === query[0]);
+    const prefix = repeated ? query[0] : query;
+    const current = expanded ? activeIndex : selected;
+    const start = previous && !repeated ? current : current + 1;
+    const match = Array.from(
+      { length: options.length },
+      (_, offset) => (Math.max(0, start) + offset) % options.length,
+    ).find((index) =>
+      options[index].label
+        .normalize("NFC")
+        .toLocaleLowerCase()
+        .startsWith(prefix),
+    );
+
+    typed.current = { text: query, time: now };
+    if (match === undefined) return;
+    placeMenu();
+    setActive(match);
+    setOpen(true);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (disabled || !options.length) return;
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
+      typed.current.text = "";
       setOpen(false);
       event.stopPropagation();
     }
 
     if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       event.preventDefault();
+      typed.current.text = "";
       placeMenu();
       setOpen(true);
       setActive((index) => nextActiveIndex(event.key, index));
@@ -126,7 +157,18 @@ export default function FilterSelect({
       choose(activeIndex);
     }
 
-    if (event.key === "Tab") setOpen(false);
+    if (event.key === "Tab" && expanded) choose(activeIndex, false);
+
+    if (
+      event.key.length === 1 &&
+      event.key !== " " &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      event.preventDefault();
+      findByText(event.key);
+    }
   }
 
   return (
@@ -151,11 +193,13 @@ export default function FilterSelect({
         aria-activedescendant={expanded ? `${id}-${activeIndex}` : undefined}
         className="flex h-[46px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-[#c8d0d7] bg-white px-3 text-left disabled:bg-[#f4f5f6] text-[15px] font-medium leading-[21px] tracking-[-.09px] text-[#202b36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]"
         onClick={() => {
+          typed.current.text = "";
           placeMenu();
           setActive(Math.max(0, selected));
           setOpen((v) => !v);
         }}
         onKeyDown={handleKeyDown}
+        onCompositionEnd={(event) => findByText(event.data)}
       >
         <span>
           {options.find((option) => option.value === value)?.label || value}
