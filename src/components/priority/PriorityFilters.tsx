@@ -1,3 +1,4 @@
+import FormFilterSelect from "../common/FormFilterSelect";
 import type { FormEventHandler } from "react";
 
 import searchIcon from "../../assets/priority/search.svg";
@@ -25,39 +26,39 @@ export default function PriorityFilters({
       aria-label="우선점검 검색 조건"
       className="flex shrink-0 flex-wrap gap-[10px] xl:flex-nowrap"
     >
-      <select
+      <FormFilterSelect
         name="district"
-        aria-label="지역"
+        label="지역"
         defaultValue={params.get("district") || ""}
-        className={`${control} w-[176px]`}
-      >
-        <option value="">지역 전체</option>
-        {["원미구", "소사구", "오정구"].map((s) => (
-          <option key={s}>{s}</option>
-        ))}
-      </select>
-      <select
+        className="w-[176px]"
+        options={[
+          { value: "", label: "지역 전체" },
+          ...["원미구", "소사구", "오정구"].map((value) => ({
+            value,
+            label: value,
+          })),
+        ]}
+      />
+      <FormFilterSelect
         name="risk"
-        aria-label="취약도"
+        label="취약도"
         defaultValue={params.get("risk") || ""}
-        className={`${control} w-[166px]`}
-      >
-        <option value="">취약도 전체</option>
-        {["높음", "주의", "낮음"].map((s) => (
-          <option key={s}>{s}</option>
-        ))}
-      </select>
-      <select
+        className="w-[166px]"
+        options={[
+          { value: "", label: "취약도 전체" },
+          ...["높음", "주의", "낮음"].map((value) => ({ value, label: value })),
+        ]}
+      />
+      <FormFilterSelect
         name="status"
-        aria-label="처리 상태"
+        label="처리 상태"
         defaultValue={params.get("status") || ""}
-        className={`${control} w-[192px]`}
-      >
-        <option value="">처리 상태 전체</option>
-        {["지정", "미지정"].map((s) => (
-          <option key={s}>{s}</option>
-        ))}
-      </select>
+        className="w-[192px]"
+        options={[
+          { value: "", label: "처리 상태 전체" },
+          ...["지정", "미지정"].map((value) => ({ value, label: value })),
+        ]}
+      />
       <div className="relative min-w-[160px] flex-1">
         <img
           src={searchIcon}
@@ -83,7 +84,10 @@ export default function PriorityFilters({
       </button>
       <button
         type="button"
-        onClick={onReset}
+        onClick={(event) => {
+          event.currentTarget.form?.reset();
+          onReset();
+        }}
         className={`${control} w-[118px]`}
       >
         초기화

@@ -182,8 +182,10 @@ export default function InspectionManagement() {
   }
 
   function reset() {
-    if (saving.current) return;
+    if (saving.current) return false;
     navigate("/inspection");
+
+    return true;
   }
 
   function search(event: FormEvent<HTMLFormElement>) {
