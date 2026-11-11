@@ -37,9 +37,11 @@ function SectionTitle({
 
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3 text-[13px] leading-[19px]">
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-start gap-3 text-[13px] leading-[19px]">
       <dt>{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+      <dd className="min-w-0 break-keep [overflow-wrap:anywhere]">
+        {children}
+      </dd>
     </div>
   );
 }
@@ -194,7 +196,11 @@ export default function ApplicationDetail({
                 </InfoRow>
 
                 <InfoRow label="주택 / 거주 형태">
-                  {a.address} · {a.houseType} / {a.tenure}
+                  <span>{a.address}</span>
+                  {" · "}
+                  <span className="inline-block">
+                    {a.houseType} / {a.tenure}
+                  </span>
                 </InfoRow>
 
                 <InfoRow label="AI 취약도 / 이력">
@@ -220,7 +226,7 @@ export default function ApplicationDetail({
                     {["오전 9~12시", "오후 13~18시", "상관없음"].map((t) => (
                       <span
                         key={t}
-                        className={`flex h-7 min-w-0 items-center justify-center rounded-md border bg-[#f4f5f6] px-2 py-1 text-[11px] ${
+                        className={`flex min-h-7 min-w-0 items-center justify-center rounded-md border bg-[#f4f5f6] px-2 py-1 text-[11px] ${
                           t === a.visitTime
                             ? "border-[#234f73] font-bold"
                             : "border-[#c8d0d7] text-[#43515e]"
@@ -251,9 +257,6 @@ export default function ApplicationDetail({
                       alt={item.originalFilename}
                       className="h-[68px] w-32 rounded-[7px] border border-[#c8d0d7] object-cover"
                     />
-                    <span className="mt-0 block text-xs">
-                      {item.originalFilename}
-                    </span>
                   </button>
                 ))}
                 {!record.errors.attachments && (

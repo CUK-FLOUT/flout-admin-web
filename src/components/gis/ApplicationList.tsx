@@ -38,11 +38,18 @@ function ApplicationRow({ application, selected, onSelect }: RowProps) {
         }`}
       >
         <span className="min-w-0 flex-1">
-          <strong className="block text-base leading-[21px]">
-            {application.number !== undefined && `${application.number}. `}{application.address}
+          <strong
+            title={application.address}
+            className="block truncate text-base leading-[21px]"
+          >
+            {application.number !== undefined && `${application.number}. `}
+            {application.address}
           </strong>
 
-          <span className="mt-[3px] block text-sm leading-[19px]">
+          <span
+            className="mt-[3px] block truncate text-sm leading-[19px]"
+            title={`${application.receiptNo ?? application.id} · ${application.resident} · ${application.status}`}
+          >
             {application.receiptNo ?? application.id} · {application.resident} ·{" "}
             {application.status}
           </span>
@@ -56,7 +63,9 @@ function ApplicationRow({ application, selected, onSelect }: RowProps) {
           {application.risk}
         </span>
 
-        <span className="shrink-0 justify-self-end text-sm">상세 &gt;</span>
+        <span className="shrink-0 justify-self-end whitespace-nowrap text-sm">
+          상세 &gt;
+        </span>
       </button>
     </li>
   );
@@ -91,7 +100,7 @@ export default function ApplicationList({
         </button>
       </h2>
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {applications.map((application) => (
           <ApplicationRow
             key={application.id}
@@ -113,7 +122,7 @@ export default function ApplicationList({
       {page && page.totalPages > 1 && (
         <nav
           aria-label="신청 목록 페이지"
-          className="mt-3 flex justify-center gap-4 text-sm text-[#234f73]"
+          className="mt-3 flex shrink-0 justify-center gap-4 text-sm text-[#234f73]"
         >
           <button
             disabled={page.page === 0}

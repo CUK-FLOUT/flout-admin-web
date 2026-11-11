@@ -34,7 +34,7 @@ export function addApplicationMarker({
 
   button.type = "button";
   button.className =
-    "flex h-11 cursor-pointer items-center gap-1 rounded [font-family:Pretendard,sans-serif] text-[#202b36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]";
+    "flex h-11 cursor-pointer items-center gap-2 rounded [font-family:Pretendard,sans-serif] text-[#202b36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]";
   button.setAttribute(
     "aria-label",
     `${application.number}번 ${application.address}, ${application.risk}, ${application.status} 상세 보기`,
