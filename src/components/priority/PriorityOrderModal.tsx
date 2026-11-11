@@ -161,12 +161,42 @@ export default function PriorityOrderModal({
     scrollFrame.current = null;
     lastDragY.current = null;
     dragging.current = null;
+    const pointer = pointerDrag.current;
+
     pointerDrag.current = null;
+    if (pointer && dialogRef.current?.hasPointerCapture(pointer.pointerId))
+      dialogRef.current.releasePointerCapture(pointer.pointerId);
   }
 
   return (
     <dialog
       ref={dialogRef}
+      onPointerMove={(event) => {
+        const drag = pointerDrag.current;
+
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        startDragScroll(event.clientY);
+        const target = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>("[data-order-id]")?.dataset.orderId;
+
+        setDropTarget(target && byId.has(target) ? target : null);
+        if (target && target !== drag.id && byId.has(target))
+          moveTo(drag.id, target);
+      }}
+      onPointerUp={(event) => {
+        if (pointerDrag.current?.pointerId === event.pointerId) stopDrag();
+      }}
+      onPointerCancel={(event) => {
+        if (pointerDrag.current?.pointerId === event.pointerId) stopDrag();
+      }}
+      onLostPointerCapture={(event) => {
+        if (
+          event.target === event.currentTarget &&
+          pointerDrag.current?.pointerId === event.pointerId
+        )
+          stopDrag();
+      }}
       aria-labelledby="priority-order-title"
       aria-describedby="priority-order-description"
       onCancel={(event) => {
@@ -242,7 +272,21 @@ export default function PriorityOrderModal({
               <col key={index} style={{ width: `${(width / 844) * 100}%` }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-white text-xs font-normal leading-[18px]">
+          <thead
+            onDragOver={(event) => {
+              if (!dragging.current) return;
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "none";
+              setDropTarget(null);
+              startDragScroll(event.clientY);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              stopDrag();
+            }}
+            className="sticky top-0 z-10 bg-white text-xs font-normal leading-[18px]"
+          >
             <tr className="h-11">
               {[
                 "정렬",
@@ -266,8 +310,10 @@ export default function PriorityOrderModal({
                 data-order-id={application.id}
                 className={`h-14 ${dropTarget === application.id ? "bg-[#eef3f7]" : "bg-white"}`}
                 onDragOver={(event) => {
+                  if (!dragging.current) return;
                   event.preventDefault();
-                  if (dragging.current) setDropTarget(application.id);
+                  event.dataTransfer.dropEffect = "move";
+                  setDropTarget(application.id);
                   startDragScroll(event.clientY);
                 }}
                 onDrop={(event) => {
@@ -320,30 +366,9 @@ export default function PriorityOrderModal({
                         id: application.id,
                         pointerId: event.pointerId,
                       };
-                      event.currentTarget.setPointerCapture(event.pointerId);
+                      event.preventDefault();
+                      dialogRef.current?.setPointerCapture(event.pointerId);
                       startDragScroll(event.clientY);
-                    }}
-                    onPointerMove={(event) => {
-                      const drag = pointerDrag.current;
-
-                      if (!drag || drag.pointerId !== event.pointerId) return;
-                      startDragScroll(event.clientY);
-                      const target = document
-                        .elementFromPoint(event.clientX, event.clientY)
-                        ?.closest<HTMLElement>("[data-order-id]")
-                        ?.dataset.orderId;
-
-                      if (target && target !== drag.id && byId.has(target)) {
-                        setDropTarget(target);
-                        moveTo(drag.id, target);
-                      }
-                    }}
-                    onPointerUp={stopDrag}
-                    onPointerCancel={() => {
-                      if (!dragging.current) stopDrag();
-                    }}
-                    onLostPointerCapture={() => {
-                      if (!dragging.current) stopDrag();
                     }}
                   >
                     <img

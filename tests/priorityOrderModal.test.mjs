@@ -42,7 +42,18 @@ function render(
       return { top: 100, bottom: 300 };
     },
   };
+  let capturedPointer = null;
+  let hitId = null;
   const dialog = {
+    setPointerCapture(id) {
+      capturedPointer = id;
+    },
+    hasPointerCapture(id) {
+      return capturedPointer === id;
+    },
+    releasePointerCapture() {
+      capturedPointer = null;
+    },
     open: false,
     showModal() {
       this.open = true;
@@ -83,6 +94,13 @@ function render(
       },
     },
     document: {
+      elementFromPoint() {
+        return {
+          closest() {
+            return hitId ? { dataset: { orderId: hitId } } : null;
+          },
+        };
+      },
       documentElement: html,
       body,
       activeElement: opener,
@@ -134,6 +152,12 @@ function render(
   walk(tree);
   return {
     tree,
+    setHit(id) {
+      hitId = id;
+    },
+    captured() {
+      return capturedPointer;
+    },
     nodes,
     moves,
     announcements,
@@ -232,17 +256,22 @@ test("holding a pointer at the edge keeps scrolling until release, cancel or unm
     pointerType: "touch",
     pointerId: 1,
     clientY: 290,
-    currentTarget: { setPointerCapture() {} },
+    preventDefault() {},
+    currentTarget: {
+      setPointerCapture() {
+        throw new Error("row must not capture");
+      },
+    },
   };
   handle.props.onPointerDown(down);
   h.runFrame();
   assert.equal(h.viewport.scrollTop, 24);
   h.runFrame();
   assert.equal(h.viewport.scrollTop, 48);
-  handle.props.onPointerUp();
+  h.tree.props.onPointerUp({ pointerId: 1 });
   assert.equal(h.frames.size, 0);
   handle.props.onPointerDown(down);
-  handle.props.onPointerCancel();
+  h.tree.props.onPointerCancel({ pointerId: 1 });
   assert.equal(h.frames.size, 0);
   handle.props.onPointerDown(down);
   cleanup();
@@ -294,8 +323,12 @@ test("native drag survives pointer cancellation before drop", () => {
   const h = render();
   const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
   handle.props.onDragStart({ clientY: 100, dataTransfer: { setData() {} } });
-  handle.props.onPointerCancel();
-  handle.props.onLostPointerCapture();
+  h.tree.props.onPointerCancel({ pointerId: 1 });
+  h.tree.props.onLostPointerCapture({
+    pointerId: 1,
+    target: h.dialog,
+    currentTarget: h.dialog,
+  });
   h.nodes
     .find((n) => n.props["data-order-id"] === "C")
     .props.onDrop({ preventDefault() {} });
@@ -311,9 +344,67 @@ test("native drag scrolls upward over the sticky header and stops on dragend", (
   const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
   handle.props.onDragStart({ clientY: 200, dataTransfer: { setData() {} } });
   h.viewport.scrollTop = 100;
-  h.nodes.find((n) => n.props["data-order-scroll"] !== undefined).props.onDragOver({ clientY: 110, preventDefault() {} });
+  h.nodes
+    .find((n) => n.props["data-order-scroll"] !== undefined)
+    .props.onDragOver({ clientY: 110, preventDefault() {} });
   h.runFrame();
   assert.equal(h.viewport.scrollTop, 76);
   handle.props.onDragEnd();
   assert.equal(h.frames.size, 0);
+});
+
+test("header rejects native drop and clears the previous row highlight", () => {
+  const h = render();
+  h.nodes
+    .find((n) => n.props["aria-label"] === "A 순서 변경")
+    .props.onDragStart({ clientY: 200, dataTransfer: { setData() {} } });
+  h.nodes
+    .find((n) => n.props["data-order-id"] === "B")
+    .props.onDragOver({ clientY: 200, dataTransfer: {}, preventDefault() {} });
+  let prevented = false;
+  const dataTransfer = {};
+  const header = h.nodes.find((n) => n.type === "thead");
+  header.props.onDragOver({
+    clientY: 110,
+    dataTransfer,
+    stopPropagation() {},
+    preventDefault() {
+      prevented = true;
+    },
+  });
+  assert.equal(dataTransfer.dropEffect, "none");
+  assert.equal(prevented, false);
+  assert.equal(h.announcements.at(-1), null);
+  header.props.onDrop({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(h.moves.length, 0);
+  assert.equal(h.frames.size, 0);
+});
+
+test("touch and pen use stable dialog capture through consecutive moves", () => {
+  for (const pointerType of ["touch", "pen"]) {
+    const h = render();
+    const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+    handle.props.onPointerDown({
+      pointerType,
+      pointerId: 7,
+      clientY: 200,
+      preventDefault() {},
+    });
+    assert.equal(h.captured(), 7);
+    h.setHit("B");
+    h.tree.props.onPointerMove({ pointerId: 7, clientX: 50, clientY: 200 });
+    h.tree.props.onLostPointerCapture({
+      pointerId: 7,
+      target: {},
+      currentTarget: h.dialog,
+    });
+    h.setHit("C");
+    h.tree.props.onPointerMove({ pointerId: 7, clientX: 50, clientY: 250 });
+    assert.equal(h.moves.length, 3);
+    h.tree.props.onPointerUp({ pointerId: 7 });
+    assert.equal(h.captured(), null);
+    assert.equal(h.frames.size, 0);
+    h.tree.props.onPointerMove({ pointerId: 7, clientX: 50, clientY: 200 });
+    assert.equal(h.moves.length, 3);
+  }
 });

@@ -31,6 +31,8 @@ function mount(overrides = {}, requestId = "5", search = "") {
     dirty = true,
     tree,
     params = new URLSearchParams(search);
+  let historyKey = 0,
+    historyState = null;
   const slots = [],
     pending = [],
     reads = [],
@@ -79,6 +81,7 @@ function mount(overrides = {}, requestId = "5", search = "") {
     module,
     exports: module.exports,
     AbortController,
+    crypto: { randomUUID: () => `bulk-${++historyKey}` },
     URLSearchParams,
     Promise,
     require(name) {
@@ -118,11 +121,14 @@ function mount(overrides = {}, requestId = "5", search = "") {
         };
       if (name === "react-router-dom")
         return {
+          useLocation: () => ({ key: String(historyKey), state: historyState }),
           useParams: () => ({ requestId }),
           useNavigate: () => () => {},
           useSearchParams: () => [
             params,
-            (next) => {
+            (next, options) => {
+              historyKey++;
+              historyState = options?.state ?? null;
               params = next;
               dirty = true;
             },
@@ -169,8 +175,11 @@ function mount(overrides = {}, requestId = "5", search = "") {
     find,
     reads,
     orders,
+    history() { return { key: historyKey, state: historyState, search: params.toString() }; },
+    restoreHistory(value) { historyKey = value.key; historyState = value.state; params = new URLSearchParams(value.search); dirty = true; },
     setSearch(value) {
       params = new URLSearchParams(value);
+      historyKey++;
       dirty = true;
     },
   };
@@ -339,4 +348,41 @@ test("페이지·필터 변경 후 이전 페이지로 돌아와도 체크 선�
   h.setSearch("risk=높음");
   await h.flush();
   assert.equal(h.find("PriorityList").checkedIds.length, 0);
+});
+
+test("bulk submission rejects changed list or modal history without falling back to the detail", async () => {
+  for (const search of ["dialog=designate&page=1", "dialog=designate"]) {
+    const calls = [];
+    const h = mount({
+      setPriorityDesignation: async (...args) => {
+        calls.push(args);
+      },
+    });
+    await h.flush();
+    h.find("PriorityList").onToggle(5);
+    await h.flush();
+    h.find("PriorityList").onBulkDesignate();
+    await h.flush();
+    h.setSearch(search);
+    await h.flush();
+    await h.find("PriorityModals").onDesignate();
+    await h.flush();
+    assert.equal(calls.length, 0);
+    assert.match(h.find("PriorityModals").error, /다시 선택/);
+  }
+});
+
+
+test("닫은 bulk 확인 창을 뒤로 가기로 복원해도 상세 한 건으로 대체 제출하지 않는다", async () => {
+  const calls = [];
+  const h = mount({ setPriorityDesignation: async (...args) => { calls.push(args); } });
+  await h.flush();
+  h.find("PriorityList").onToggle(5); await h.flush();
+  h.find("PriorityList").onBulkDesignate(); await h.flush();
+  const previous = h.history();
+  h.find("PriorityModals").onClose(); await h.flush();
+  h.restoreHistory(previous); await h.flush();
+  await h.find("PriorityModals").onDesignate(); await h.flush();
+  assert.equal(calls.length, 0);
+  assert.match(h.find("PriorityModals").error, /다시 선택/);
 });
