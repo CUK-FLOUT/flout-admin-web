@@ -289,3 +289,31 @@ test("loading keeps the modal closable while save remains disabled", () => {
     false,
   );
 });
+
+test("native drag survives pointer cancellation before drop", () => {
+  const h = render();
+  const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+  handle.props.onDragStart({ clientY: 100, dataTransfer: { setData() {} } });
+  handle.props.onPointerCancel();
+  handle.props.onLostPointerCapture();
+  h.nodes
+    .find((n) => n.props["data-order-id"] === "C")
+    .props.onDrop({ preventDefault() {} });
+  assert.deepEqual(h.moves, [
+    ["A", 1],
+    ["A", 1],
+  ]);
+  assert.equal(h.frames.size, 0);
+});
+
+test("native drag scrolls upward over the sticky header and stops on dragend", () => {
+  const h = render();
+  const handle = h.nodes.find((n) => n.props["aria-label"] === "A 순서 변경");
+  handle.props.onDragStart({ clientY: 200, dataTransfer: { setData() {} } });
+  h.viewport.scrollTop = 100;
+  h.nodes.find((n) => n.props["data-order-scroll"] !== undefined).props.onDragOver({ clientY: 110, preventDefault() {} });
+  h.runFrame();
+  assert.equal(h.viewport.scrollTop, 76);
+  handle.props.onDragEnd();
+  assert.equal(h.frames.size, 0);
+});

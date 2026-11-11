@@ -164,7 +164,16 @@ function mount(overrides = {}, requestId = "5", search = "") {
     visit(tree);
     return found?.props;
   }
-  return { flush, find, reads, orders };
+  return {
+    flush,
+    find,
+    reads,
+    orders,
+    setSearch(value) {
+      params = new URLSearchParams(value);
+      dirty = true;
+    },
+  };
 }
 
 test("현재 목록에 없는 상세도 별도 조회한 지정 상태를 사용한다", async () => {
@@ -245,4 +254,89 @@ test("알 수 없는 risk/status는 실제 요청과 순서 저장에서 필터�
   await h.flush();
   assert.equal(h.orders.length, 1);
   assert.equal(h.orders[0][2], false);
+});
+
+test("복수 체크는 상세 선택과 독립적이고 전체 applicationId를 한 번에 지정한다", async () => {
+  const calls = [];
+  const gate = deferred();
+  let designated = false;
+  const h = mount({
+    getPriorityInspections: async () => ({
+      applications: [
+        row,
+        { ...row, applicationId: 6, receiptNo: "000006" },
+      ].map((item) => ({ ...item, designated })),
+      page: 0,
+      totalElements: 2,
+      totalPages: 1,
+    }),
+    setPriorityDesignation: async (...args) => {
+      calls.push(args);
+      await gate.promise;
+      designated = true;
+    },
+  });
+  await h.flush();
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  h.find("PriorityList").onToggle(6);
+  await h.flush();
+  assert.deepEqual(Array.from(h.find("PriorityList").checkedIds), [5, 6]);
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  assert.deepEqual(Array.from(h.find("PriorityList").checkedIds), [6]);
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  h.find("PriorityList").onBulkDesignate();
+  await h.flush();
+  assert.equal(h.find("PriorityModals").bulkCount, 2);
+  const submit = h.find("PriorityModals").onDesignate;
+  const pending = submit();
+  await submit();
+  assert.equal(calls.length, 1);
+  assert.deepEqual(Array.from(calls[0][0]), [6, 5]);
+  assert.equal(calls[0][1], true);
+  gate.resolve();
+  await pending;
+  await h.flush();
+  assert.equal(h.find("PriorityList").checkedIds.length, 0);
+  assert(h.find("PriorityList").filtered.every((item) => item.designated));
+});
+
+test("일괄 지정 실패 시 선택을 유지하고 완료 창을 표시하지 않는다", async () => {
+  const h = mount({
+    setPriorityDesignation: async () => {
+      throw new Error("지정 실패");
+    },
+  });
+  await h.flush();
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  h.find("PriorityList").onBulkDesignate();
+  await h.flush();
+  await h.find("PriorityModals").onDesignate();
+  await h.flush();
+  assert.equal(h.find("PriorityModals").dialog, "designate");
+  assert.equal(h.find("PriorityModals").error, "지정 실패");
+  assert.deepEqual(Array.from(h.find("PriorityList").checkedIds), [5]);
+  assert.equal(h.find("PriorityList").filtered[0].designated, false);
+});
+
+test("페이지·필터 변경 후 이전 페이지로 돌아와도 체크 선택을 복원하지 않는다", async () => {
+  const h = mount();
+  await h.flush();
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  assert.equal(h.find("PriorityList").checkedIds.length, 1);
+  h.setSearch("page=1");
+  await h.flush();
+  assert.equal(h.find("PriorityList").checkedIds.length, 0);
+  h.setSearch("");
+  await h.flush();
+  assert.equal(h.find("PriorityList").checkedIds.length, 0);
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  h.setSearch("risk=높음");
+  await h.flush();
+  assert.equal(h.find("PriorityList").checkedIds.length, 0);
 });

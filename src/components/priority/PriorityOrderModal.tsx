@@ -46,6 +46,7 @@ export default function PriorityOrderModal({
     pointerId: number;
   } | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const byId = new Map(
     applications.map((application) => [application.id, application]),
   );
@@ -154,6 +155,7 @@ export default function PriorityOrderModal({
   }
 
   function stopDrag() {
+    setDropTarget(null);
     if (scrollFrame.current !== null)
       window.cancelAnimationFrame(scrollFrame.current);
     scrollFrame.current = null;
@@ -225,6 +227,11 @@ export default function PriorityOrderModal({
       </p>
       <div
         data-order-scroll
+        onDragOver={(event) => {
+          if (!dragging.current) return;
+          event.preventDefault();
+          startDragScroll(event.clientY);
+        }}
         tabIndex={0}
         aria-label="선정 순서 목록"
         className="min-h-0 flex-1 overflow-auto overscroll-contain [@media(max-height:320px)]:min-h-[100px]"
@@ -257,9 +264,10 @@ export default function PriorityOrderModal({
               <tr
                 key={application.id}
                 data-order-id={application.id}
-                className="h-14 bg-white"
+                className={`h-14 ${dropTarget === application.id ? "bg-[#eef3f7]" : "bg-white"}`}
                 onDragOver={(event) => {
                   event.preventDefault();
+                  if (dragging.current) setDropTarget(application.id);
                   startDragScroll(event.clientY);
                 }}
                 onDrop={(event) => {
@@ -272,11 +280,18 @@ export default function PriorityOrderModal({
                 <td className="p-0">
                   <button
                     type="button"
-                    draggable
+                    draggable={!busy && !loading && ready}
+                    disabled={busy || loading || !ready}
                     aria-label={`${application.id} 순서 변경`}
                     aria-describedby="priority-order-keyboard"
                     className="mx-auto flex size-9 touch-none items-center justify-center !cursor-grab active:!cursor-grabbing"
                     onDragStart={(event) => {
+                      if (busy || loading || !ready) {
+                        event.preventDefault();
+
+                        return;
+                      }
+
                       dragging.current = application.id;
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", application.id);
@@ -294,7 +309,13 @@ export default function PriorityOrderModal({
                         moveTo(application.id, rows[to].id);
                     }}
                     onPointerDown={(event) => {
-                      if (event.pointerType === "mouse") return;
+                      if (
+                        busy ||
+                        loading ||
+                        !ready ||
+                        event.pointerType === "mouse"
+                      )
+                        return;
                       pointerDrag.current = {
                         id: application.id,
                         pointerId: event.pointerId,
@@ -313,14 +334,25 @@ export default function PriorityOrderModal({
                         ?.dataset.orderId;
 
                       if (target && target !== drag.id && byId.has(target)) {
+                        setDropTarget(target);
                         moveTo(drag.id, target);
                       }
                     }}
                     onPointerUp={stopDrag}
-                    onPointerCancel={stopDrag}
-                    onLostPointerCapture={stopDrag}
+                    onPointerCancel={() => {
+                      if (!dragging.current) stopDrag();
+                    }}
+                    onLostPointerCapture={() => {
+                      if (!dragging.current) stopDrag();
+                    }}
                   >
-                    <img src={dragHandle} alt="" width={18} height={18} />
+                    <img
+                      src={dragHandle}
+                      draggable={false}
+                      alt=""
+                      width={18}
+                      height={18}
+                    />
                   </button>
                 </td>
                 <td className="p-0">{application.id}</td>
