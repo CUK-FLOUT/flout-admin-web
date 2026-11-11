@@ -17,7 +17,6 @@ import {
   getPriorityOrder,
   setPriorityDesignation,
   priorityError,
-  savePriorityInternalMemo,
 } from "../../api/priorityInspections";
 import type {
   PriorityItem,
@@ -90,14 +89,6 @@ export default function PriorityManagement() {
   const [orderReady, setOrderReady] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [memoDrafts, setMemoDrafts] = useState<Record<number, string>>({});
-  const [memoSaving, setMemoSaving] = useState<Record<number, boolean>>({});
-  const [memoFeedback, setMemoFeedback] = useState<{
-    id: number;
-    error?: string;
-    message?: string;
-  }>();
-  const memoFlights = useRef(new Map<number, Promise<void>>());
   const mutation = useRef(false);
   const orderRequest = useRef(0);
   const [cancelledDesignation, setCancelledDesignation] = useState(false);
@@ -221,12 +212,7 @@ export default function PriorityManagement() {
     if (selectedApplicationId === undefined) return;
     const controller = new AbortController();
 
-    Promise.resolve(memoFlights.current.get(selectedApplicationId))
-      .then(() => {
-        if (controller.signal.aborted) return undefined;
-
-        return getPriorityInspection(selectedApplicationId, controller.signal);
-      })
+    getPriorityInspection(selectedApplicationId, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted && data)
           setDetail({ key: detailKey, data });
@@ -441,7 +427,6 @@ export default function PriorityManagement() {
 
     try {
       await setPriorityDesignation(ids, !cancel);
-      await Promise.all(ids.map((id) => memoFlights.current.get(id)));
       setSelection({ key: listKey, ids: [] });
       setCancelledDesignation(cancel);
       setRevision((value) => value + 1);
@@ -455,51 +440,6 @@ export default function PriorityManagement() {
       mutation.current = false;
       setBusy(false);
     }
-  }
-
-  async function saveMemo() {
-    const id = selected?.applicationId;
-
-    if (!id || !selected) return;
-    if (memoFlights.current.has(id)) return memoFlights.current.get(id);
-    const value = memoDrafts[id];
-
-    if (value === undefined || value === selected.memo) return;
-
-    setMemoSaving((current) => ({ ...current, [id]: true }));
-    setMemoFeedback({ id, message: "메모를 저장하는 중입니다." });
-    const flight = (async () => {
-      try {
-        const saved = await savePriorityInternalMemo(id, value);
-
-        setDetail((current) =>
-          current?.data?.applicationId === id
-            ? {
-                ...current,
-                data: { ...current.data, internalMemo: saved.internalMemo },
-              }
-            : current,
-        );
-        setMemoDrafts((current) => {
-          if (current[id] !== value) return current;
-          const next = { ...current };
-
-          delete next[id];
-
-          return next;
-        });
-        setMemoFeedback({ id, message: "메모가 저장되었습니다." });
-      } catch (cause) {
-        setMemoFeedback({ id, error: priorityError(cause) });
-      } finally {
-        memoFlights.current.delete(id);
-        setMemoSaving((current) => ({ ...current, [id]: false }));
-      }
-    })();
-
-    memoFlights.current.set(id, flight);
-
-    return flight;
   }
 
   function closeModal() {
@@ -535,15 +475,6 @@ export default function PriorityManagement() {
           </button>
         </p>
       )}
-      {memoFeedback?.id === selected?.applicationId && memoFeedback?.error && (
-        <p role="alert">{memoFeedback.error}</p>
-      )}
-      {memoFeedback?.id === selected?.applicationId &&
-        memoFeedback?.message && (
-          <p role="status" className="sr-only">
-            {memoFeedback.message}
-          </p>
-        )}
       {loading && <p role="status">우선점검 목록을 불러오는 중입니다.</p>}
       {!loading &&
         selectedApplicationId !== undefined &&
@@ -592,26 +523,7 @@ export default function PriorityManagement() {
           key={selected?.id || "empty"}
           application={selected}
           searchEmpty={searchEmpty}
-          memo={
-            selected?.applicationId
-              ? (memoDrafts[selected.applicationId] ?? selected.memo)
-              : ""
-          }
-          memoSaving={Boolean(
-            selected?.applicationId && memoSaving[selected.applicationId],
-          )}
-          onSaveMemo={() => {
-            void saveMemo();
-          }}
           busy={busy}
-          onMemo={(value) => {
-            if (selected?.applicationId) {
-              const id = selected.applicationId;
-
-              setMemoDrafts((current) => ({ ...current, [id]: value }));
-              setMemoFeedback(undefined);
-            }
-          }}
           ordering={ordering}
           onDesignate={() => {
             setBulkTargets(null);

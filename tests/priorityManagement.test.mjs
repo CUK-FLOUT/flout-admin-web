@@ -175,8 +175,19 @@ function mount(overrides = {}, requestId = "5", search = "") {
     find,
     reads,
     orders,
-    history() { return { key: historyKey, state: historyState, search: params.toString() }; },
-    restoreHistory(value) { historyKey = value.key; historyState = value.state; params = new URLSearchParams(value.search); dirty = true; },
+    history() {
+      return {
+        key: historyKey,
+        state: historyState,
+        search: params.toString(),
+      };
+    },
+    restoreHistory(value) {
+      historyKey = value.key;
+      historyState = value.state;
+      params = new URLSearchParams(value.search);
+      dirty = true;
+    },
     setSearch(value) {
       params = new URLSearchParams(value);
       historyKey++;
@@ -200,31 +211,30 @@ test("현재 목록에 없는 상세도 별도 조회한 지정 상태를 사용
   assert.equal(selected.designationKnown, true);
 });
 
-test("지정 후 상세 재조회는 진행 중인 메모 PATCH 완료를 기다린다", async () => {
-  const patch = deferred();
-  let memo = "이전 메모",
-    details = 0;
+test("담당자 메모는 상세 응답을 표시하며 지정 후 재조회도 PATCH 없이 반영한다", async () => {
+  let memo = "기존 담당자 메모",
+    writes = 0;
   const h = mount({
-    getPriorityInspection: async () => {
-      details++;
-      return { ...detail, internalMemo: memo };
+    getPriorityInspection: async () => ({ ...detail, internalMemo: memo }),
+    savePriorityInternalMemo: async () => {
+      writes++;
+      throw new Error("조회 화면에서 저장 금지");
     },
-    savePriorityInternalMemo: () => patch.promise,
+    setPriorityDesignation: async () => {
+      memo = "서버에서 갱신한 메모";
+    },
   });
   await h.flush();
-  h.find("PriorityDetail").onMemo("새 메모");
+  assert.equal(h.find("PriorityDetail").application.memo, "기존 담당자 메모");
+  assert.equal(h.find("PriorityDetail").onMemo, undefined);
+  assert.equal(h.find("PriorityDetail").onSaveMemo, undefined);
+  await h.find("PriorityModals").onDesignate();
   await h.flush();
-  h.find("PriorityDetail").onSaveMemo();
-  await h.flush();
-  const designation = h.find("PriorityModals").onDesignate();
-  await h.flush();
-  assert.equal(details, 1);
-  memo = "새 메모";
-  patch.resolve({ applicationId: 5, internalMemo: memo });
-  await designation;
-  await h.flush();
-  assert.equal(details, 2);
-  assert.equal(h.find("PriorityDetail").memo, "새 메모");
+  assert.equal(
+    h.find("PriorityDetail").application.memo,
+    "서버에서 갱신한 메모",
+  );
+  assert.equal(writes, 0);
 });
 
 test("조회 중 닫기는 즉시 로딩을 해제하고 늦은 응답을 무시한다", async () => {
@@ -372,17 +382,66 @@ test("bulk submission rejects changed list or modal history without falling back
   }
 });
 
-
 test("닫은 bulk 확인 창을 뒤로 가기로 복원해도 상세 한 건으로 대체 제출하지 않는다", async () => {
   const calls = [];
-  const h = mount({ setPriorityDesignation: async (...args) => { calls.push(args); } });
+  const h = mount({
+    setPriorityDesignation: async (...args) => {
+      calls.push(args);
+    },
+  });
   await h.flush();
-  h.find("PriorityList").onToggle(5); await h.flush();
-  h.find("PriorityList").onBulkDesignate(); await h.flush();
+  h.find("PriorityList").onToggle(5);
+  await h.flush();
+  h.find("PriorityList").onBulkDesignate();
+  await h.flush();
   const previous = h.history();
-  h.find("PriorityModals").onClose(); await h.flush();
-  h.restoreHistory(previous); await h.flush();
-  await h.find("PriorityModals").onDesignate(); await h.flush();
+  h.find("PriorityModals").onClose();
+  await h.flush();
+  h.restoreHistory(previous);
+  await h.flush();
+  await h.find("PriorityModals").onDesignate();
+  await h.flush();
   assert.equal(calls.length, 0);
   assert.match(h.find("PriorityModals").error, /다시 선택/);
+});
+
+test("메모 입력란은 읽기 전용이며 편집·Enter·blur 저장 이벤트가 없다", () => {
+  const exports = {};
+  const jsx = (type, props) => ({ type, props });
+  const code = ts.transpileModule(
+    readFileSync("src/components/priority/PriorityDetail.tsx", "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
+      },
+    },
+  ).outputText;
+  vm.runInNewContext(code, {
+    exports,
+    require(name) {
+      return name === "react/jsx-runtime"
+        ? { jsx, jsxs: jsx }
+        : { default: "asset" };
+    },
+  });
+  function find(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (Array.isArray(node)) return node.map(find).find(Boolean);
+    if (node.props?.id === "priority-memo") return node.props;
+    return find(node.props?.children);
+  }
+  for (const memo of ["저장된 메모", ""]) {
+    const input = find(
+      exports.default({
+        application: { id: "5", memo },
+        searchEmpty: false,
+        ordering: false,
+      }),
+    );
+    assert.equal(input.value, memo);
+    assert.equal(input.readOnly, true);
+    for (const event of ["onChange", "onBlur", "onKeyDown"])
+      assert.equal(input[event], undefined);
+  }
 });
