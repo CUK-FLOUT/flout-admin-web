@@ -1,3 +1,4 @@
+import { loadPollingHook } from "./helpers/loadPollingHook.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -166,7 +167,8 @@ function hookHarness(overrides = {}) {
   }).outputText;
   vm.runInNewContext(source, {
     module,exports:module.exports,AbortController,
-    require(name) {
+    require: function require(name) {
+      if (name.endsWith("/usePagePolling")) return loadPollingHook(require("react"));
       if (name === "react") return {
         useState(initial) {
           const i = index++;

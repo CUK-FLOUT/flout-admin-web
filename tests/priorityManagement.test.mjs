@@ -1,3 +1,4 @@
+import { loadPollingHook } from "./helpers/loadPollingHook.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -84,7 +85,8 @@ function mount(overrides = {}, requestId = "5", search = "") {
     crypto: { randomUUID: () => `bulk-${++historyKey}` },
     URLSearchParams,
     Promise,
-    require(name) {
+    require: function require(name) {
+      if (name.endsWith("/usePagePolling")) return loadPollingHook(require("react"));
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "react")
         return {

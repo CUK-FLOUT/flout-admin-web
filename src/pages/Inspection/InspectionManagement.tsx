@@ -20,7 +20,7 @@ import {
   getInspections,
   inspectionError,
 } from "../../api/inspections";
-import type { InspectionPage } from "../../api/inspections";
+import { usePagePolling } from "../../hooks/usePagePolling";
 import { loadInspection } from "./loadInspection";
 import { inspectionRow, inspectionSearch } from "./apiModel";
 
@@ -30,11 +30,9 @@ export default function InspectionManagement() {
   const navigate = useNavigate();
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
-  const [pageData, setPageData] = useState<InspectionPage | null>(null);
   const [selected, setSelected] = useState<InspectionApplication>();
   const [storageError, setStorageError] = useState("");
   const [inspectorsError, setInspectorsError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const active = useRef(true);
@@ -63,6 +61,15 @@ export default function InspectionManagement() {
       ? undefined
       : requestId || params.get("selected") || undefined;
   const stage = params.get("stage") || "전체";
+  const list = usePagePolling({
+    queryKey: searchQuery,
+    revision,
+    paused: busy,
+    load: (signal) => getInspections(JSON.parse(searchQuery), signal),
+    errorMessage: inspectionError,
+  });
+  const pageData = list.data;
+  const loading = list.loading;
   const filtered = (pageData?.inspections || []).map(inspectionRow);
   const searchEmpty =
     filtered.length === 0 &&
@@ -93,45 +100,25 @@ export default function InspectionManagement() {
     const controller = new AbortController();
 
     async function load() {
-      setLoading(true);
       setStorageError("");
-      setPageData(null);
       setSelected(undefined);
+      if (!selectedId || !/^[1-9]\d*$/.test(selectedId)) return;
       try {
-        const page = await getInspections(
-          JSON.parse(searchQuery),
-          controller.signal,
-        );
+        const detail = await loadInspection(Number(selectedId), controller.signal);
 
-        if (controller.signal.aborted) return;
-        setPageData(page);
-        if (selectedId && /^[1-9]\d*$/.test(selectedId)) {
-          const item = page.inspections.find(
-            (row) => row.inspectionId === Number(selectedId),
-          );
-          const detail = await loadInspection(
-            Number(selectedId),
-            controller.signal,
-            item,
-          );
-
-          if (controller.signal.aborted) return;
-          setSelected({
-            ...detail,
-            ...assignments.current.get(detail.inspectionId!),
-          });
-        }
+        if (!controller.signal.aborted) setSelected({
+          ...detail,
+          ...assignments.current.get(detail.inspectionId!),
+        });
       } catch (error) {
         if (!controller.signal.aborted) setStorageError(inspectionError(error));
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     void load();
 
     return () => controller.abort();
-  }, [searchQuery, selectedId, revision]);
+  }, [selectedId, revision]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -342,13 +329,13 @@ export default function InspectionManagement() {
         </p>
       )}
 
-      {storageError && (
+      {(storageError || list.error) && (
         <p role="alert" className="text-sm text-[#a53632]">
-          {storageError}
+          {storageError || list.error}
         </p>
       )}
 
-      {storageError && (
+      {(storageError || list.error) && (
         <button type="button" onClick={() => setRevision((value) => value + 1)}>
           다시 시도
         </button>
@@ -366,7 +353,7 @@ export default function InspectionManagement() {
           total={pageData?.totalElements || 0}
           page={pageData?.page || 0}
           totalPages={pageData?.totalPages || 0}
-          loading={loading || !!storageError}
+          loading={loading || (!pageData && Boolean(list.error))}
           onPage={(page) =>
             changeParams({ page: String(page), selected: "none" })
           }

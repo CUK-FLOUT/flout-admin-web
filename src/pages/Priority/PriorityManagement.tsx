@@ -1,3 +1,4 @@
+import { usePagePolling } from "../../hooks/usePagePolling";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -20,7 +21,6 @@ import {
 } from "../../api/priorityInspections";
 import type {
   PriorityItem,
-  PriorityPage,
   PriorityDetailResponse,
 } from "../../api/priorityInspections";
 import { commitPriorityOrder } from "./orderApi";
@@ -58,11 +58,6 @@ export default function PriorityManagement() {
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
   const [revision, setRevision] = useState(0);
-  const [list, setList] = useState<{
-    key: string;
-    data?: PriorityPage;
-    error?: string;
-  }>();
   const [detail, setDetail] = useState<{
     key: string;
     data?: PriorityDetailResponse;
@@ -106,11 +101,25 @@ export default function PriorityManagement() {
   const hasFilters = Boolean(
     keyword.trim() || district || riskLevel || designated !== undefined,
   );
-  const data = list?.key === listKey ? list.data : undefined;
-  const listError = list?.key === listKey ? list.error : undefined;
-  const loading = !data && !listError;
-  const filtered = data?.applications.map(toApplication) || [];
   const checkedIds = selection.key === listKey ? selection.ids : [];
+  const list = usePagePolling({
+    queryKey: JSON.stringify([filterKey, page]),
+    revision,
+    paused: checkedIds.length > 0 || !!dialog || busy || orderLoading,
+    load: (signal) => getPriorityInspections({
+      keyword,
+      district: district || undefined,
+      riskLevel,
+      designated,
+      page,
+      size: 10,
+    }, signal),
+    errorMessage: priorityError,
+  });
+  const data = list.data;
+  const listError = list.error;
+  const loading = list.loading;
+  const filtered = data?.applications.map(toApplication) || [];
 
   if (selection.key !== listKey) setSelection({ key: listKey, ids: [] });
 
@@ -134,13 +143,26 @@ export default function PriorityManagement() {
     });
   }
 
-  const selectedRow = requestId
-    ? filtered.find((a) => a.applicationId === Number(requestId))
-    : filtered[0];
+  const selectionKey = JSON.stringify([filterKey, page]);
+  const [automaticSelection, setAutomaticSelection] = useState<{
+    key: string;
+    id?: number;
+  }>({ key: "" });
+  const automaticId = automaticSelection.key === selectionKey
+    ? automaticSelection.id ?? filtered[0]?.applicationId
+    : filtered[0]?.applicationId;
+
+  if (
+    automaticSelection.key !== selectionKey ||
+    automaticSelection.id !== automaticId
+  )
+    setAutomaticSelection({ key: selectionKey, id: automaticId });
+
+  const selectedApplicationId = requestId ? Number(requestId) : automaticId;
+  const selectedRow = filtered.find(
+    (a) => a.applicationId === selectedApplicationId,
+  );
   const selectionInList = selectedRow !== undefined;
-  const selectedApplicationId = requestId
-    ? Number(requestId)
-    : selectedRow?.applicationId;
   const detailKey = JSON.stringify([selectedApplicationId, revision]);
   const detailData = detail?.key === detailKey ? detail.data : undefined;
   const detailError = detail?.key === detailKey ? detail.error : undefined;
@@ -182,31 +204,6 @@ export default function PriorityManagement() {
 
   const modalOrder = normalizePriorityOrder(draftOrder, eligible);
   const searchEmpty = Boolean(data && !data.totalElements && hasFilters);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    getPriorityInspections(
-      {
-        keyword,
-        district: district || undefined,
-        riskLevel,
-        designated,
-        page,
-        size: 10,
-      },
-      controller.signal,
-    )
-      .then((data) => {
-        if (!controller.signal.aborted) setList({ key: listKey, data });
-      })
-      .catch((cause) => {
-        if (!controller.signal.aborted)
-          setList({ key: listKey, error: priorityError(cause) });
-      });
-
-    return () => controller.abort();
-  }, [district, riskLevel, designated, keyword, page, listKey]);
 
   useEffect(() => {
     if (selectedApplicationId === undefined) return;
@@ -484,7 +481,7 @@ export default function PriorityManagement() {
       <div className="grid items-stretch gap-4 xl:min-h-[360px] xl:flex-1 xl:grid-cols-[minmax(0,784fr)_minmax(342px,384fr)]">
         <PriorityList
           filtered={filtered}
-          loading={loading || Boolean(listError)}
+          loading={loading || (!data && Boolean(listError))}
           total={data?.totalElements || 0}
           page={data?.page ?? page}
           totalPages={data?.totalPages || 0}
