@@ -1,5 +1,5 @@
 import { getSessionGeneration } from "../../auth/session";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssignmentPanel from "../../components/inspection/AssignmentPanel";
@@ -70,6 +70,13 @@ export default function InspectionManagement() {
   });
   const pageData = list.data;
   const loading = list.loading;
+  const loadSelectedInspection = useEffectEvent((id: number, signal: AbortSignal) =>
+    loadInspection(
+      id,
+      signal,
+      pageData?.inspections.find((item) => item.inspectionId === id),
+    ),
+  );
   const filtered = (pageData?.inspections || []).map(inspectionRow);
   const searchEmpty =
     filtered.length === 0 &&
@@ -104,7 +111,7 @@ export default function InspectionManagement() {
       setSelected(undefined);
       if (!selectedId || !/^[1-9]\d*$/.test(selectedId)) return;
       try {
-        const detail = await loadInspection(Number(selectedId), controller.signal);
+        const detail = await loadSelectedInspection(Number(selectedId), controller.signal);
 
         if (!controller.signal.aborted) setSelected({
           ...detail,
