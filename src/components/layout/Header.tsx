@@ -6,7 +6,7 @@ import {
   getSessionGeneration,
   subscribeSession,
 } from "../../auth/session";
-import profile from "../../assets/layout/profile.png";
+import ProfileMenu from "./ProfileMenu";
 
 export default function Header() {
   const session = useSyncExternalStore(
@@ -73,12 +73,9 @@ export default function Header() {
 
       <span aria-hidden="true" className="h-4 w-px bg-[#f4f5f6]" />
 
-      <span className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f5f6]">
-          <img src={profile} alt="" width={24} height={24} />
-        </span>
-        {currentAccount?.profile?.name ?? session?.name ?? "운영자"}
-      </span>
+      <ProfileMenu
+        name={currentAccount?.profile?.name ?? session?.name ?? "운영자"}
+      />
     </header>
   );
 }

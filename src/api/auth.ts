@@ -1,6 +1,11 @@
 import axios from "axios";
 import { authClient } from "./authTransport";
-import { getSession, parseSession, setSession } from "../auth/session";
+import {
+  getSession,
+  getSessionGeneration,
+  parseSession,
+  setSession,
+} from "../auth/session";
 import type { AdminSession } from "../auth/session";
 import { requestGoogleIdToken } from "../auth/google";
 
@@ -123,6 +128,11 @@ let refreshFlight: {
 export function refreshSession(): Promise<AdminSession> {
   const previous = getSession();
 
+  if (logoutFlight?.generation === getSessionGeneration())
+    return Promise.reject(
+      new AuthenticationError("로그아웃 처리 중입니다.", 409),
+    );
+
   if (!previous || Date.parse(previous.refreshExpiresAt) <= Date.now()) {
     setSession(null);
 
@@ -160,6 +170,46 @@ export function refreshSession(): Promise<AdminSession> {
     });
 
   refreshFlight = { session: previous, promise };
+
+  return promise;
+}
+
+let logoutFlight: { generation: number; promise: Promise<void> } | null = null;
+
+export function logoutAdmin(): Promise<void> {
+  const previous = getSession();
+  const generation = getSessionGeneration();
+
+  if (!previous) return Promise.resolve();
+  if (logoutFlight?.generation === generation) return logoutFlight.promise;
+  const pendingRefresh =
+    refreshFlight?.session === previous ? refreshFlight.promise : undefined;
+  const promise = Promise.resolve()
+    .then(async () => {
+      // A rotation consumes the old refresh token. Revoke the newly issued one.
+      if (pendingRefresh) await pendingRefresh;
+      if (getSessionGeneration() !== generation) return;
+      const current = getSession();
+
+      if (!current) return;
+      const response = await authClient.post<void>("/api/auth/logout", {
+        refreshToken: current.refreshToken,
+      });
+
+      if (response.status !== 204)
+        throw new AuthenticationError(
+          "로그아웃 응답을 확인하지 못했습니다. 다시 시도해 주세요.",
+        );
+      if (getSessionGeneration() === generation) setSession(null);
+    })
+    .catch((error: unknown) => {
+      throw authenticationError(error);
+    })
+    .finally(() => {
+      if (logoutFlight?.promise === promise) logoutFlight = null;
+    });
+
+  logoutFlight = { generation, promise };
 
   return promise;
 }
