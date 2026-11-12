@@ -4,7 +4,6 @@ import { constructionStatuses } from "./types";
 import type {
   ConstructionCandidate,
   ConstructionRecord,
-  EditableConstructionStatus,
   InstallationDraft,
 } from "./types";
 
@@ -261,19 +260,6 @@ export function publishInstallation(
     published,
     draft: { ...structuredClone(draft), date: record.date, time: record.time },
   });
-}
-
-export function changeConstructionStatus(
-  record: ConstructionRecord,
-  status: EditableConstructionStatus,
-): ConstructionRecord {
-  assertEditable(record);
-  if (!record.date || !record.time)
-    throw new Error("배정·일정을 먼저 저장해 주세요.");
-  if (status === "완료" && !record.published)
-    throw new Error("설치 결과·완료 사진을 먼저 등록해 주세요.");
-
-  return next(record, { status });
 }
 
 export function finishConstruction(

@@ -375,9 +375,6 @@ export default function InspectionManagement() {
             application={selected}
             busy={busy}
             onSave={save}
-            onRefresh={() => {
-              if (!saving.current) setRevision((value) => value + 1);
-            }}
           />
         ) : (
           <section
