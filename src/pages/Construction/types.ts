@@ -6,7 +6,6 @@ export const constructionStatuses = [
   "전체 완료",
 ] as const;
 export type ConstructionStatus = (typeof constructionStatuses)[number];
-export type EditableConstructionStatus = "예정" | "진행" | "완료";
 export type ConstructionTab = "전체" | "예정" | "진행" | "완료";
 export type ConstructionPhoto = {
   id: string;
@@ -60,8 +59,6 @@ export const constructionDialogKinds = [
   "registered",
   "registered-support",
   "schedule-saved",
-  "status-confirm",
-  "status-saved",
   "installation",
   "draft-saved",
   "published",

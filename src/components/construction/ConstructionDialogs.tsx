@@ -55,8 +55,6 @@ export default function ConstructionDialogs(props: ConstructionDialogProps) {
     kind === "registered-support" ||
     kind === "schedule-saved" ||
     kind === "draft-saved" ||
-    kind === "status-confirm" ||
-    kind === "status-saved" ||
     kind === "overall-saved"
   ) {
     return <ConstructionStatusDialogs {...detailProps} />;

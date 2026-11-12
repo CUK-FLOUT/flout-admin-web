@@ -9,7 +9,6 @@ import {
   getAssignmentDraft,
 } from "../../pages/Inspection/mockData";
 import { CalendarIcon, ClockIcon } from "./InspectionIcons";
-import StatusDropdown from "./StatusDropdown";
 import { inspectionCheckbox, inspectionDate, inspectionPanel } from "./styles";
 import person from "../../assets/inspection/person.svg";
 import { getSession } from "../../auth/session";
@@ -23,7 +22,6 @@ type Props = {
     kind: InspectionDialogState,
   ) => Promise<boolean>;
   busy: boolean;
-  onRefresh: () => void;
 };
 const input =
   "h-10 w-full min-w-0 rounded-md border border-[#c8d0d7] bg-white px-3 text-[13px] font-medium leading-[19px]";
@@ -31,7 +29,6 @@ const input =
 export default function AssignmentPanel({
   application: a,
   onSave,
-  onRefresh,
   busy,
 }: Props) {
   const [draft, setDraft] = useState(() => ({
@@ -175,29 +172,6 @@ export default function AssignmentPanel({
           className={`${input} h-[42px] font-normal`}
         />
       </label>
-      <div className="flex shrink-0 flex-col gap-[6px]">
-        <label
-          htmlFor="inspection-status"
-          className="text-[13px] font-bold leading-[19px]"
-        >
-          점검 상태
-        </label>
-        <div className="flex gap-2">
-          <StatusDropdown
-            value={a.status}
-            disabled
-            onChange={(value) => update("status", value)}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRefresh}
-            className="h-10 w-[88px] shrink-0 rounded-md bg-[#234f73] px-3 text-sm font-semibold text-white"
-          >
-            상태 확인
-          </button>
-        </div>
-      </div>
       <label className="flex shrink-0 items-center gap-2 text-[13px] font-medium leading-[19px]">
         <input
           type="checkbox"

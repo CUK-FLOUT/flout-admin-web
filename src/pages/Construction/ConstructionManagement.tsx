@@ -152,9 +152,7 @@ function ConstructionWorkspace({
   }, []);
   const requested = params.get("dialog");
   const kind =
-    constructionDialogKinds.includes(requested as ConstructionDialogKind) &&
-    requested !== "status-confirm" &&
-    requested !== "status-saved"
+    constructionDialogKinds.includes(requested as ConstructionDialogKind)
       ? (requested as ConstructionDialogKind)
       : null;
   const candidate =
@@ -725,7 +723,6 @@ function ConstructionWorkspace({
           candidate={candidate}
           candidates={candidates}
           draft={draft}
-          target=""
           checked={checked}
           error={data.error}
           busy={busy || restoring}
