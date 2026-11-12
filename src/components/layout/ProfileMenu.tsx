@@ -26,6 +26,7 @@ export default function ProfileMenu({ name }: { name: string }) {
     if (!open) return;
     item.current?.focus();
     const outside = (event: PointerEvent) => {
+      if (submitting.current) return;
       if (
         event.target instanceof Node &&
         !container.current?.contains(event.target)
@@ -70,6 +71,7 @@ export default function ProfileMenu({ name }: { name: string }) {
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
+          if (submitting.current) return;
           setOpen(false);
           trigger.current?.focus();
         } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -79,7 +81,8 @@ export default function ProfileMenu({ name }: { name: string }) {
         }
       }}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        if (!submitting.current && !event.currentTarget.contains(event.relatedTarget))
+          setOpen(false);
       }}
     >
       <button
@@ -87,9 +90,12 @@ export default function ProfileMenu({ name }: { name: string }) {
         type="button"
         aria-label={`${name} 계정 메뉴`}
         aria-haspopup="menu"
+        aria-disabled={busy}
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!submitting.current) setOpen((value) => !value);
+        }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
