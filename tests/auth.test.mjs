@@ -941,3 +941,120 @@ test("focus keeps the existing expiry check and does not create concurrent retri
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(h.timers.size, 0);
 });
+
+test("logout posts the refresh token without Authorization, accepts empty 204 and clears both tokens", async () => {
+  const h = harness(session());
+  h.http.defaults.adapter = async (config) => {
+    assert.equal(config.url, "/api/auth/logout");
+    assert.equal(config.method, "post");
+    assert.equal(config.headers.get("Authorization"), undefined);
+    assert.deepEqual(JSON.parse(config.data), { refreshToken: "test-refresh-1" });
+    return { ...ok(config, null), status: 204, data: "" };
+  };
+  await h.auth.logoutAdmin();
+  assert.equal(h.store.getSession(), null);
+  assert.equal(h.storage.has(key), false);
+});
+
+test("duplicate logout clicks share one request and cannot start a new refresh", async () => {
+  const h = harness(session());
+  let finish, calls = 0;
+  h.http.defaults.adapter = (config) => {
+    calls++;
+    return new Promise((resolve) => { finish = () => resolve({ ...ok(config, null), status: 204, data: "" }); });
+  };
+  const first = h.auth.logoutAdmin();
+  const second = h.auth.logoutAdmin();
+  assert.equal(first, second);
+  await new Promise(setImmediate);
+  await assert.rejects(h.auth.refreshSession(), /로그아웃 처리 중/);
+  assert.equal(calls, 1);
+  finish();
+  await first;
+  assert.equal(h.store.getSession(), null);
+});
+
+test("logout waits for a running rotation and revokes the newly issued refresh token", async () => {
+  const h = harness(session());
+  let rotate;
+  const requests = [];
+  h.http.defaults.adapter = (config) => {
+    requests.push(config.url);
+    if (config.url.endsWith("/refresh")) return new Promise((resolve) => {
+      rotate = () => resolve(ok(config, session({ accessToken: "rotated-access", refreshToken: "rotated-refresh" })));
+    });
+    assert.deepEqual(JSON.parse(config.data), { refreshToken: "rotated-refresh" });
+    return Promise.resolve({ ...ok(config, null), status: 204, data: "" });
+  };
+  const refresh = h.auth.refreshSession();
+  await new Promise(setImmediate);
+  const logout = h.auth.logoutAdmin();
+  await new Promise(setImmediate);
+  assert.deepEqual(requests, ["/api/auth/refresh"]);
+  rotate();
+  await Promise.all([refresh, logout]);
+  assert.deepEqual(requests, ["/api/auth/refresh", "/api/auth/logout"]);
+  assert.equal(h.store.getSession(), null);
+});
+
+test("logout failures keep the session and release the request lock for retry", async () => {
+  for (const status of [400, 401, 403, 500, undefined]) {
+    const h = harness(session());
+    h.http.defaults.adapter = async (config) => {
+      throw new axios.AxiosError("network", "ERR_NETWORK", config, null, status ? {
+        data: { message: "로그아웃 실패" }, status, statusText: "Failure", headers: {}, config,
+      } : undefined);
+    };
+    await assert.rejects(h.auth.logoutAdmin());
+    assert.equal(h.store.getSession().refreshToken, "test-refresh-1");
+    h.http.defaults.adapter = async (config) => ({ ...ok(config, null), status: 204, data: "" });
+    await h.auth.logoutAdmin();
+    assert.equal(h.store.getSession(), null);
+  }
+});
+
+test("late logout responses never clear a newer login session", async () => {
+  const h = harness(session());
+  let finish;
+  h.http.defaults.adapter = (config) => new Promise((resolve) => {
+    finish = () => resolve({ ...ok(config, null), status: 204, data: "" });
+  });
+  const pending = h.auth.logoutAdmin();
+  await new Promise(setImmediate);
+  h.store.setSession(session({ accessToken: "new-login", refreshToken: "new-login-refresh" }));
+  finish();
+  await pending;
+  assert.equal(h.store.getSession().accessToken, "new-login");
+  assert.equal(JSON.parse(h.storage.get(key)).refreshToken, "new-login-refresh");
+});
+
+test("logout with no session makes no request, while expired access does not trigger refresh", async () => {
+  const empty = harness();
+  empty.http.defaults.adapter = () => assert.fail("No request expected");
+  await empty.auth.logoutAdmin();
+  const h = harness(session({ expiresAt: new Date(Date.now() - 1000).toISOString() }));
+  h.http.defaults.adapter = async (config) => {
+    assert.equal(config.url, "/api/auth/logout");
+    return { ...ok(config, null), status: 204, data: "" };
+  };
+  await h.auth.logoutAdmin();
+  assert.equal(h.store.getSession(), null);
+});
+
+test("failed token rotation during logout does not revoke an uncertain token or strand the request lock", async () => {
+  const h = harness(session());
+  let reject;
+  h.http.defaults.adapter = (config) => new Promise((_, no) => {
+    reject = () => no(new axios.AxiosError("offline", "ERR_NETWORK", config));
+  });
+  const refresh = h.auth.refreshSession();
+  await new Promise(setImmediate);
+  const logout = h.auth.logoutAdmin();
+  const settled = Promise.allSettled([refresh, logout]);
+  reject();
+  assert((await settled).every((result) => result.status === "rejected"));
+  assert(h.store.getSession());
+  h.http.defaults.adapter = async (config) => ({ ...ok(config, null), status: 204, data: "" });
+  await h.auth.logoutAdmin();
+  assert.equal(h.store.getSession(), null);
+});
