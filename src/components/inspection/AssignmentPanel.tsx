@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type {
   AssignmentDraft,
   InspectionApplication,
@@ -13,6 +13,7 @@ import { inspectionCheckbox, inspectionDate, inspectionPanel } from "./styles";
 import person from "../../assets/inspection/person.svg";
 import { getSession } from "../../auth/session";
 import { validateAssignment } from "../../pages/Inspection/apiModel";
+import { inspectionResultPath } from "../../pages/Inspection/resultNavigation";
 import type { InspectionDialogState } from "./InspectionDialog";
 
 type Props = {
@@ -31,6 +32,7 @@ export default function AssignmentPanel({
   onSave,
   busy,
 }: Props) {
+  const [params] = useSearchParams();
   const [draft, setDraft] = useState(() => ({
     ...getAssignmentDraft(a),
     visitTime: a.visitTime,
@@ -202,7 +204,7 @@ export default function AssignmentPanel({
           배정·일정 저장
         </button>
         <Link
-          to={`/inspection/${a.inspectionId}/results`}
+          to={inspectionResultPath(a.inspectionId, params)}
           className="flex h-[42px] items-center justify-center rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5"
         >
           점검 결과 등록

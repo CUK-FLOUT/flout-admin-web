@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { inspectionManagementPath } from "../Inspection/resultNavigation";
 import { loadInspection } from "../Inspection/loadInspection";
 import { inspectionError } from "../../api/inspections";
 import type { InspectionApplication } from "../Inspection/mockData";
@@ -14,6 +15,8 @@ import emptyDocument from "../../assets/priority/empty-document.svg";
 
 export default function InspectionResults() {
   const { requestId } = useParams();
+  const [params] = useSearchParams();
+  const returnTo = inspectionManagementPath(requestId, params);
   const [application, setApplication] = useState<InspectionApplication>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,7 +47,13 @@ export default function InspectionResults() {
 
     return () => controller.abort();
   }, [requestId, revision]);
-  if (loading) return <p role="status">점검 정보를 불러오는 중…</p>;
+  if (loading)
+    return (
+      <div>
+        <InspectionReturnLink to={returnTo} />
+        <p role="status">점검 정보를 불러오는 중…</p>
+      </div>
+    );
 
   if (!application)
     return (
@@ -56,19 +65,21 @@ export default function InspectionResults() {
         <button type="button" onClick={() => setRevision((value) => value + 1)}>
           다시 시도
         </button>
-        <Link to="/inspection" className={resultSecondary}>
-          현장점검 목록으로
-        </Link>
+        <InspectionReturnLink to={inspectionManagementPath(undefined, params)} />
       </section>
     );
 
-  return <ResultEditor key={application.id} application={application} />;
+  return (
+    <ResultEditor key={application.id} application={application} returnTo={returnTo} />
+  );
 }
 
 function ResultEditor({
   application: a,
+  returnTo,
 }: {
   application: InspectionApplication;
+  returnTo: string;
 }) {
   const editor = useInspectionResultEditor(a);
   const {
@@ -81,6 +92,7 @@ function ResultEditor({
     draft,
     error,
     busy,
+    saving,
     editingPublished,
     readOnly,
     content,
@@ -97,6 +109,7 @@ function ResultEditor({
     <div
       className={`w-full min-w-0 shrink-0 pb-[10px] font-[family-name:Inter,Pretendard,sans-serif] text-[#0f172a] ${expanded ? "pt-[2px]" : "pt-px"} ${inspectionFocus} [&_button:enabled]:cursor-pointer`}
     >
+      <InspectionReturnLink to={returnTo} blocked={saving} />
       <div className="flex h-10 items-center justify-between gap-4">
         <h1 className="text-[30px] font-bold leading-[38px] max-sm:text-2xl">
           {readOnly
@@ -179,5 +192,28 @@ function ResultEditor({
         />
       )}
     </div>
+  );
+}
+
+function InspectionReturnLink({
+  to,
+  blocked = false,
+}: {
+  to: string;
+  blocked?: boolean;
+}) {
+  return (
+    <Link
+      to={to}
+      aria-disabled={blocked}
+      tabIndex={blocked ? -1 : undefined}
+      onClick={(event) => {
+        if (blocked) event.preventDefault();
+      }}
+      className="mb-3 inline-flex min-h-10 items-center gap-2 rounded text-sm font-medium text-[#234f73] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] aria-disabled:cursor-wait aria-disabled:text-[#64748b]"
+    >
+      <span aria-hidden="true">←</span>
+      현장점검 관리로 돌아가기
+    </Link>
   );
 }

@@ -272,6 +272,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     draft,
     error,
     busy,
+    saving,
     loading,
     loaded,
     retry: () => {
