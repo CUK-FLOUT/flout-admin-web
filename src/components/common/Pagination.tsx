@@ -1,5 +1,4 @@
 type Props = {
-  /** UI page numbers start at 1; callers convert API indexes when needed. */
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -26,8 +25,10 @@ export default function Pagination({
     onPageChange(next);
   };
 
-  const button = "grid size-7 shrink-0 place-items-center rounded-md border text-[13px] leading-[18px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] enabled:cursor-pointer disabled:cursor-default disabled:opacity-40";
-  const inactive = "border-[#c8d0d7] bg-white text-[#202b36] enabled:hover:bg-[#f4f5f6]";
+  const button =
+    "grid size-7 shrink-0 place-items-center rounded-md border text-[13px] leading-[18px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73] enabled:cursor-pointer disabled:cursor-default disabled:opacity-40";
+  const inactive =
+    "border-[#c8d0d7] bg-white text-[#202b36] enabled:hover:bg-[#f4f5f6]";
 
   return (
     <nav
