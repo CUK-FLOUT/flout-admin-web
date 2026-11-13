@@ -147,16 +147,6 @@ function InfrastructureList({
         <h1 className="text-[30px] font-bold leading-9">
           지역·공공 인프라 관리
         </h1>
-        <button
-          onClick={() =>
-            data.setError(
-              "지역 문제는 현장점검 결과 등록 화면에서 원본 점검과 연결해 등록해 주세요.",
-            )
-          }
-          className={infrastructureSecondary + " h-10 px-4"}
-        >
-          지역 문제 등록
-        </button>
       </div>
       <form
         onSubmit={(e) => {

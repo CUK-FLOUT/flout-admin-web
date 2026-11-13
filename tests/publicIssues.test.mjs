@@ -666,8 +666,8 @@ test("review requests block duplicates, preserve input/photos on failure and nev
     .panel()
     .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   const panel = w.panel();
-  panel.onSave(true);
-  panel.onSave(true);
+  panel.onSave();
+  panel.onSave();
   assert.equal(calls, 1);
   assert.equal(w.panel().busy, true);
   pending.reject(new Error("저장 실패"));
@@ -744,7 +744,7 @@ test("missing review or failed completion never uploads photos or marks an issue
 test("late mutation success never changes an inactive workspace or navigates away from another page", async () => {
   const pending = deferred();
   const w = reviewWorkspace({ savePublicIssueReview: () => pending.promise });
-  w.panel().onSave(true);
+  w.panel().onSave();
   w.unmount();
   pending.resolve({
     publicIssueId: 9,
@@ -1043,4 +1043,21 @@ test("completed issue without an action ID only reconciles and never posts compl
   assert.equal(lookups, 2);
   assert.equal(w.requests.length, 0);
   w.unmount();
+});
+
+
+test("review content save preserves server review status and sends edited content", async () => {
+  for (const reviewStatus of ["PENDING", "UNDER_REVIEW", "INSPECTION_REQUIRED"]) {
+    const w = reviewWorkspace({}, { ...detail, review: { ...detail.review, reviewStatus } });
+    w.panel().onUpdate("target", "수정한 대상");
+    w.panel().onUpdate("requirements", "확인할 점검 내용");
+    await w.panel().onSave();
+    assert.equal(w.requests.length, 1);
+    assert.equal(w.requests[0][0], "review");
+    assert.equal(w.requests[0][2].reviewStatus, reviewStatus);
+    assert.equal(w.requests[0][2].reviewTarget, "수정한 대상");
+    assert.equal(w.requests[0][2].inspectionNotes, "확인할 점검 내용");
+    assert.equal(w.dialog().kind, "status-saved");
+    w.unmount();
+  }
 });

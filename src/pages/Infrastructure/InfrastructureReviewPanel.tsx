@@ -1,7 +1,6 @@
 import type { RefObject } from "react";
 
 import InfrastructureImage from "../../components/infrastructure/InfrastructureImage";
-import InfrastructureSelect from "../../components/infrastructure/InfrastructureSelect";
 import {
   infrastructureCard,
   infrastructureInput,
@@ -20,7 +19,7 @@ type Props = {
     key: K,
     value: FacilityDraft[K],
   ) => void;
-  onSave: (status: boolean) => void;
+  onSave: () => void;
   onComplete: () => void;
   onUpload: (files: File[]) => Promise<void>;
 };
@@ -67,15 +66,6 @@ export default function InfrastructureReviewPanel({
           >
             점검 필요사항
           </label>
-          {!readOnly && (
-            <button
-              disabled={busy}
-              onClick={() => save(false)}
-              className="text-xs leading-[21px] text-[#234f73] underline underline-offset-2"
-            >
-              점검 필요사항 등록
-            </button>
-          )}
         </div>
         <textarea
           id="facility-requirements"
@@ -87,25 +77,14 @@ export default function InfrastructureReviewPanel({
             " mt-[11px] h-[68px] min-h-[68px] resize-y p-3 text-sm leading-[21px]"
           }
         />
-        <div className="mt-[19px] grid grid-cols-2 gap-[10px]">
-          <InfrastructureSelect
-            label="공공시설 검토 상태"
-            value={readOnly ? issue.status : draft.status}
-            options={["검토 대기", "검토 중", "점검 필요"]}
-            review
-            disabled={readOnly || busy}
-            onChange={(value) =>
-              update("status", value as FacilityDraft["status"])
-            }
-          />
-          <button
-            disabled={readOnly || busy}
-            onClick={() => save(true)}
-            className={infrastructurePrimary + " h-[46px] rounded-md"}
-          >
-            상태 저장
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={readOnly || busy}
+          onClick={save}
+          className={infrastructurePrimary + " mt-[19px] h-[46px] w-full rounded-md text-base"}
+        >
+          검토 내용 저장
+        </button>
       </section>
       <section className="min-h-[360px] border-t-[0.75px] border-[#c8d0d7] px-[15.25px] pt-[23.25px] pb-[30px]">
         <div className="flex items-center justify-between gap-2">

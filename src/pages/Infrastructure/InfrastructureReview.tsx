@@ -175,14 +175,12 @@ function FacilityWorkspace({
     data.setError("");
   }
 
-  async function save(changeStatus: boolean) {
+  async function save() {
     if (submitting.current || readOnly) return;
-    const reviewStatus = changeStatus
-      ? publicReviewStatus(draft.status)
-      : issue.reviewState || publicReviewStatus(draft.status);
+    const reviewStatus = issue.reviewState || publicReviewStatus(draft.status);
 
     if (reviewStatus === "ACTION_IN_PROGRESS" || reviewStatus === "COMPLETED") {
-      data.setError("검토 상태를 선택한 뒤 상태 저장을 눌러 주세요.");
+      data.setError("현재 조치 상태에서는 검토 내용을 저장할 수 없습니다.");
 
       return;
     }
@@ -207,7 +205,7 @@ function FacilityWorkspace({
       data.applyReview(saved);
       data.refresh();
       submitting.current = false;
-      dialog(changeStatus ? "status-saved" : "requirements-saved");
+      dialog("status-saved");
     } catch (cause) {
       if (active.current) data.setError(publicIssueError(cause));
     } finally {
