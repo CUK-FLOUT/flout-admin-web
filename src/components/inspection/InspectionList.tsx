@@ -1,6 +1,6 @@
 import Pagination from "../common/Pagination";
-import type { InspectionApplication } from "../../pages/Inspection/mockData";
-import { formatDate } from "../../pages/Inspection/mockData";
+import type { InspectionApplication } from "../../pages/Inspection/types";
+import { formatDate } from "../../pages/Inspection/formatDate";
 import { inspectionCheckbox, inspectionPanel } from "./styles";
 import InspectionEmptyContent from "./InspectionEmptyContent";
 

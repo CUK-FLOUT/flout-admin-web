@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { InspectionApplication } from "../Inspection/mockData";
+import type { InspectionApplication } from "../Inspection/types";
 import { getSessionGeneration } from "../../auth/session";
 import {
   createPublicIssue,

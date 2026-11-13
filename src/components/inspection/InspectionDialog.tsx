@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import type {
   EditableStatus,
   InspectionApplication,
-} from "../../pages/Inspection/mockData";
-import { formatDate } from "../../pages/Inspection/mockData";
+} from "../../pages/Inspection/types";
+import { formatDate } from "../../pages/Inspection/formatDate";
 import { inspectionFocus } from "./styles";
 
 export type InspectionDialogState =

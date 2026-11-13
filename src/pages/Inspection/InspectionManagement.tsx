@@ -9,8 +9,8 @@ import InspectionList from "../../components/inspection/InspectionList";
 import InspectionStatusTabs from "../../components/inspection/InspectionStatusTabs";
 import InspectionDialog from "../../components/inspection/InspectionDialog";
 import type { InspectionDialogState } from "../../components/inspection/InspectionDialog";
-import { inspectionStatuses } from "./mockData";
-import type { EditableStatus, InspectionApplication } from "./mockData";
+import { inspectionStatuses } from "./constants";
+import type { EditableStatus, InspectionApplication } from "./types";
 import {
   inspectionFocus,
   inspectionPanel,
