@@ -388,7 +388,7 @@ test("list and detail load independently, old detail responses are ignored, refr
   assert.equal(detailReads.at(-1).args[1].aborted, true);
 });
 
-async function workspace(record, apiOverrides = {}) {
+async function workspace(record, apiOverrides = {}, storageOverrides = {}) {
   const react = { useEffect() {}, useRef: () => ({ current: false }) };
   const requests = [],
     navigations = [];
@@ -449,6 +449,7 @@ async function workspace(record, apiOverrides = {}) {
     "./draftStorage": {
       readConstructionDraft: async () => null,
       writeConstructionDraft: async () => {},
+      ...storageOverrides,
     },
     "./model": { displayDate: (value) => value },
     "../../components/construction/styles": {
@@ -511,12 +512,22 @@ test("workspace prevents double schedule submission and preserves draft on API f
   ready.onSchedule();
   assert.equal(saves, 1);
   assert.equal(w.panel().busy, true);
+  function selectionButton(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (node.type === "button" && node.props["aria-label"]?.endsWith("시공 선택")) return node.props;
+    return [node.props?.children].flat(Infinity).map(selectionButton).find(Boolean);
+  }
+  const selection = selectionButton(w.render());
+  assert.equal(selection.disabled, true);
+  selection.onClick();
+  assert.equal(w.navigations.length, 0);
   pending.reject(new Error("일정 저장 거절"));
   await tick();
   assert.equal(w.panel().busy, false);
   assert.equal(w.panel().draft.date, "2099-12-31");
   assert.equal(w.data.refreshes, 0);
   assert.equal(w.data.error, "일정 저장 거절");
+  assert.equal(selectionButton(w.render()).disabled, false);
   w.unmount();
 });
 
@@ -1199,4 +1210,36 @@ test("consent metadata update preserves locally edited schedule and newly upload
   assert.equal(state.draft.note, "입력 내용");
   assert.equal(state.draft.photos[0].id, "uploaded");
   hook.unmount();
+});
+
+
+test("draft restore failure allows selecting another construction while preserving write protection", async () => {
+  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord(detail);
+  let localWrites = 0, serverWrites = 0;
+  const w = await workspace(record, {
+    saveConstructionSchedule: async () => { serverWrites++; },
+  }, {
+    readConstructionDraft: async () => { throw new Error("저장소 읽기 실패"); },
+    writeConstructionDraft: async () => { localWrites++; },
+  });
+  const panel = w.panel();
+  assert.equal(panel.loading, false);
+  assert.equal(panel.busy, true);
+  assert.match(w.data.error, /초안을 복원하지 못했습니다.*저장소 읽기 실패/);
+  panel.onChange({ ...panel.draft, date: "2099-12-31", time: "10:00" });
+  w.panel().onSchedule();
+  await tick();
+  assert.equal(localWrites, 0);
+  assert.equal(serverWrites, 0);
+  w.data.records.push({ ...record, id: "92", receiptNo: "000006" });
+  function selectionButton(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (node.type === "button" && node.props["aria-label"]?.startsWith("000006 ·")) return node.props;
+    return [node.props?.children].flat(Infinity).map(selectionButton).find(Boolean);
+  }
+  const selection = selectionButton(w.render());
+  assert.equal(selection.disabled, false);
+  selection.onClick();
+  assert.equal(w.navigations.at(-1).pathname, "/construction/92");
+  w.unmount();
 });

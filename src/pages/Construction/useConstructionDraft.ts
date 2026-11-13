@@ -29,6 +29,7 @@ export function useConstructionDraft(
     record,
     draft: record ? structuredClone(record.draft) : null,
     ready: false,
+    restoreFailed: false,
   });
   const photoUrls = useRef(new Set<string>());
 
@@ -65,20 +66,23 @@ export function useConstructionDraft(
         setState((current) => {
           if (!current.record) return current;
           if (!saved || current.record.status === "전체 완료")
-            return { ...current, ready: true };
+            return { ...current, ready: true, restoreFailed: false };
 
           return {
             ...current,
             ready: true,
+            restoreFailed: false,
             draft: mergeConstructionDraft(current.record, { ...saved, photos }),
           };
         });
       })
       .catch((cause) => {
-        if (active)
+        if (active) {
+          setState((current) => ({ ...current, ready: false, restoreFailed: true }));
           onError(
             "시공 초안을 복원하지 못했습니다. " + constructionError(cause),
           );
+        }
       });
 
     return () => {
@@ -122,7 +126,8 @@ export function useConstructionDraft(
   return {
     draft: state.draft,
     setDraft,
-    restoring: !!id && !state.ready,
+    restoring: !!id && !state.ready && !state.restoreFailed,
+    restoreFailed: state.restoreFailed,
     photoUrls,
   };
 }

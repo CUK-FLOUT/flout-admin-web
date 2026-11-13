@@ -342,7 +342,7 @@ function SupportManagementScreen() {
                       role="row"
                       aria-selected={selected?.apiId === a.apiId}
                       className={
-                        "grid min-h-[62px] grid-cols-[minmax(181px,181fr)_minmax(194px,194fr)_minmax(190px,190fr)_95px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
+                        "relative grid min-h-[62px] grid-cols-[minmax(181px,181fr)_minmax(194px,194fr)_minmax(190px,190fr)_95px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
                         (selected?.apiId === a.apiId
                           ? "bg-[#f4f5f6]"
                           : "bg-white")
@@ -353,7 +353,7 @@ function SupportManagementScreen() {
                           type="button"
                           onClick={() => change(returnQuery(), String(a.apiId))}
                           aria-label={a.id + " · " + a.resident + " 신청 선택"}
-                          className="py-5 text-left after:absolute"
+                          className="py-5 text-left after:absolute after:inset-0 after:content-['']"
                         >
                           {a.id + " · " + a.resident}
                         </button>

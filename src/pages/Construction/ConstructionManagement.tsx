@@ -133,10 +133,11 @@ function ConstructionWorkspace({
 }: Props) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { draft, setDraft, restoring, photoUrls } = useConstructionDraft(
+  const { draft, setDraft, restoring, restoreFailed, photoUrls } = useConstructionDraft(
     a,
     data.setError,
   );
+  const draftBlocked = restoring || restoreFailed;
   const [candidateId, setCandidateId] = useState(params.get("candidate") || "");
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -212,7 +213,7 @@ function ConstructionWorkspace({
     action: () => Promise<unknown>,
     success?: ConstructionDialogKind,
   ) {
-    if (submitting.current || restoring || !a) return;
+    if (submitting.current || draftBlocked || !a) return;
     submitting.current = true;
     setBusy(true);
     data.setError("");
@@ -605,14 +606,16 @@ function ConstructionWorkspace({
                   aria-selected={record.id === a?.id}
                   key={record.id}
                   className={
-                    "grid min-h-[62px] grid-cols-[minmax(186px,186fr)_minmax(190px,190fr)_minmax(93px,93fr)_183px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
+                    "relative grid min-h-[62px] grid-cols-[minmax(186px,186fr)_minmax(190px,190fr)_minmax(93px,93fr)_183px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
                     (record.id === a?.id ? "bg-[#f4f5f6]" : "")
                   }
                 >
                   <div role="cell">
                     <button
                       type="button"
+                      disabled={busy || restoring}
                       onClick={() => {
+                        if (submitting.current || restoring) return;
                         data.setError("");
                         go(query(), record.id);
                       }}
@@ -622,7 +625,7 @@ function ConstructionWorkspace({
                         record.resident +
                         " 시공 선택"
                       }
-                      className="py-5 text-left"
+                      className="py-5 text-left after:absolute after:inset-0 after:content-['']"
                     >
                       {(record.receiptNo || record.id) +
                         " · " +
@@ -667,7 +670,7 @@ function ConstructionWorkspace({
         <ConstructionDetail
           application={a}
           draft={draft}
-          busy={busy || restoring}
+          busy={busy || draftBlocked}
           loading={restoring || (!a && data.detailLoading)}
           onChange={setDraft}
           onSchedule={schedule}
@@ -699,7 +702,7 @@ function ConstructionWorkspace({
           draft={draft}
           checked={checked}
           error={data.error}
-          busy={busy || restoring}
+          busy={busy || draftBlocked}
           onClose={close}
           onConfirm={confirm}
           onInstall={install}
