@@ -54,7 +54,6 @@ export default function InspectionManagement() {
   const [inspectors, setInspectors] = useState<{ id: number; name: string }[]>(
     [],
   );
-  const assignments = useRef(new Map<number, Partial<InspectionApplication>>());
   const searchQuery = JSON.stringify(inspectionSearch(params));
   const selectedId =
     params.get("selected") === "none"
@@ -113,10 +112,7 @@ export default function InspectionManagement() {
       try {
         const detail = await loadSelectedInspection(Number(selectedId), controller.signal);
 
-        if (!controller.signal.aborted) setSelected({
-          ...detail,
-          ...assignments.current.get(detail.inspectionId!),
-        });
+        if (!controller.signal.aborted) setSelected(detail);
       } catch (error) {
         if (!controller.signal.aborted) setStorageError(inspectionError(error));
       }
@@ -246,13 +242,6 @@ export default function InspectionManagement() {
           notice: response.preVisitNotice,
           status: "예정",
         };
-        assignments.current.set(application.inspectionId, {
-          assignee: saved.assignee,
-          inspectorUserId: saved.inspectorUserId,
-          visitDate: saved.visitDate,
-          visitTime: saved.visitTime,
-          notice: saved.notice,
-        });
       }
 
       setSelected(saved);
@@ -371,7 +360,7 @@ export default function InspectionManagement() {
         />
         {selected ? (
           <AssignmentPanel
-            key={`${selected.id}:${selected.assignee}:${selected.visitDate}:${selected.visitTime}:${selected.status}:${selected.notice}:${selected.notifyResident}`}
+            key={`${selected.id}:${selected.assignee}:${selected.visitDate}:${selected.visitTime}:${selected.status}:${selected.notice}`}
             application={selected}
             busy={busy}
             onSave={save}

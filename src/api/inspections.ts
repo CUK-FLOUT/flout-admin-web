@@ -28,6 +28,9 @@ export interface InspectionDetail {
   preferredTimeSlot: TimeSlot | null;
   inspectorId: number | null;
   inspectorName: string | null;
+  visitDate: string | null;
+  visitTime: string | null;
+  preVisitNotice: string | null;
 }
 export interface InspectionPage {
   inspections: InspectionItem[];
