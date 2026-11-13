@@ -1,3 +1,4 @@
+import { searchInputText } from "../../components/common/searchStyles";
 import Pagination from "../../components/common/Pagination";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -188,7 +189,7 @@ function InfrastructureList({
             onChange={(e) =>
               setFilters((f) => ({ ...f, query: e.target.value }))
             }
-            className="min-w-0 flex-1 text-sm leading-[normal] outline-none placeholder:text-[#202b36]"
+            className={`min-w-0 flex-1 outline-none ${searchInputText}`}
           />
         </label>
         <button

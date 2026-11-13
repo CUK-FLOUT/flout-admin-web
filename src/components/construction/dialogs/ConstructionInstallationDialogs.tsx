@@ -96,12 +96,11 @@ export default function ConstructionInstallationDialogs({
           disabled={busy}
           onClick={() => file.current?.click()}
           className={constructionSecondary + " min-w-0 truncate px-4 text-left"}
-          title={draft.photos.map((p) => p.name).join(", ")}
         >
           {busy
             ? "사진 저장 중…"
             : draft.photos.length
-              ? draft.photos.map((p) => p.name).join(", ") + " · 사진 첨부"
+              ? `사진 ${draft.photos.length}개 첨부 · 사진 추가`
               : "사진 첨부"}
         </button>
         <input

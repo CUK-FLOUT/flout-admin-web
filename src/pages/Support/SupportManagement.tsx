@@ -1,3 +1,4 @@
+import { searchInputText } from "../../components/common/searchStyles";
 import Pagination from "../../components/common/Pagination";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -239,7 +240,7 @@ function SupportManagementScreen() {
             value={filters.q}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
             placeholder="접수번호 · 신청자 검색"
-            className="min-w-0 flex-1 text-sm leading-5 outline-none placeholder:text-[#202b36]"
+            className={`min-w-0 flex-1 outline-none ${searchInputText}`}
           />
         </label>
         <button type="submit" className={supportPrimary + " h-12"}>

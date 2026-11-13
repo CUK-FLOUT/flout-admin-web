@@ -1,3 +1,4 @@
+import { searchInputText } from "../common/searchStyles";
 import FormFilterSelect from "../common/FormFilterSelect";
 import type { FormEventHandler } from "react";
 
@@ -83,7 +84,7 @@ export default function InspectionFilters({
           aria-label="주소·접수번호 검색"
           defaultValue={params.get("q") || ""}
           placeholder="주소·접수번호 검색"
-          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#202b36]"
+          className={`min-w-0 flex-1 bg-transparent outline-none ${searchInputText}`}
         />
       </label>
       <button

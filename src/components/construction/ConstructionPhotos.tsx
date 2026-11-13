@@ -21,7 +21,7 @@ export default function ConstructionPhotos({
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_150px] items-start gap-[10px]">
-      <div className="flex h-[100px] min-w-0 snap-x gap-[10px] overflow-x-auto">
+      <div className="flex min-h-[76px] min-w-0 snap-x gap-[10px] overflow-x-auto">
         {photos.length ? (
           photos.map((photo) => (
             <div key={photo.id} className="w-full min-w-full snap-start">
@@ -48,12 +48,6 @@ export default function ConstructionPhotos({
                   </button>
                 )}
               </div>
-              <p
-                title={photo.name}
-                className="mt-[6px] truncate text-sm leading-[18px]"
-              >
-                {photo.name}
-              </p>
             </div>
           ))
         ) : (

@@ -96,7 +96,7 @@ export default function InfrastructureReviewPanel({
             <button
               disabled={busy}
               onClick={() => file.current?.click()}
-              className="text-xs text-[#234f73] underline underline-offset-2"
+              className="text-xs text-[#234f73]"
             >
               사진 첨부
             </button>
@@ -113,7 +113,7 @@ export default function InfrastructureReviewPanel({
             " mt-4 h-[43px] min-h-[43px] resize-y p-[11px] text-sm leading-[21px] placeholder:text-[#94a3b8]"
           }
         />
-        <div className="mt-5 flex h-[92px] gap-4 overflow-x-auto px-0.5">
+        <div className="mt-5 flex min-h-[68px] gap-4 overflow-x-auto px-0.5">
           {draft.photos.map((photo) => (
             <figure key={photo.id} className="w-32 shrink-0">
               <div className="relative h-[68px] overflow-hidden rounded-[7px] border-[0.75px] border-[#c8d0d7]">
@@ -143,9 +143,6 @@ export default function InfrastructureReviewPanel({
                   </button>
                 )}
               </div>
-              <figcaption className="mt-[6px] truncate text-[13px] font-medium leading-[18px]">
-                {photo.name}
-              </figcaption>
             </figure>
           ))}
           {!draft.photos.length && (
