@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { InspectionApplication } from "../../pages/Inspection/mockData";
-import { formatDate } from "../../pages/Inspection/mockData";
+import type { InspectionApplication } from "../../pages/Inspection/types";
+import { formatDate } from "../../pages/Inspection/formatDate";
 import { CalendarIcon, ClockIcon } from "./InspectionIcons";
 import { inspectionDate, inspectionPanel } from "./styles";
 import person from "../../assets/inspection/person.svg";

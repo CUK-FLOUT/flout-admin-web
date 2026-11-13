@@ -3,7 +3,7 @@ import { inspectionError, searchInspectionAddresses } from "../../api/inspection
 import type { AddressSearchResponse } from "../../api/inspections";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import type { InspectionApplication } from "../../pages/Inspection/mockData";
+import type { InspectionApplication } from "../../pages/Inspection/types";
 import type {
   RegionIssue,
   ResultContent,

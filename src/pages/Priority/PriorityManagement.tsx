@@ -29,7 +29,7 @@ import {
   normalizePriorityOrder,
   normalizePriorityFilters,
 } from "./priorityUtils";
-import type { PriorityApplication } from "./mockData";
+import type { PriorityApplication } from "./types";
 
 function toApplication(item: PriorityItem): PriorityApplication {
   return {

@@ -1,5 +1,5 @@
 import Pagination from "../common/Pagination";
-import type { PriorityApplication } from "../../pages/Priority/mockData";
+import type { PriorityApplication } from "../../pages/Priority/types";
 import highDot from "../../assets/priority/risk-high.svg";
 import warningDot from "../../assets/priority/risk-warning.svg";
 import lowDot from "../../assets/priority/risk-low.svg";

@@ -1,33 +1,8 @@
+import { inspectionStatuses } from "./constants";
+import type { AssignmentDraft, InspectionApplication, InspectionStatus } from "./types";
 import { readPublishedResultIds } from "../InspectionResults/storage";
 
-export type InspectionStatus = "대기" | "예정" | "진행" | "완료";
-export type EditableStatus = Exclude<InspectionStatus, "대기">;
-export type InspectionApplication = {
-  id: string;
-  inspectionId?: number;
-  applicationId?: number;
-  inspectorUserId?: number | null;
-  resident: string;
-  address: string;
-  district: string;
-  phone: string;
-  priority: boolean;
-  requestedDate: string;
-  requestedTime: string;
-  assignee: string;
-  status: InspectionStatus;
-  visitDate: string;
-  visitTime: string;
-  notice: string;
-  notifyResident: boolean;
-  resultPublished: boolean;
-};
-export type AssignmentDraft = Pick<
-  InspectionApplication,
-  "assignee" | "visitDate" | "visitTime" | "notice" | "notifyResident"
-> & { status: EditableStatus };
 export const inspectionStorageKey = "flout-inspection-mock-v1";
-export const inspectionStatuses: EditableStatus[] = ["예정", "진행", "완료"];
 export const assignees = ["김담당", "이담당", "박담당", "최담당"];
 // Figma에 실제로 정의된 10행. 전화번호·지역·000001 외 주민명/확정 일정은 흐름 확인용 Mock입니다.
 const rows = [
@@ -127,8 +102,4 @@ export function readInspections(): InspectionApplication[] {
   } catch {
     return structuredClone(defaults);
   }
-}
-
-export function formatDate(value: string) {
-  return value.replaceAll("-", ".");
 }

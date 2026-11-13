@@ -1,4 +1,4 @@
-import type { PriorityApplication } from "../../pages/Priority/mockData";
+import type { PriorityApplication } from "../../pages/Priority/types";
 import emptyDocument from "../../assets/priority/empty-document.svg";
 import emptySearch from "../../assets/priority/empty-search.svg";
 

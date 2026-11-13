@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { inspectionManagementPath } from "../Inspection/resultNavigation";
 import { loadInspection } from "../Inspection/loadInspection";
 import { inspectionError } from "../../api/inspections";
-import type { InspectionApplication } from "../Inspection/mockData";
+import type { InspectionApplication } from "../Inspection/types";
 import ResultPhotos from "../../components/inspection-results/ResultPhotos";
 import ResultsDialogs from "../../components/inspection-results/ResultsDialogs";
 import { ResidentPreview } from "../../components/inspection-results/ResultFeedback";

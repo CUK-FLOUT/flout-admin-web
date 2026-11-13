@@ -1,4 +1,4 @@
-import type { PriorityApplication } from "../../pages/Priority/mockData";
+import type { PriorityApplication } from "../../pages/Priority/types";
 import PriorityDialog from "./PriorityDialog";
 import PriorityOrderModal from "./PriorityOrderModal";
 

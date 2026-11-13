@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PriorityApplication } from "../../pages/Priority/mockData";
+import type { PriorityApplication } from "../../pages/Priority/types";
 import dragHandle from "../../assets/priority/order-drag-handle.svg";
 import highDot from "../../assets/priority/risk-high.svg";
 import warningDot from "../../assets/priority/risk-warning.svg";

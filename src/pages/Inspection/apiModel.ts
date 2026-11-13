@@ -3,7 +3,7 @@ import type {
   InspectionItem,
   InspectionSearch,
 } from "../../api/inspections";
-import type { InspectionApplication, InspectionStatus } from "./mockData";
+import type { InspectionApplication, InspectionStatus } from "./types";
 
 export const apiStatuses = {
   대기: "RECEIVED",
