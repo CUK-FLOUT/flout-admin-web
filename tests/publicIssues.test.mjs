@@ -1,75 +1,12 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
-import vm from "node:vm";
-import ts from "typescript";
 import axios from "axios";
-import { randomUUID } from "node:crypto";
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 function harness(overrides = {}, environment = {}) {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let response = () => ({ isSuccess: true, result: {} });
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: await response(config),
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(/\.tsx?$/.test(path) ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        jsx: ts.JsxEmit.ReactJSX,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    vm.runInNewContext(source, {
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      URLSearchParams,
-      URL,
-      crypto: { randomUUID },
-      ...environment,
-      require(name) {
-        if (name in overrides) return overrides[name];
-        if (name === "axios") return axios;
-        if (name === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), name));
-      },
-    });
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    respond(fn) {
-      response = fn;
-    },
-  };
+  return createApiHarness({ overrides, environment, wrapResult: false });
 }
 function hooks() {
   const slots = [],
