@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import Pagination from "../common/Pagination";
 import type { GisPage } from "../../api/gisApplications";
@@ -122,15 +123,13 @@ export default function ApplicationList({
       <h2 className="relative mb-3 flex h-[59px] shrink-0 items-center gap-[6px] border-b border-[#f4f5f6] pb-[10px] text-[22px] font-bold">
         <img src={listHeading} alt="" width={32} height={32} />
         신청 목록
-        <button
-          type="button"
-          disabled
-          title="준비 중"
-          className="absolute right-0 top-[13px] flex h-9 w-[134px] items-center justify-center gap-1 rounded-md border border-[#c8d0d7] px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+        <Link
+          to="/priority"
+          className="absolute right-0 top-[13px] flex h-9 w-[134px] items-center justify-center gap-1 rounded-md border border-[#c8d0d7] px-2 text-sm font-bold hover:bg-[#f4f5f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]"
         >
           <img src={layersIcon} alt="" width={18} height={18} />
           우선점검 관리
-        </button>
+        </Link>
       </h2>
 
       <ul ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -171,7 +170,7 @@ export default function ApplicationList({
           onChange={(e) => onToggleMarkers(e.target.checked)}
           className="h-5 w-5 accent-[#234f73]"
         />
-        마커와 상태를 표시
+        마커 표시
       </label>
     </section>
   );

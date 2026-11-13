@@ -107,6 +107,9 @@ test("extracted marker keeps selection, coordinates and removes native handlers"
   const overlay = h.overlays[0];
   const button = overlay.options.content;
   assert.equal(overlay.options.zIndex, 10);
+  assert.equal(overlay.options.xAnchor, 0.5);
+  assert.equal(button.children.length, 1);
+  assert.equal(button.children[0].children.length, 2);
   assert.equal(button.attributes.get("aria-pressed"), "true");
   assert.equal(overlay.options.position.latitude, getMapLocation(application).latitude);
   assert.equal(button.children[0].children[0].width, 32);
