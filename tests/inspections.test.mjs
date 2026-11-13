@@ -39,6 +39,7 @@ function harness() {
       exports: module.exports,
       FormData,
       AbortController,
+      URLSearchParams,
       Date,
       Error,
       Number,
@@ -859,4 +860,52 @@ test("known inspection row avoids a failing list search when opening detail", as
   assert.equal(result.status, "진행");
   assert.equal(h.requests.length, 1);
   assert.equal(h.requests[0].url, "/api/admin/inspections/91");
+});
+
+
+test("result navigation round-trip preserves applied filters, page and selected inspection", () => {
+  const { inspectionResultPath, inspectionManagementPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const original = new URLSearchParams({
+    stage: "진행", district: "원미구", assignee: "23", visit: "2026-11-13",
+    q: "부천 & 101호", page: "2", selected: "91", dialog: "assignment-saved", target: "예정",
+  });
+  const result = new URL(inspectionResultPath(91, original), "https://example.com");
+  assert.equal(result.pathname, "/inspection/91/results");
+  result.searchParams.set("dialog", "actions");
+  result.searchParams.set("addressQuery", "다른 주소");
+  result.searchParams.set("mode", "edit");
+  const back = new URL(inspectionManagementPath("91", result.searchParams), result.origin);
+  assert.equal(back.pathname, "/inspection/91");
+  for (const key of ["stage", "district", "assignee", "visit", "q", "page"])
+    assert.equal(back.searchParams.get(key), original.get(key));
+  for (const key of ["dialog", "target", "selected", "addressQuery", "mode"])
+    assert.equal(back.searchParams.has(key), false);
+  assert.equal(original.get("dialog"), "assignment-saved");
+});
+
+test("direct result entry returns to its inspection without relying on browser history", () => {
+  const { inspectionManagementPath, inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  assert.equal(inspectionManagementPath("91", new URLSearchParams()), "/inspection/91");
+  assert.equal(inspectionResultPath(91, new URLSearchParams()), "/inspection/91/results");
+});
+
+test("invalid inspection IDs and editor-only parameters safely fall back to the inspection list", () => {
+  const { inspectionManagementPath, inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const params = new URLSearchParams({ page: "2", returnTo: "https://evil.example", dialog: "published" });
+  for (const id of [undefined, "https://evil.example", "//evil.example", "-1", "0", "NaN", "9007199254740992"])
+    assert.equal(inspectionManagementPath(id, params), "/inspection?page=2");
+  assert.equal(inspectionResultPath(undefined, params), "/inspection?page=2");
+});
+
+test("navigation blocks mutations but stays available during result loading and after failure", async () => {
+  let reject;
+  const h = editorHarness({ saveInspectionDraft: () => new Promise((_, no) => { reject = no; }) });
+  assert.equal(h.render().saving, false);
+  await settle();
+  const pending = h.render().persist(false);
+  assert.equal(h.render().saving, true);
+  reject(new Error("저장 실패"));
+  await pending;
+  assert.equal(h.render().saving, false);
+  assert.equal(h.render().error, "저장 실패");
 });
