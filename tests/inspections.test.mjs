@@ -206,6 +206,25 @@ test("list/detail distinguish application ID, receipt and inspection ID and null
   assert.equal(detail.address, "부천");
 });
 
+test("detail uses persisted assignment independently of resident preferences and list state", () => {
+  const { inspectionRow, inspectionDetail } = harness().load("src/pages/Inspection/apiModel.ts");
+  for (const [status, label] of [["SCHEDULED", "예정"], ["IN_PROGRESS", "진행"], ["COMPLETED", "완료"]]) {
+    const row = inspectionRow({ inspectionId: 91, applicationId: 5, receiptNo: "000005", address: "부천", designated: false, preferredVisitDate: "2026-11-20", preferredTimeSlot: "MORNING", inspectorUserId: 7, inspectorName: "담당자", status });
+    const response = { inspectionId: 91, applicationId: 5, receiptNo: "000005", applicantName: "주민", address: "부천", detailAddress: null, contact: "010", preferredVisitDate: "2026-11-20", preferredTimeSlot: "MORNING", inspectorId: 7, inspectorName: "담당자", visitDate: "2026-11-21", visitTime: "15:30", preVisitNotice: "저장된 방문 안내" };
+    const detail = inspectionDetail(response, row);
+    assert.equal(detail.status, label);
+    assert.equal(detail.assignee, "담당자");
+    assert.equal(detail.requestedDate, "2026-11-20");
+    assert.equal(detail.visitDate, "2026-11-21");
+    assert.equal(detail.visitTime, "15:30");
+    assert.equal(detail.notice, "저장된 방문 안내");
+    const empty = inspectionDetail({ ...response, visitDate: null, visitTime: null, preVisitNotice: null }, detail);
+    assert.equal(empty.visitDate, "");
+    assert.equal(empty.visitTime, "");
+    assert.equal(empty.notice, "");
+  }
+});
+
 test("assignment accepts received or scheduled state, future Korean time and one-time assignment", () => {
   const { validateAssignment } = harness().load(
     "src/pages/Inspection/apiModel.ts",
