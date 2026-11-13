@@ -1,3 +1,4 @@
+import { searchInputText } from "../common/searchStyles";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Filters } from "../../pages/GIS/types";
@@ -6,7 +7,7 @@ import searchIcon from "../../assets/gis/imgSearch1.svg";
 import GisFilterSelect from "./GisFilterSelect";
 
 const control =
-  "h-[46px] rounded-md border border-[#c8d0d7] bg-white px-3 text-[15px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73]";
+  "h-[46px] rounded-md border border-[#c8d0d7] bg-white px-3 focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73]";
 
 type Props = {
   filterKey: string;
@@ -90,7 +91,7 @@ export default function GisFilters({
           value={draft.search}
           onChange={(e) => update({ ...draft, search: e.target.value })}
           placeholder="주소·접수번호 검색"
-          className={`${control} w-full pl-9 text-sm`}
+          className={`${control} w-full pl-9 ${searchInputText}`}
         />
       </div>
 
@@ -104,7 +105,7 @@ export default function GisFilters({
       <button
         type="button"
         onClick={reset}
-        className={`${control} w-[118px] cursor-pointer`}
+        className={`${control} w-[118px] cursor-pointer text-[15px]`}
       >
         초기화
       </button>

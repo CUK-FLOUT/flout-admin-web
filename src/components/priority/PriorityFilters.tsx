@@ -1,10 +1,11 @@
+import { searchInputText } from "../common/searchStyles";
 import FormFilterSelect from "../common/FormFilterSelect";
 import type { FormEventHandler } from "react";
 
 import searchIcon from "../../assets/priority/search.svg";
 
 const control =
-  "h-[46px] rounded-md border border-[#c8d0d7] bg-white px-3 text-[15px] leading-[21px] tracking-[-.09px] focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73]";
+  "h-[46px] rounded-md border border-[#c8d0d7] bg-white px-3 focus:outline-2 focus:outline-offset-2 focus:outline-[#234f73]";
 
 type Props = {
   filterKey: string;
@@ -73,7 +74,7 @@ export default function PriorityFilters({
           aria-label="주소 또는 접수번호"
           defaultValue={params.get("q") || ""}
           placeholder="주소·접수번호 검색"
-          className={`${control} w-full border-[#234f73] pl-9 text-sm`}
+          className={`${control} w-full border-[#234f73] pl-9 ${searchInputText}`}
         />
       </div>
       <button
@@ -88,7 +89,7 @@ export default function PriorityFilters({
           event.currentTarget.form?.reset();
           onReset();
         }}
-        className={`${control} w-[118px]`}
+        className={`${control} w-[118px] text-[15px] leading-[21px] tracking-[-.09px]`}
       >
         초기화
       </button>

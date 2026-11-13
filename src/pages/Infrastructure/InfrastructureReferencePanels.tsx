@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 
 import InfrastructureImage from "../../components/infrastructure/InfrastructureImage";
 import { infrastructureCard } from "../../components/infrastructure/styles";
-import { infrastructureAssets as assets } from "./assets";
 import type { InfrastructureIssue } from "./types";
 
 export function FacilityReferenceInformation({
@@ -63,10 +62,6 @@ export function FacilityReferenceInformation({
               alt={photo.name}
               className="h-[105px] w-full object-cover"
             />
-            <figcaption className="flex h-[33px] items-center gap-[10px] bg-[#f4f5f6] px-[11px] text-xs leading-[18px]">
-              <img src={assets.photo} alt="" width={16} height={16} />
-              {photo.name}
-            </figcaption>
           </figure>
         ))}
         {!issue.referencePhotos.length && (
