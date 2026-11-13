@@ -34,7 +34,7 @@ export function addApplicationMarker({
 
   button.type = "button";
   button.className =
-    "flex h-11 cursor-pointer items-center gap-2 rounded [font-family:Pretendard,sans-serif] text-[#202b36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]";
+    "flex size-11 cursor-pointer items-center justify-center rounded [font-family:Pretendard,sans-serif] text-[#202b36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]";
   button.setAttribute(
     "aria-label",
     `${application.number}번 ${application.address}, ${application.risk}, ${application.status} 상세 보기`,
@@ -44,7 +44,6 @@ export function addApplicationMarker({
 
   pin.className =
     "relative h-9 w-8 shrink-0 rounded-full" +
-    (application.marker.labelBefore ? " order-2" : "") +
     (isSelected ? " ring-2 ring-[#234f73] ring-offset-2" : "");
   const image = document.createElement("img");
 
@@ -60,12 +59,7 @@ export function addApplicationMarker({
     "absolute left-0 top-[6px] w-8 text-center text-xs font-bold text-white";
   number.textContent = String(application.number);
   pin.append(image, number);
-  const label = document.createElement("span");
-
-  label.className =
-    "whitespace-nowrap rounded-[5px] border border-[#cbd5e1] bg-white px-2 py-1 text-xs text-[#334155]";
-  label.textContent = application.status;
-  button.append(pin, label);
+  button.append(pin);
   const stopMap = () => maps.event.preventMap();
   const click = () => {
     maps.event.preventMap();
@@ -79,7 +73,7 @@ export function addApplicationMarker({
     map,
     content: button,
     position: new maps.LatLng(point.latitude, point.longitude),
-    xAnchor: application.marker.labelBefore ? 0.85 : 0.15,
+    xAnchor: 0.5,
     yAnchor: 1,
     zIndex: isSelected ? 10 : 1,
   });
