@@ -133,10 +133,11 @@ function ConstructionWorkspace({
 }: Props) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { draft, setDraft, restoring, photoUrls } = useConstructionDraft(
+  const { draft, setDraft, restoring, restoreFailed, photoUrls } = useConstructionDraft(
     a,
     data.setError,
   );
+  const draftBlocked = restoring || restoreFailed;
   const [candidateId, setCandidateId] = useState(params.get("candidate") || "");
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -212,7 +213,7 @@ function ConstructionWorkspace({
     action: () => Promise<unknown>,
     success?: ConstructionDialogKind,
   ) {
-    if (submitting.current || restoring || !a) return;
+    if (submitting.current || draftBlocked || !a) return;
     submitting.current = true;
     setBusy(true);
     data.setError("");
@@ -669,7 +670,7 @@ function ConstructionWorkspace({
         <ConstructionDetail
           application={a}
           draft={draft}
-          busy={busy || restoring}
+          busy={busy || draftBlocked}
           loading={restoring || (!a && data.detailLoading)}
           onChange={setDraft}
           onSchedule={schedule}
@@ -701,7 +702,7 @@ function ConstructionWorkspace({
           draft={draft}
           checked={checked}
           error={data.error}
-          busy={busy || restoring}
+          busy={busy || draftBlocked}
           onClose={close}
           onConfirm={confirm}
           onInstall={install}
