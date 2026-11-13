@@ -1,3 +1,4 @@
+import Pagination from "../../components/common/Pagination";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import InfrastructureSelect from "../../components/infrastructure/InfrastructureSelect";
@@ -272,7 +273,7 @@ function InfrastructureList({
               />
             ) : null}
           </div>
-          <div className="flex h-10 shrink-0 items-center justify-between gap-1 px-[7px]">
+          <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-x-3 px-[7px]">
             <label className="flex items-center gap-2 text-[13px] leading-[18px] tracking-[-0.078px]">
               <input
                 type="checkbox"
@@ -294,44 +295,19 @@ function InfrastructureList({
               </span>
               마커와 상태를 표시
             </label>
-            {pages > 1 && (
-              <nav
-                aria-label="지역 문제 목록 페이지"
-                className="flex items-center gap-2 text-xs"
-              >
-                <button
-                  disabled={page === 1}
-                  aria-label="지역 문제 이전 페이지"
-                  onClick={() => {
-                    const p = clean();
+            <Pagination
+              label="지역 문제 목록 페이지"
+              page={page}
+              totalPages={data.totalPages}
+              disabled={data.loading}
+              onPageChange={(number) => {
+                const p = clean();
 
-                    p.set("page", String(page - 1));
-                    p.delete("selected");
-                    go(p);
-                  }}
-                  className="px-1 disabled:opacity-40"
-                >
-                  ‹
-                </button>
-                <span>
-                  {page} / {pages}
-                </span>
-                <button
-                  disabled={page === pages}
-                  aria-label="지역 문제 다음 페이지"
-                  onClick={() => {
-                    const p = clean();
-
-                    p.set("page", String(page + 1));
-                    p.delete("selected");
-                    go(p);
-                  }}
-                  className="px-1 disabled:opacity-40"
-                >
-                  ›
-                </button>
-              </nav>
-            )}
+                p.set("page", String(number));
+                p.delete("selected");
+                go(p);
+              }}
+            />
           </div>
         </section>
       </div>

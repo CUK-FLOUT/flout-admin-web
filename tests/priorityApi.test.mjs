@@ -227,7 +227,7 @@ test("응답 없는 연결 실패와 서버 오류를 빈 목록으로 처리하
 
 test("기존 목록 페이지네이션은 로딩이 끝난 후 표시되며 서버 페이지로 이동한다", () => {
   const module = { exports: {} };
-  const jsx = (type, props) => ({ type, props: props || {} });
+  const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props: props || {} });
   const source = ts.transpileModule(
     readFileSync("src/components/priority/PriorityList.tsx", "utf8"),
     {
@@ -243,6 +243,13 @@ test("기존 목록 페이지네이션은 로딩이 끝난 후 표시되며 서�
     exports: module.exports,
     require(name) {
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+      if (name === "../common/Pagination") {
+        const pagination = { exports: {} };
+        vm.runInNewContext(ts.transpileModule(readFileSync("src/components/common/Pagination.tsx", "utf8"), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+        }).outputText, { exports: pagination.exports, require: () => ({ jsx, jsxs: jsx }) });
+        return pagination.exports;
+      }
       if (name.endsWith(".svg")) return { default: name };
       throw new Error(name);
     },

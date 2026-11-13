@@ -1,3 +1,4 @@
+import Pagination from "../common/Pagination";
 import type { PriorityApplication } from "../../pages/Priority/mockData";
 import highDot from "../../assets/priority/risk-high.svg";
 import warningDot from "../../assets/priority/risk-warning.svg";
@@ -236,45 +237,14 @@ export default function PriorityList({
         )}
       </div>
       {!!filtered.length && (
-        <nav
-          aria-label="페이지 선택"
-          className="flex h-[65px] shrink-0 items-center justify-center gap-2 border-t border-[#c8d0d7]"
-        >
-          <button
-            type="button"
-            disabled={loading || page <= 0}
-            onClick={() => onPage?.(page - 1)}
-            aria-label="이전 페이지"
-            className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
-          >
-            ‹
-          </button>
-          {Array.from(
-            { length: Math.min(5, totalPages) },
-            (_, i) => Math.max(0, Math.min(page - 2, totalPages - 5)) + i + 1,
-          ).map((n) => (
-            <button
-              key={n}
-              type="button"
-              disabled={loading}
-              onClick={() => onPage?.(n - 1)}
-              aria-current={n === page + 1 ? "page" : undefined}
-              aria-label={`${n}페이지`}
-              className={`h-[34px] w-[34px] rounded-md border text-sm ${n === page + 1 ? "border-[#234f73] bg-[#234f73] font-bold text-white" : "border-[#cbd5e1] bg-white text-[#64748b]"}`}
-            >
-              {n}
-            </button>
-          ))}
-          <button
-            type="button"
-            disabled={loading || page + 1 >= totalPages}
-            onClick={() => onPage?.(page + 1)}
-            aria-label="다음 페이지"
-            className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
-          >
-            ›
-          </button>
-        </nav>
+        <Pagination
+          label="우선점검 목록 페이지"
+          page={page + 1}
+          totalPages={totalPages}
+          disabled={loading || busy || !onPage}
+          onPageChange={(next) => onPage?.(next - 1)}
+          className="h-[65px] border-t border-[#c8d0d7]"
+        />
       )}
     </section>
   );
