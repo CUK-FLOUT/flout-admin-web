@@ -27,7 +27,7 @@ export type SupportPage = {
 export type SupportCounts = {
   totalCount: number;
   reviewingCount: number;
-  consentRequiredCount: number;
+  rejectedCount: number;
   approvedCount: number;
 };
 export type SupportDetails = {

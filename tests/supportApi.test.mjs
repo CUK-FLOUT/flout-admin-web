@@ -818,3 +818,21 @@ test("검토 조회가 실패해도 상세를 표시하고 승인 준비 상태�
   assert.equal(h.record(201).reviewError, "검토 조회 실패");
   assert.equal(h.record(201).application.reviewLoaded, false);
 });
+
+
+test("지원 현황은 최신 rejectedCount를 포함한 네 집계값과 0건을 그대로 반환한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/supportApplications.ts");
+  for (const counts of [
+    { totalCount: 21, reviewingCount: 4, rejectedCount: 6, approvedCount: 11 },
+    { totalCount: 15, reviewingCount: 4, rejectedCount: 0, approvedCount: 11 },
+    { totalCount: 0, reviewingCount: 0, rejectedCount: 0, approvedCount: 0 },
+  ]) {
+    h.setResponse(() => counts);
+    const controller = new AbortController();
+    assert.deepEqual(plain(await api.getSupportCounts(controller.signal)), counts);
+    assert.equal(h.requests.at(-1).url, root + "/status");
+    assert.equal(h.requests.at(-1).method, "get");
+    assert.equal(h.requests.at(-1).signal, controller.signal);
+  }
+});

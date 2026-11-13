@@ -105,7 +105,7 @@ function SupportManagementScreen() {
     },
     {
       label: "미승인",
-      count: response.counts?.consentRequiredCount,
+      count: response.counts?.rejectedCount,
       icon: clockIcon,
     },
     { label: "승인", count: response.counts?.approvedCount, icon: userIcon },
