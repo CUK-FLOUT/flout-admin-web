@@ -605,14 +605,16 @@ function ConstructionWorkspace({
                   aria-selected={record.id === a?.id}
                   key={record.id}
                   className={
-                    "grid min-h-[62px] grid-cols-[minmax(186px,186fr)_minmax(190px,190fr)_minmax(93px,93fr)_183px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
+                    "relative grid min-h-[62px] grid-cols-[minmax(186px,186fr)_minmax(190px,190fr)_minmax(93px,93fr)_183px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
                     (record.id === a?.id ? "bg-[#f4f5f6]" : "")
                   }
                 >
                   <div role="cell">
                     <button
                       type="button"
+                      disabled={busy || restoring}
                       onClick={() => {
+                        if (submitting.current || restoring) return;
                         data.setError("");
                         go(query(), record.id);
                       }}
@@ -622,7 +624,7 @@ function ConstructionWorkspace({
                         record.resident +
                         " 시공 선택"
                       }
-                      className="py-5 text-left"
+                      className="py-5 text-left after:absolute after:inset-0 after:content-['']"
                     >
                       {(record.receiptNo || record.id) +
                         " · " +

@@ -511,12 +511,22 @@ test("workspace prevents double schedule submission and preserves draft on API f
   ready.onSchedule();
   assert.equal(saves, 1);
   assert.equal(w.panel().busy, true);
+  function selectionButton(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (node.type === "button" && node.props["aria-label"]?.endsWith("시공 선택")) return node.props;
+    return [node.props?.children].flat(Infinity).map(selectionButton).find(Boolean);
+  }
+  const selection = selectionButton(w.render());
+  assert.equal(selection.disabled, true);
+  selection.onClick();
+  assert.equal(w.navigations.length, 0);
   pending.reject(new Error("일정 저장 거절"));
   await tick();
   assert.equal(w.panel().busy, false);
   assert.equal(w.panel().draft.date, "2099-12-31");
   assert.equal(w.data.refreshes, 0);
   assert.equal(w.data.error, "일정 저장 거절");
+  assert.equal(selectionButton(w.render()).disabled, false);
   w.unmount();
 });
 
