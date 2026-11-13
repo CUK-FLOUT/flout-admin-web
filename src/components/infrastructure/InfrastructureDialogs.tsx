@@ -63,18 +63,11 @@ export default function InfrastructureDialogs({
   if (kind === "status-saved")
     return (
       <InfrastructureDialog
-        title={
-          a.status +
-          (a.status === "검토 대기" ? "로" : "으로") +
-          " 저장했습니다."
-        }
+        title="검토 내용을 저장했습니다."
         width="max-w-[520px]"
         height="min-h-[229px]"
         onClose={onClose}
       >
-        <p className="text-sm leading-[21px]">
-          주민 신청 상세에도 동일한 점검 상태를 표시합니다.
-        </p>
         <dl className="flex flex-col gap-3">
           {[
             ["검토대상", a.target],
