@@ -122,9 +122,12 @@ const detail = {
 test("실제 DTO를 한글로 매핑하고 주소로 층수나 누락된 상태·좌표를 추측하지 않는다", () => {
   const h = harness(), a = h.load("src/pages/GIS/apiMapping.ts");
   assert.deepEqual(plain(a.gisSearch({district:"원미구",risk:"주의",status:"시공",search:"  000029  "},3)), {
-    district:"원미구",riskLevel:"CAUTION",processingStatus:"CONSTRUCTION",keyword:"000029",page:3,size:10,
+    district:"원미구",riskLevel:"CAUTION",processingStatus:"CONSTRUCTION",keyword:"000029",page:3,size:5,
   });
-  assert.deepEqual(plain(a.gisSearch({district:"invalid",risk:"invalid",status:"invalid",search:""},0)), {page:0,size:10});
+  assert.deepEqual(plain(a.gisSearch({district:"invalid",risk:"invalid",status:"invalid",search:""},0)), {page:0,size:5});
+  assert.deepEqual(plain(a.gisSearch({district:"원미구",risk:"주의",status:"시공",search:"QA"},2,8)), {
+    district:"원미구",riskLevel:"CAUTION",processingStatus:"CONSTRUCTION",keyword:"QA",page:2,size:8,
+  });
   const mapped = a.gisDetailApplication(detail);
   assert.equal(mapped.id, "29"); assert.equal(mapped.receiptNo,"000029");
   assert.equal(mapped.houseType,"1층");assert.equal(mapped.tenure,"자가");

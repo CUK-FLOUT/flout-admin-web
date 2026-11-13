@@ -1,3 +1,4 @@
+import Pagination from "../../components/common/Pagination";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ConstructionBadge from "../../components/construction/ConstructionBadge";
@@ -482,8 +483,6 @@ function ConstructionWorkspace({
     (params.has("requestId")
       ? "지원 신청 번호와 시공 ID는 다릅니다. 목록에서 시공 대상을 선택해 주세요."
       : "");
-  const firstNumber = Math.min(Math.max(1, page - 1), Math.max(1, pages - 2));
-  const pageNumbers = [firstNumber, firstNumber + 1, firstNumber + 2];
 
   return (
     <div
@@ -649,45 +648,20 @@ function ConstructionWorkspace({
             ) : null}
           </div>
           {visible.length > 0 && (
-            <nav
-              aria-label="시공 목록 페이지"
-              className="mt-4 flex h-10 shrink-0 items-center justify-center gap-1"
-            >
-              {[page - 1, ...pageNumbers, page + 1].map((number, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  aria-label={
-                    index === 0
-                      ? "이전 페이지"
-                      : index === 4
-                        ? "다음 페이지"
-                        : number + "페이지"
-                  }
-                  aria-current={
-                    index > 0 && index < 4 && number === page
-                      ? "page"
-                      : undefined
-                  }
-                  disabled={number < 1 || number > pages}
-                  onClick={() => {
-                    const p = query();
+            <Pagination
+              label="시공 목록 페이지"
+              page={page}
+              totalPages={pages}
+              disabled={data.listLoading || busy}
+              onPageChange={(number) => {
+                const p = query();
 
-                    p.set("page", String(number));
-                    data.setError("");
-                    go(p);
-                  }}
-                  className={
-                    "grid size-8 place-items-center rounded-[7px] border text-[13px] leading-[18px] disabled:cursor-default disabled:opacity-40 " +
-                    (index > 0 && index < 4 && number === page
-                      ? "border-[#234f73] bg-[#234f73] font-bold text-white"
-                      : "border-[#c8d0d7] bg-white")
-                  }
-                >
-                  {index === 0 ? "‹" : index === 4 ? "›" : number}
-                </button>
-              ))}
-            </nav>
+                p.set("page", String(number));
+                data.setError("");
+                go(p);
+              }}
+              className="mt-4"
+            />
           )}
         </section>
         <ConstructionDetail

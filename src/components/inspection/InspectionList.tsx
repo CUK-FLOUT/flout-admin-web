@@ -1,3 +1,4 @@
+import Pagination from "../common/Pagination";
 import type { InspectionApplication } from "../../pages/Inspection/mockData";
 import { formatDate } from "../../pages/Inspection/mockData";
 import { inspectionCheckbox, inspectionPanel } from "./styles";
@@ -143,36 +144,13 @@ export default function InspectionList({
         )}
       </div>
       {total > 0 && (
-        <nav
-          aria-label="목록 페이지"
-          className="flex h-[61.5px] shrink-0 items-center justify-center gap-2"
-        >
-          <button
-            type="button"
-            disabled={page <= 0 || loading}
-            onClick={() => onPage(page - 1)}
-            aria-label="이전 페이지"
-            className="size-[34px] rounded-md border border-[#c8d0d7] text-xs disabled:text-[#64748b]"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-current="page"
-            className="size-[34px] rounded-md bg-[#234f73] text-xs font-bold text-white"
-          >
-            {page + 1}
-          </button>
-          <button
-            type="button"
-            disabled={page + 1 >= totalPages || loading}
-            onClick={() => onPage(page + 1)}
-            aria-label="다음 페이지"
-            className="size-[34px] rounded-md border border-[#c8d0d7] text-xs disabled:text-[#64748b]"
-          >
-            ›
-          </button>
-        </nav>
+        <Pagination
+          page={page + 1}
+          totalPages={totalPages}
+          disabled={loading}
+          onPageChange={(next) => onPage(next - 1)}
+          className="h-[61.5px]"
+        />
       )}
     </section>
   );

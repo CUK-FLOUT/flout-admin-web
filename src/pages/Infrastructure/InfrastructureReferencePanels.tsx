@@ -1,3 +1,4 @@
+import Pagination from "../../components/common/Pagination";
 import type { Dispatch, SetStateAction } from "react";
 
 import InfrastructureImage from "../../components/infrastructure/InfrastructureImage";
@@ -175,43 +176,18 @@ export function RelatedApplications({
           </p>
         )
       )}
-      <div className="relative flex h-11 items-center text-xs leading-[18px]">
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 text-xs leading-[18px]">
         <p>
           전체 {relatedTotal ?? issue.related.length}건 · {issue.related.length}
           건 조회
         </p>
-        <nav
-          aria-label="관련 주민 신청 페이지"
-          className="absolute left-1/2 flex -translate-x-1/2 items-center gap-3"
-        >
-          <button
-            aria-label="관련 주민 신청 이전 페이지"
-            disabled={page <= 1}
-            onClick={() => onPageChange((currentPage) => currentPage - 1)}
-            className="disabled:opacity-40"
-          >
-            ‹
-          </button>
-          {[1, 2, 3].map((p) => (
-            <button
-              key={p}
-              disabled={p > totalPages}
-              aria-current={p === page ? "page" : undefined}
-              onClick={() => onPageChange(p)}
-              className="disabled:opacity-40"
-            >
-              {p}
-            </button>
-          ))}
-          <button
-            aria-label="관련 주민 신청 다음 페이지"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange((currentPage) => currentPage + 1)}
-            className="disabled:opacity-40"
-          >
-            ›
-          </button>
-        </nav>
+        <Pagination
+          label="관련 주민 신청 페이지"
+          page={page}
+          totalPages={totalPages}
+          disabled={loading}
+          onPageChange={onPageChange}
+        />
       </div>
     </section>
   );

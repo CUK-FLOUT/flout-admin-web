@@ -1,3 +1,4 @@
+import Pagination from "../../components/common/Pagination";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -63,7 +64,6 @@ function SupportManagementScreen() {
     supportSearchFilters(initialFilters(params)),
   );
   const visible = response.page?.supportApplications.map(mapSupport) ?? [];
-  const pageCount = Math.max(1, response.page?.totalPages ?? 1);
   const selectedId = requestId || params.get("selected");
   const selectionKey = JSON.stringify([initialFilters(params), page]);
   const [automaticSelection, setAutomaticSelection] = useState<{
@@ -185,10 +185,6 @@ function SupportManagementScreen() {
     );
     navigate("/support/" + selected.apiId + "/review?" + p.toString());
   }
-
-  const pageNumbers = [1, 2, 3].map(
-    (i) => Math.min(Math.max(1, page - 1), Math.max(1, pageCount - 2)) + i - 1,
-  );
 
   return (
     <div
@@ -380,45 +376,19 @@ function SupportManagementScreen() {
                   ))}
                 </div>
               </div>
-              <nav
-                aria-label="지원 신청 페이지"
-                className="flex h-11 shrink-0 items-center justify-center gap-[6px]"
-              >
-                {[page - 1, ...pageNumbers, page + 1].map((number, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    aria-label={
-                      index === 0
-                        ? "이전 페이지"
-                        : index === 4
-                          ? "다음 페이지"
-                          : number + "페이지"
-                    }
-                    aria-current={
-                      index > 0 && index < 4 && number === page
-                        ? "page"
-                        : undefined
-                    }
-                    disabled={number < 1 || number > pageCount}
-                    onClick={() => {
-                      const p = returnQuery();
+              <Pagination
+                label="지원 신청 페이지"
+                page={page}
+                totalPages={response.page?.totalPages ?? 0}
+                disabled={response.loading}
+                onPageChange={(number) => {
+                  const p = returnQuery();
 
-                      p.set("page", String(number));
-                      p.delete("selected");
-                      change(p);
-                    }}
-                    className={
-                      "grid size-7 place-items-center rounded-md border text-[13px] disabled:cursor-default disabled:opacity-40 " +
-                      (index > 0 && index < 4 && number === page
-                        ? "border-[#234f73] bg-[#234f73] font-bold text-white"
-                        : "border-[#c8d0d7] bg-white")
-                    }
-                  >
-                    {index === 0 ? "‹" : index === 4 ? "›" : number}
-                  </button>
-                ))}
-              </nav>
+                  p.set("page", String(number));
+                  p.delete("selected");
+                  change(p);
+                }}
+              />
             </>
           )}
         </section>

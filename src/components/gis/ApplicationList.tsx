@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import Pagination from "../common/Pagination";
 import type { GisPage } from "../../api/gisApplications";
 import type { Application, Risk } from "../../pages/GIS/types";
 import listHeading from "../../assets/gis/imgListIcon.svg";
@@ -19,6 +21,7 @@ type Props = {
   onToggleMarkers: (visible: boolean) => void;
   page?: GisPage;
   onPage?: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
 };
 
 type RowProps = Pick<Props, "onSelect"> & {
@@ -80,7 +83,37 @@ export default function ApplicationList({
   onToggleMarkers,
   page,
   onPage,
+  onPageSizeChange,
 }: Props) {
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const list = listRef.current;
+
+    if (!list || !onPageSizeChange) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const measure = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const row = list.querySelector("li > button")?.parentElement;
+        const rowHeight = row?.getBoundingClientRect().height || 64;
+
+        if (list.clientHeight > 0)
+          onPageSizeChange(Math.max(1, Math.min(100, Math.floor(list.clientHeight / rowHeight))));
+      }, 150);
+    };
+
+    const observer = new ResizeObserver(measure);
+
+    observer.observe(list);
+    measure();
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timer);
+    };
+  }, [onPageSizeChange]);
+
   return (
     <section
       aria-label="신청 목록"
@@ -100,7 +133,7 @@ export default function ApplicationList({
         </button>
       </h2>
 
-      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <ul ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {applications.map((application) => (
           <ApplicationRow
             key={application.id}
@@ -119,29 +152,15 @@ export default function ApplicationList({
         )}
       </ul>
 
-      {page && page.totalPages > 1 && (
-        <nav
-          aria-label="신청 목록 페이지"
-          className="mt-3 flex shrink-0 justify-center gap-4 text-sm text-[#234f73]"
-        >
-          <button
-            disabled={page.page === 0}
-            onClick={() => onPage?.(page.page - 1)}
-            aria-label="이전 신청 페이지"
-          >
-            ‹
-          </button>
-          <span>
-            {page.page + 1} / {page.totalPages}
-          </span>
-          <button
-            disabled={page.page + 1 >= page.totalPages}
-            onClick={() => onPage?.(page.page + 1)}
-            aria-label="다음 신청 페이지"
-          >
-            ›
-          </button>
-        </nav>
+      {page && (
+        <Pagination
+          label="신청 목록 페이지"
+          page={page.page + 1}
+          totalPages={page.totalPages}
+          disabled={!onPage}
+          onPageChange={(next) => onPage?.(next - 1)}
+          className="mt-3"
+        />
       )}
 
       <label className="mt-4 mb-[26px] flex h-10 shrink-0 cursor-pointer items-center gap-2 text-[13px]">

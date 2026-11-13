@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
@@ -26,7 +26,7 @@ function harness(overrides = {}, environment = {}) {
   };
   const modules = new Map();
   function load(path) {
-    const file = resolve(/\.tsx?$/.test(path) ? path : `${path}.ts`);
+    const file = resolve(/\.tsx?$/.test(path) ? path : existsSync(`${path}.tsx`) ? `${path}.tsx` : `${path}.ts`);
     if (modules.has(file)) return modules.get(file);
     const module = { exports: {} };
     const source = ts.transpileModule(readFileSync(file, "utf8"), {

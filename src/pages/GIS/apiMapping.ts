@@ -19,7 +19,7 @@ export const processingLabels: Record<ProcessingStatus, string> = {
   CONSTRUCTION_IN_PROGRESS: "시공 진행",
   CONSTRUCTION_COMPLETED: "시공 완료",
 };
-export function gisSearch(filters: Filters, page: number): GisSearch {
+export function gisSearch(filters: Filters, page: number, size = 5): GisSearch {
   return {
     district: ["원미구", "소사구", "오정구"].includes(filters.district)
       ? filters.district
@@ -32,7 +32,7 @@ export function gisSearch(filters: Filters, page: number): GisSearch {
     )[filters.status as "점검"],
     keyword: filters.search.trim() || undefined,
     page,
-    size: 10,
+    size,
   };
 }
 
