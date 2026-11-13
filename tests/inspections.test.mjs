@@ -1,70 +1,13 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import axios from "axios";
 
-function harness() {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let respond = () => ({});
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: { isSuccess: true, result: respond(config), message: "성공" },
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(path.endsWith(".ts") ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    const context = vm.createContext({
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      URLSearchParams,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      require(specifier) {
-        if (specifier === "axios") return axios;
-        if (specifier === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), specifier));
-      },
-    });
-    vm.runInContext(source, context);
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    setResponse(fn) {
-      respond = fn;
-    },
-  };
-}
+const harness = createApiHarness;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test("nine API methods use inspection ID and exact request fields", async () => {
