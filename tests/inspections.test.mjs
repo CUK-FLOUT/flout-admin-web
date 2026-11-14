@@ -507,6 +507,7 @@ function editorHarness(overrides = {}) {
     getInspectionResult: async () => savedResult,
     saveInspectionDraft: async () => ({ resultStatus: "DRAFT" }),
     publishInspectionResult: async () => ({ inspectionStatus: "COMPLETED" }),
+    validateRecommendedFacilities: async () => ({ hasFacilities: true, facilities: ["물막이판"] }),
     uploadInspectionPhotos: async () => ({
       photos: [
         { photoId: 18, fileName: "추가.png", url: "https://example.com/18" },
@@ -731,6 +732,7 @@ test("화면 이탈 후 공개 응답은 완료 모달을 열지 않는다", asy
   h.render();
   await settle();
   const pending = h.render().persist(true);
+  await settle();
   h.unmount();
   resolve({ inspectionStatus: "COMPLETED" });
   await pending;
@@ -870,4 +872,92 @@ test("navigation blocks mutations but stays available during result loading and 
   await pending;
   assert.equal(h.render().saving, false);
   assert.equal(h.render().error, "저장 실패");
+});
+
+test("시설 사전 검증은 기존 예방조치 원문만 전달하고 잘못된 입력·응답을 거부한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/inspections.ts");
+  const descriptions = ["출입구에 물막이판 설치를 권장합니다.", "배수구 주변을 정리해 주세요."];
+  h.setResponse(() => ({ hasFacilities: true, facilities: ["출입구 물막이판"] }));
+  assert.equal((await api.validateRecommendedFacilities(descriptions)).hasFacilities, true);
+  assert.equal(h.requests[0].url, "/api/admin/inspections/recommended-facilities/validate");
+  assert.equal(h.requests[0].method, "post");
+  assert.deepEqual(JSON.parse(h.requests[0].data), { descriptions });
+  for (const values of [[], [" "], ["x".repeat(4001)], Array(21).fill("내용")])
+    await assert.rejects(api.validateRecommendedFacilities(values));
+  assert.equal(h.requests.length, 1);
+  h.setResponse(() => ({ hasFacilities: false, facilities: [] }));
+  assert.equal((await api.validateRecommendedFacilities(descriptions)).hasFacilities, false);
+  h.setResponse(() => ({ hasFacilities: true, facilities: [] }));
+  await assert.rejects(api.validateRecommendedFacilities(descriptions), /검증 응답/);
+});
+
+test("시설이 없으면 공개를 멈추고 명시적으로 그대로 공개를 선택한 경우만 공개한다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: false, facilities: [] }) });
+  h.render();
+  await settle();
+  const descriptions = [...h.render().draft.actions];
+  await h.render().persist(true);
+  assert.equal(h.render().facilityWarning, true);
+  assert.equal(h.render().readOnly, false);
+  assert.deepEqual(plain(h.calls.find(c => c.name === "validateRecommendedFacilities").args), [descriptions]);
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+  await h.render().confirmFacilityPublish();
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.render().readOnly, true);
+  assert.equal(h.calls.filter(c => c.name === "publishInspectionResult").length, 1);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 1);
+});
+
+test("시설명 수정 후 공개할 때 재검증하며 경고 취소만으로 공개하지 않는다", async () => {
+  let found = false;
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: found, facilities: found ? ["물막이판"] : [] }) });
+  h.render();
+  await settle();
+  await h.render().persist(true);
+  h.render().editFacilityActions();
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.params().get("dialog"), "actions");
+  h.render().update("actions", ["출입구에 물막이판 설치"]);
+  found = true;
+  await h.render().persist(true);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 2);
+  assert.equal(h.calls.filter(c => c.name === "publishInspectionResult").length, 1);
+});
+
+test("검증 실패는 미추출 경고로 바꾸지 않으며 임시 저장은 검증하지 않는다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => { throw new Error("검증 서버 연결 실패"); } });
+  h.render();
+  await settle();
+  await h.render().persist(false);
+  assert.equal(h.calls.some(c => c.name === "validateRecommendedFacilities"), false);
+  await h.render().persist(true);
+  assert.equal(h.render().facilityWarning, false);
+  assert.match(h.render().error, /검증 서버 연결 실패/);
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+});
+
+test("검증 중 중복 요청과 화면 이탈 후 공개를 차단한다", async () => {
+  let resolve;
+  const h = editorHarness({ validateRecommendedFacilities: () => new Promise(r => { resolve = r; }) });
+  h.render();
+  await settle();
+  const pending = h.render().persist(true);
+  await h.render().persist(true);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 1);
+  h.unmount();
+  resolve({ hasFacilities: true, facilities: ["물막이판"] });
+  await pending;
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+});
+
+test("경고 이후 입력이 바뀌면 이전 검증 결과로 공개하지 않는다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: false, facilities: [] }) });
+  h.render();
+  await settle();
+  await h.render().persist(true);
+  h.render().update("actions", ["변경된 예방조치"]);
+  await h.render().confirmFacilityPublish();
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+  assert.match(h.render().error, /다시 검증/);
 });

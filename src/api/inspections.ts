@@ -239,6 +239,38 @@ export async function saveInspectionDraft(id: number, body: ResultRequest) {
   return result(data);
 }
 
+export interface RecommendedFacilitiesValidation {
+  hasFacilities: boolean;
+  facilities: string[];
+}
+
+export async function validateRecommendedFacilities(
+  descriptions: string[],
+): Promise<RecommendedFacilitiesValidation> {
+  if (
+    !descriptions.length ||
+    descriptions.length > 20 ||
+    descriptions.some((text) => !text.trim() || text.length > 4000)
+  )
+    throw new Error(
+      "권장 예방조치를 1~20개 입력해 주세요. 각 문장은 4000자 이하여야 합니다.",
+    );
+  const { data } = await apiClient.post<
+    Envelope<RecommendedFacilitiesValidation>
+  >(`${root}/recommended-facilities/validate`, { descriptions });
+  const response = result(data);
+
+  if (
+    typeof response.hasFacilities !== "boolean" ||
+    !Array.isArray(response.facilities) ||
+    response.facilities.some((name) => typeof name !== "string" || !name.trim()) ||
+    response.hasFacilities !== (response.facilities.length > 0)
+  )
+    throw new Error("시설 검증 응답을 확인하지 못했습니다. 다시 시도해 주세요.");
+
+  return response;
+}
+
 export async function publishInspectionResult(id: number, body: ResultRequest) {
   const { data } = await apiClient.post<
     Envelope<{

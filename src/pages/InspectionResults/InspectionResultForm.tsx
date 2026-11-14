@@ -1,3 +1,4 @@
+import FacilityGuidance from "../../components/inspection-results/FacilityGuidance";
 import { resultFeedbacks } from "./apiContent";
 import ResultFeedback, {
   GrowingTextarea,
@@ -125,6 +126,7 @@ export default function InspectionResultForm({ editor }: Props) {
                   </button>
                 )}
               </div>
+              {!readOnly && <FacilityGuidance />}
               <ol className="flex flex-col gap-2">
                 {content.actions.map((action, index) => (
                   <li

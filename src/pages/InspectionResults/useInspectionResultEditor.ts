@@ -9,6 +9,7 @@ import {
   getInspectionResult,
   inspectionError,
   publishInspectionResult,
+  validateRecommendedFacilities,
   saveInspectionDraft,
   uploadInspectionPhotos,
 } from "../../api/inspections";
@@ -54,6 +55,8 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   const [loaded, setLoaded] = useState(false);
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [facilityWarning, setFacilityWarning] = useState(false);
+  const validatedSnapshot = useRef<string | null>(null);
   const inFlight = useRef(false);
   const active = useRef(true);
   const current = () => active.current && generation === getSessionGeneration();
@@ -156,7 +159,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     setError("");
   }
 
-  async function persist(publish: boolean) {
+  async function persistResult(publish: boolean, confirmed = false) {
     if (busy || inFlight.current || readOnly || !current()) return;
     const problem = validateResult(draft, publish);
 
@@ -170,8 +173,24 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     setSaving(true);
     setError("");
     try {
-      if (publish) await publishInspectionResult(id, resultRequest(draft));
-      else await saveInspectionDraft(id, resultRequest(draft));
+      const body = resultRequest(draft);
+
+      if (publish && !confirmed) {
+        const validation = await validateRecommendedFacilities(
+          body.recommendedActions.map((action) => action.description),
+        );
+
+        if (!current()) return;
+        if (!validation.hasFacilities) {
+          validatedSnapshot.current = JSON.stringify(body);
+          setFacilityWarning(true);
+
+          return;
+        }
+      }
+
+      if (publish) await publishInspectionResult(id, body);
+      else await saveInspectionDraft(id, body);
       if (generation === getSessionGeneration()) draftsFor(generation).delete(id);
       if (!current()) return;
       setReadOnly(publish);
@@ -183,6 +202,31 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
       inFlight.current = false;
       if (current()) setSaving(false);
     }
+  }
+
+  function dismissFacilityWarning() {
+    if (inFlight.current) return;
+    validatedSnapshot.current = null;
+    setFacilityWarning(false);
+  }
+
+  function editFacilityActions() {
+    if (busy || inFlight.current || readOnly || !current()) return;
+    dismissFacilityWarning();
+    setDialog("actions");
+  }
+
+  async function confirmFacilityPublish() {
+    if (inFlight.current || !facilityWarning || !current()) return;
+    if (validatedSnapshot.current !== JSON.stringify(resultRequest(draft))) {
+      dismissFacilityWarning();
+      setError("입력 내용이 변경되었습니다. 공개 버튼을 눌러 다시 검증해 주세요.");
+
+      return;
+    }
+
+    dismissFacilityWarning();
+    await persistResult(true, true);
   }
 
   async function registerRegion(
@@ -287,7 +331,11 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     update,
     updateFeedback,
     toggleCategory,
-    persist,
+    persist: (publish: boolean) => persistResult(publish),
+    facilityWarning,
+    dismissFacilityWarning,
+    editFacilityActions,
+    confirmFacilityPublish,
     registerRegion,
     upload,
     removePhoto,
