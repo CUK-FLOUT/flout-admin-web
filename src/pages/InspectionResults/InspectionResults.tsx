@@ -1,3 +1,4 @@
+import FacilityWarning from "../../components/inspection-results/FacilityWarning";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { inspectionManagementPath } from "../Inspection/resultNavigation";
@@ -168,7 +169,17 @@ function ResultEditor({
           />
         )}
       </div>
-      {dialog && (
+      {editor.facilityWarning && (
+        <FacilityWarning
+          busy={busy}
+          onClose={editor.dismissFacilityWarning}
+          onPublish={() => {
+            void editor.confirmFacilityPublish();
+          }}
+          onEdit={editor.editFacilityActions}
+        />
+      )}
+      {!editor.facilityWarning && dialog && (
         <ResultsDialogs
           busy={busy}
           kind={dialog}

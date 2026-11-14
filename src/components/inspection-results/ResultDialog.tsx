@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { inspectionFocus } from "../inspection/styles";
 
 type Props = {
-  title: string;
+  title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   size: "small" | "region" | "address" | "actions";
