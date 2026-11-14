@@ -146,7 +146,6 @@ function FacilityWorkspace({
           />
         </div>
         <InfrastructureReviewPanel
-          issue={issue}
           draft={draft}
           busy={busy}
           readOnly={readOnly}

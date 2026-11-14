@@ -5,7 +5,6 @@ import {
   getPublicIssue,
   publicIssueError,
   savePublicIssueReview,
-  uploadPublicIssueImages,
   validatePublicIssueImages,
 } from "../../api/publicIssues";
 import { publicReviewStatus } from "./apiMapping";
@@ -66,9 +65,6 @@ export function useInfrastructureReviewActions({
   const readOnly = issue.status === "조치 완료";
   const active = useRef(false);
   const submitting = useRef(false);
-  const completedActionId = useRef<number | undefined>(
-    readOnly ? issue.actionId : undefined,
-  );
   const completionUncertain = useRef(false);
   const photoUrls = useRef(new Set<string>());
 
@@ -87,7 +83,7 @@ export function useInfrastructureReviewActions({
     key: K,
     value: FacilityDraft[K],
   ) {
-    if (submitting.current) return;
+    if (submitting.current || readOnly) return;
     const oldPhotos = draft.photos;
 
     if (key === "photos" && Array.isArray(value)) {
@@ -150,7 +146,8 @@ export function useInfrastructureReviewActions({
 
   function requestComplete() {
     if (submitting.current) return;
-    if (readOnly) {
+    if (readOnly) return;
+    if (completionUncertain.current) {
       void finishAction();
 
       return;
@@ -174,15 +171,24 @@ export function useInfrastructureReviewActions({
       return;
     }
 
+    if (!draft.photos.some((photo) => photo.file)) {
+      data.setError("조치 사진을 1장 이상 선택해 주세요.");
+
+      return;
+    }
+
     data.setError("");
     onDialog("complete-confirm");
   }
 
   async function upload(files: File[]) {
-    if (!files.length || submitting.current) return;
+    if (!files.length || submitting.current || readOnly) return;
     data.setError("");
     try {
-      validatePublicIssueImages(files);
+      validatePublicIssueImages([
+        ...draft.photos.flatMap((photo) => (photo.file ? [photo.file] : [])),
+        ...files,
+      ]);
       const photos = files.map((file) => {
         const src = URL.createObjectURL(file);
 
@@ -199,35 +205,45 @@ export function useInfrastructureReviewActions({
       setDraft((current) => ({
         ...current,
         photos: [...current.photos, ...photos],
-        verified: readOnly ? current.verified : false,
+        verified: false,
       }));
     } catch (cause) {
       data.setError(publicIssueError(cause));
     }
   }
 
-  async function reconcileCompletion() {
+  function applyCompletedPhotos(photos: FacilityDraft["photos"]) {
+    photoUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    photoUrls.current.clear();
+    setDraft((current) => ({ ...current, photos, verified: true }));
+  }
+
+  async function reconcileCompletion(failure = "") {
     try {
       const latest = await getPublicIssue(Number(issue.id));
 
       if (!active.current) return;
-      if (latest.status === "COMPLETED") data.applyDetail(latest);
-      const action = latest.actions
-        .filter((item) => item.status === "COMPLETED")
-        .sort((a, b) => b.actionId - a.actionId)[0];
+      if (latest.status === "COMPLETED") {
+        data.applyDetail(latest);
+        const action = latest.actions
+          .filter((item) => item.status === "COMPLETED")
+          .sort((a, b) => b.actionId - a.actionId)[0];
 
-      if (latest.status === "COMPLETED" && action) {
-        completedActionId.current = action.actionId;
-        data.setError(
-          "서버의 조치 완료를 확인했습니다. 남은 사진이 있으면 사진만 다시 저장해 주세요.",
+        applyCompletedPhotos(
+          (action?.images ?? []).map((image) => ({
+            id: String(image.imageId),
+            name: `조치 사진 ${image.imageId}`,
+            src: image.imageUrl,
+          })),
         );
-      } else if (latest.status === "COMPLETED") {
+        data.setError("서버의 사진 저장 및 조치 완료를 확인했습니다.");
+        submitting.current = false;
+        onDialog(null);
+      } else {
         data.setError(
-          "조치는 완료되었지만 사진 저장에 필요한 조치 ID를 확인하지 못했습니다. 다시 확인해 주세요.",
+          (failure ? failure + " " : "") +
+            "아직 조치가 완료되지 않았습니다. 입력 내용과 사진을 확인한 뒤 다시 시도해 주세요.",
         );
-        data.refresh();
-
-        return;
       }
 
       completionUncertain.current = false;
@@ -241,99 +257,67 @@ export function useInfrastructureReviewActions({
   }
 
   async function finishAction() {
-    if (submitting.current) return;
-    if (
-      !completionUncertain.current &&
-      !completedActionId.current &&
-      !readOnly &&
-      (!issue.reviewId ||
+    if (submitting.current || readOnly) return;
+    const files = draft.photos.flatMap((photo) =>
+      photo.file ? [photo.file] : [],
+    );
+
+    if (!completionUncertain.current) {
+      if (
+        !issue.reviewId ||
         !draft.verified ||
         !draft.result.trim() ||
-        draft.result.trim().length > 4000)
-    ) {
-      data.setError("저장된 검토 내용과 조치 결과·확인 항목을 확인해 주세요.");
+        draft.result.trim().length > 4000
+      ) {
+        data.setError(
+          "저장된 검토 내용과 조치 결과·확인 항목을 확인해 주세요.",
+        );
 
-      return;
+        return;
+      }
+
+      try {
+        validatePublicIssueImages(files);
+      } catch (cause) {
+        data.setError(publicIssueError(cause));
+
+        return;
+      }
     }
 
     submitting.current = true;
     setBusy(true);
     data.setError("");
-    let actionId = readOnly
-      ? issue.actionId || completedActionId.current
-      : completedActionId.current;
-
     try {
-      if (completionUncertain.current || (readOnly && !actionId)) {
+      if (completionUncertain.current) {
         await reconcileCompletion();
 
         return;
       }
 
-      if (!actionId) {
-        completionUncertain.current = true;
-        const completed = await completePublicIssueAction(
-          Number(issue.id),
-          draft.result,
-        );
+      completionUncertain.current = true;
+      const completed = await completePublicIssueAction(
+        Number(issue.id),
+        draft.result,
+        files,
+      );
 
-        actionId = completed.actionId;
-        completedActionId.current = actionId;
-        completionUncertain.current = false;
-        if (active.current) {
-          data.applyCompletion(completed);
-          data.refresh();
-        }
-      }
-
-      const pending = draft.photos.filter((photo) => photo.file);
-
-      if (pending.length) {
-        const uploaded = await uploadPublicIssueImages(
-          Number(issue.id),
-          actionId,
-          pending.map((photo) => photo.file!),
-        );
-
-        pending.forEach((photo) => {
-          URL.revokeObjectURL(photo.src);
-          photoUrls.current.delete(photo.src);
-        });
-
-        if (active.current)
-          setDraft((current) => ({
-            ...current,
-            photos: Array.from(
-              new Map(
-                [
-                  ...current.photos.filter(
-                    (photo) => !pending.some((item) => item.id === photo.id),
-                  ),
-                  ...uploaded.images.map((image) => ({
-                    id: String(image.imageId),
-                    name: `조치 사진 ${image.imageId}`,
-                    src: image.imageUrl,
-                  })),
-                ].map((photo) => [photo.id, photo]),
-              ).values(),
-            ),
-          }));
-      }
-
-      if (active.current) {
-        data.refresh();
-        submitting.current = false;
-        onDialog(null);
-      }
+      if (!active.current) return;
+      completionUncertain.current = false;
+      applyCompletedPhotos(
+        completed.images.map((image) => ({
+          id: String(image.imageId),
+          name: `조치 사진 ${image.imageId}`,
+          src: image.imageUrl,
+        })),
+      );
+      data.applyCompletion(completed);
+      data.refresh();
+      submitting.current = false;
+      onDialog(null);
     } catch (cause) {
       if (active.current) {
-        data.setError(
-          (actionId
-            ? "조치 완료는 처리되었습니다. 사진 저장이 실패해 사진만 다시 저장할 수 있습니다. "
-            : "") + publicIssueError(cause),
-        );
-        if (actionId) data.refresh();
-        else if (completionUncertain.current) await reconcileCompletion();
+        await reconcileCompletion(publicIssueError(cause));
       }
     } finally {
       submitting.current = false;

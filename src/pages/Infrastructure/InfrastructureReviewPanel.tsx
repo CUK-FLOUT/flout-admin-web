@@ -7,10 +7,9 @@ import {
   infrastructurePrimary,
 } from "../../components/infrastructure/styles";
 import { infrastructureAssets as assets } from "./assets";
-import type { FacilityDraft, InfrastructureIssue } from "./types";
+import type { FacilityDraft } from "./types";
 
 type Props = {
-  issue: InfrastructureIssue;
   draft: FacilityDraft;
   busy: boolean;
   readOnly: boolean;
@@ -25,7 +24,6 @@ type Props = {
 };
 
 export default function InfrastructureReviewPanel({
-  issue,
   draft,
   busy,
   readOnly,
@@ -35,7 +33,6 @@ export default function InfrastructureReviewPanel({
   onComplete: requestComplete,
   onUpload: upload,
 }: Props) {
-  const pendingPhotos = draft.photos.some((photo) => photo.file);
 
   return (
     <aside
@@ -92,7 +89,7 @@ export default function InfrastructureReviewPanel({
             <img src={assets.actionComplete} alt="" width={22} height={22} />
             공공시설 조치 완료
           </h2>
-          {(!readOnly || issue.actionId) && (
+          {!readOnly && (
             <button
               disabled={busy}
               onClick={() => file.current?.click()}
@@ -122,7 +119,7 @@ export default function InfrastructureReviewPanel({
                   alt={"조치 사진 " + photo.name}
                   className="h-full w-full object-cover"
                 />
-                {photo.file && (
+                {photo.file && !readOnly && (
                   <button
                     aria-label={photo.name + " 삭제"}
                     disabled={busy}
@@ -147,7 +144,7 @@ export default function InfrastructureReviewPanel({
           ))}
           {!draft.photos.length && (
             <button
-              disabled={busy || (readOnly && !issue.actionId)}
+              disabled={busy || readOnly}
               onClick={() => file.current?.click()}
               className="h-[68px] w-32 shrink-0 rounded-[7px] border border-dashed border-[#c8d0d7] text-xs text-[#596672]"
             >
@@ -161,7 +158,7 @@ export default function InfrastructureReviewPanel({
           type="file"
           accept="image/jpeg,image/png"
           multiple
-          disabled={busy || (readOnly && !issue.actionId)}
+          disabled={busy || readOnly}
           className="sr-only"
           onChange={(e) => {
             void upload(Array.from(e.target.files || []));
@@ -180,18 +177,14 @@ export default function InfrastructureReviewPanel({
           공공시설 조치·결과 확인 완료
         </label>
         <button
-          disabled={busy || (readOnly && !pendingPhotos)}
+          disabled={busy || readOnly}
           onClick={requestComplete}
           className={
             infrastructurePrimary +
             " mt-[22px] h-12 w-full rounded-md text-base"
           }
         >
-          {readOnly
-            ? pendingPhotos
-              ? "조치 사진 저장"
-              : "조치 완료"
-            : "조치 완료 처리"}
+          {readOnly ? "조치 완료" : "조치 완료 처리"}
         </button>
       </section>
     </aside>
