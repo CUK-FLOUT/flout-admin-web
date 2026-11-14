@@ -201,6 +201,11 @@ export function useInfrastructureData(query?: Query, issueId?: string) {
                 ...current.data.action,
                 result: response.actionDescription,
                 verified: true,
+                photos: response.images.map((image) => ({
+                  id: String(image.imageId),
+                  name: `조치 사진 ${image.imageId}`,
+                  src: image.imageUrl,
+                })),
               },
             },
           }

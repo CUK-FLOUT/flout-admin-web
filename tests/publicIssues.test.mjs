@@ -150,8 +150,9 @@ const images = {
     },
   ],
 };
+completed.images = images.images;
+
 function response(config) {
-  if (config.url.endsWith("/images")) return images;
   if (config.url.endsWith("/actions")) return completed;
   if (config.url.endsWith("/review"))
     return {
@@ -195,7 +196,7 @@ function apiHarness() {
   return { ...h, api: h.load("src/api/publicIssues.ts") };
 }
 
-test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files", async () => {
+test("7 APIs use actual Swagger methods, exact filters/IDs and multipart files", async () => {
   const h = apiHarness(),
     api = h.api;
   await api.getPublicIssues(filters, 2);
@@ -210,9 +211,8 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
     reviewReason: "기존 사유",
   };
   await api.savePublicIssueReview(9, body);
-  const action = await api.completePublicIssueAction(9, "  정비 완료  ");
   const file = new File(["image"], "photo.jpg", { type: "image/jpeg" });
-  await api.uploadPublicIssueImages(9, action.actionId, [file, file]);
+  await api.completePublicIssueAction(9, "  정비 완료  ", [file, file]);
   assert.deepEqual(
     h.requests.map((r) => [r.method, r.url]),
     [
@@ -223,7 +223,6 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
       ["get", `${root}/9/resident-applications`],
       ["post", `${root}/9/review`],
       ["post", `${root}/9/actions`],
-      ["post", `${root}/9/actions/71/images`],
     ],
   );
   assert.deepEqual(plain(h.requests[0].params), {
@@ -236,15 +235,13 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
   assert.equal(h.requests[2].params.page, undefined);
   assert.equal(h.requests[2].params.status, "UNDER_REVIEW");
   assert.deepEqual(JSON.parse(h.requests[5].data), body);
-  assert.deepEqual(JSON.parse(h.requests[6].data), {
-    actionDescription: "정비 완료",
-  });
-  assert.equal(h.requests[7].data instanceof FormData, true);
-  assert.deepEqual([...h.requests[7].data.keys()], ["files", "files"]);
-  assert.notEqual(
-    h.requests[7].headers.get("Content-Type"),
-    "application/json",
-  );
+  const multipart = h.requests[6].data;
+  assert.equal(multipart instanceof FormData, true);
+  assert.deepEqual([...multipart.keys()], ["request", "files", "files"]);
+  assert.equal(multipart.get("request").type, "application/json");
+  assert.deepEqual(JSON.parse(await multipart.get("request").text()), { actionDescription: "정비 완료" });
+  assert.equal(multipart.getAll("files").length, 2);
+  assert.notEqual(h.requests[6].headers.get("Content-Type"), "application/json");
 });
 
 test("invalid queries, IDs, required fields, review states and photos are blocked before API calls", async () => {
@@ -271,14 +268,14 @@ test("invalid queries, IDs, required fields, review states and photos are blocke
       reviewStatus: "COMPLETED",
     }),
   );
-  await assert.rejects(api.completePublicIssueAction(9, " "));
+  await assert.rejects(api.completePublicIssueAction(9, " ", []));
   for (const files of [
     [],
     [new File([], "empty.jpg", { type: "image/jpeg" })],
     [{ size: 10 * 1024 ** 2 + 1, name: "large.jpg", type: "image/jpeg" }],
     [new File(["svg"], "image.svg", { type: "image/svg+xml" })],
   ])
-    await assert.rejects(api.uploadPublicIssueImages(9, 71, files));
+    await assert.rejects(api.completePublicIssueAction(9, "완료", files));
   assert.equal(h.requests.length, 0);
 });
 
@@ -315,7 +312,7 @@ test("server errors stay errors, sensitive 500 details are hidden and unknown re
     isSuccess: true,
     result: { ...completed, publicIssueId: 99 },
   }));
-  await assert.rejects(api.completePublicIssueAction(9, "완료"), /응답/);
+  await assert.rejects(api.completePublicIssueAction(9, "완료", [new File(["image"], "a.jpg", { type: "image/jpeg" })]), /응답/);
 });
 
 test("mapping uses server counts/statuses and actual coordinates, never demo locations or invented residents", () => {
@@ -496,6 +493,7 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
           ...data.issue.action,
           result: saved.actionDescription,
           verified: true,
+          photos: saved.images.map(image => ({ id: String(image.imageId), name: "조치 사진", src: image.imageUrl })),
         },
       };
     },
@@ -516,13 +514,9 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
         publicIssueStatus: "UNDER_REVIEW",
       };
     },
-    completePublicIssueAction: async (id, result) => {
-      requests.push(["complete", id, result]);
+    completePublicIssueAction: async (id, result, files) => {
+      requests.push(["complete", id, result, files]);
       return completed;
-    },
-    uploadPublicIssueImages: async (...args) => {
-      requests.push(["images", ...args]);
-      return images;
     },
     ...apiOverrides,
   };
@@ -617,39 +611,20 @@ test("review requests block duplicates, preserve input/photos on failure and nev
   w.unmount();
 });
 
-test("completion precedes photo upload and a photo-only retry never completes the action twice", async () => {
-  let uploads = 0;
-  const w = reviewWorkspace({
-    uploadPublicIssueImages: async (...args) => {
-      w.requests.push(["images", ...args]);
-      if (++uploads === 1) throw new Error("업로드 실패");
-      return images;
-    },
-  });
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("사진과 조치 결과를 단일 요청으로 완료하고 중복 클릭을 차단한다", async () => {
+  const w = reviewWorkspace();
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   assert.equal(w.requests.length, 0);
   prepareAction(w);
   const confirm = w.dialog();
   confirm.onConfirm();
   confirm.onConfirm();
   await tick();
-  assert.deepEqual(
-    w.requests.map((r) => r[0]),
-    ["complete", "images"],
-  );
-  assert.equal(w.requests[1][2], 71);
+  assert.deepEqual(w.requests.map(r => r[0]), ["complete"]);
+  assert.equal(w.requests[0][3][0].name, "a.jpg");
   assert.equal(w.data.issue.status, "조치 완료");
-  assert.match(w.data.error, /조치 완료는 처리되었습니다/);
-  assert.equal(w.panel().draft.photos[0].file.name, "a.jpg");
-  w.dialog().onConfirm();
-  await tick();
-  assert.deepEqual(
-    w.requests.map((r) => r[0]),
-    ["complete", "images", "images"],
-  );
   assert.equal(w.panel().draft.photos[0].id, "31");
+  assert.equal(w.panel().draft.photos.some(p => p.file), false);
   assert.equal(w.dialog(), undefined);
   w.unmount();
 });
@@ -806,6 +781,7 @@ test("an existing unfinished action still sends the entered completion result", 
       ],
     },
   );
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   prepareAction(w);
   w.dialog().onConfirm();
   await tick();
@@ -815,49 +791,19 @@ test("an existing unfinished action still sends the entered completion result", 
   w.unmount();
 });
 
-test("completed photos preserve verification and use the latest server action ID without duplicate image IDs", async () => {
-  const w = reviewWorkspace(
-    {},
-    {
-      ...detail,
-      status: "COMPLETED",
-      actions: [
-        {
-          actionId: 50,
-          status: "COMPLETED",
-          actionDescription: "완료",
-          images: [],
-        },
-      ],
-    },
-  );
-  w.panel();
-  w.data.issue = {
-    ...w.data.issue,
-    actionId: 72,
-    action: {
-      ...w.data.issue.action,
-      photos: [{ id: "31", src: "https://example.com/old.jpg", name: "사진" }],
-    },
-  };
-  w.panel();
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
-  assert.equal(w.panel().draft.verified, true);
-  w.panel().onUpdate(
-    "photos",
-    w.panel().draft.photos.filter((p) => !p.file),
-  );
-  assert.equal(w.panel().draft.verified, true);
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("완료된 문제는 사진 추가·삭제와 완료 재요청을 차단한다", async () => {
+  const w = reviewWorkspace({}, {
+    ...detail, status: "COMPLETED",
+    actions: [{ actionId: 71, status: "COMPLETED", actionDescription: "완료", images: images.images }],
+  });
+  const before = plain(w.panel().draft.photos);
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  w.panel().onUpdate("photos", []);
   w.panel().onComplete();
   await tick();
-  assert.equal(w.requests[0][0], "images");
-  assert.equal(w.requests[0][2], 72);
-  assert.equal(w.panel().draft.photos.filter((p) => p.id === "31").length, 1);
+  assert.deepEqual(plain(w.panel().draft.photos), before);
+  assert.equal(w.panel().draft.verified, true);
+  assert.equal(w.requests.length, 0);
   w.unmount();
 });
 
@@ -880,12 +826,13 @@ test("uncertain completion never resends until server state is confirmed", async
             actionId: 71,
             status: "COMPLETED",
             actionDescription: "서버 완료 결과",
-            images: [],
+            images: images.images,
           },
         ],
       };
     },
   });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   prepareAction(w);
   w.dialog().onConfirm();
   await tick();
@@ -895,10 +842,12 @@ test("uncertain completion never resends until server state is confirmed", async
   await tick();
   assert.equal(completions, 1);
   assert.equal(lookups, 2);
-  assert.match(w.data.error, /서버의 조치 완료/);
+  assert.match(w.data.error, /서버의 사진 저장 및 조치 완료/);
   assert.equal(w.panel().readOnly, true);
   assert.equal(w.data.issue.action.result, "서버 완료 결과");
-  w.dialog().onConfirm();
+  assert.equal(w.dialog(), undefined);
+  assert.equal(w.panel().draft.photos.some(photo => photo.file), false);
+  w.panel().onComplete();
   await tick();
   assert.equal(completions, 1);
   w.unmount();
@@ -955,33 +904,16 @@ test("reconciled completion detail survives a failed refresh and ignores other i
   h.unmount();
 });
 
-test("completed issue without an action ID only reconciles and never posts completion", async () => {
-  let lookups = 0;
-  const w = reviewWorkspace(
-    {
-      getPublicIssue: async () => {
-        lookups++;
-        return { ...detail, status: "COMPLETED", actions: [] };
-      },
-    },
-    { ...detail, status: "COMPLETED", actions: [] },
-  );
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("완료된 문제는 조치 ID가 없어도 새 완료 요청을 보내지 않는다", async () => {
+  const w = reviewWorkspace({}, { ...detail, status: "COMPLETED", actions: [] });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   w.panel().onComplete();
   await tick();
-  assert.equal(lookups, 1);
   assert.equal(w.requests.length, 0);
   assert.equal(w.panel().readOnly, true);
-  assert.match(w.data.error, /조치 ID를 확인하지/);
-  w.panel().onComplete();
-  await tick();
-  assert.equal(lookups, 2);
-  assert.equal(w.requests.length, 0);
+  assert.equal(w.panel().draft.photos.length, 0);
   w.unmount();
 });
-
 
 test("review content save preserves server review status and sends edited content", async () => {
   for (const reviewStatus of ["PENDING", "UNDER_REVIEW", "INSPECTION_REQUIRED"]) {
@@ -995,6 +927,86 @@ test("review content save preserves server review status and sends edited conten
     assert.equal(w.requests[0][2].reviewTarget, "수정한 대상");
     assert.equal(w.requests[0][2].inspectionNotes, "확인할 점검 내용");
     assert.equal(w.dialog().kind, "status-saved");
+    w.unmount();
+  }
+});
+
+test("통합 완료는 사진을 필수로 확인하고 실패 시 결과와 선택 파일을 보존한 뒤 재시도한다", async () => {
+  let attempts = 0;
+  const w = reviewWorkspace({
+    completePublicIssueAction: async (...args) => {
+      w.requests.push(["complete", ...args]);
+      if (++attempts === 1) throw new Error("통합 저장 실패");
+      return completed;
+    },
+  });
+  prepareAction(w);
+  assert.equal(w.dialog(), undefined);
+  assert.match(w.data.error, /사진/);
+  await w.panel().onUpload([new File(["image"], "retry.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(w.panel().readOnly, false);
+  assert.equal(w.panel().draft.result, "정비 완료");
+  assert.equal(w.panel().draft.photos[0].file.name, "retry.jpg");
+  assert.match(w.data.error, /통합 저장 실패/);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(attempts, 2);
+  assert.equal(w.panel().readOnly, true);
+  assert.equal(w.panel().draft.photos[0].id, "31");
+  assert.equal(w.dialog(), undefined);
+  w.unmount();
+});
+
+test("완료 응답에 사진이 없으면 성공으로 처리하지 않는다", async () => {
+  const h = apiHarness();
+  h.respond(() => ({ isSuccess: true, result: { ...completed, images: [] } }));
+  await assert.rejects(h.api.completePublicIssueAction(9, "완료", [new File(["image"], "a.jpg", { type: "image/jpeg" })]), /사진 응답/);
+});
+
+test("통합 완료 요청 중 화면을 떠나면 후속 갱신·모달 이동을 하지 않는다", async () => {
+  const pending = deferred();
+  const w = reviewWorkspace({ completePublicIssueAction: () => pending.promise });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  w.dialog().onConfirm();
+  w.unmount();
+  pending.resolve(completed);
+  await tick();
+  assert.equal(w.data.completions, 0);
+  assert.equal(w.data.refreshes, 0);
+});
+
+test("완료 재조회에 사진이 없으면 선택 파일과 확인 창을 유지하고 완료 상태만 반영한다", async () => {
+  for (const actions of [[], [{ actionId: 71, status: "COMPLETED", actionDescription: "서버 완료 결과", images: [] }]]) {
+    let submissions = 0;
+    const w = reviewWorkspace({
+      completePublicIssueAction: async () => {
+        submissions++;
+        throw new Error("완료 응답 유실");
+      },
+      getPublicIssue: async () => ({ ...detail, status: "COMPLETED", actions }),
+    });
+    const file = new File(["image"], "preserved.jpg", { type: "image/jpeg" });
+    await w.panel().onUpload([file]);
+    prepareAction(w);
+    const selected = w.panel().draft.photos.find(photo => photo.file);
+    w.dialog().onConfirm();
+    await tick();
+    const panel = w.panel();
+    assert.equal(panel.readOnly, true);
+    assert.equal(w.data.issue.status, "조치 완료");
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.file, file);
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.src, selected.src);
+    assert.match(w.data.error, /저장된 사진을 확인하지 못했습니다/);
+    assert.doesNotMatch(w.data.error, /사진 저장 및 조치 완료를 확인했습니다/);
+    assert.ok(w.dialog());
+    assert.equal(w.data.refreshes, 0);
+    w.dialog().onConfirm();
+    await tick();
+    assert.equal(submissions, 1);
     w.unmount();
   }
 });

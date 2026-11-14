@@ -142,6 +142,7 @@ export type FacilityReviewResponse = FacilityReviewRequest & {
   reviewedAt: string;
 };
 export type PublicIssueCompletion = {
+  images: ActionImage[];
   actionId: number;
   reviewId: number;
   publicIssueId: number;
@@ -383,17 +384,26 @@ export async function savePublicIssueReview(
 export async function completePublicIssueAction(
   id: number,
   actionDescription: string,
+  files: File[],
 ) {
   const value = actionDescription.trim();
 
   if (!value || value.length > 4000)
     throw new Error("조치 결과를 1~4000자로 입력해 주세요.");
 
+  validatePublicIssueImages(files);
+  const body = new FormData();
+
+  body.append("request", new Blob([JSON.stringify({ actionDescription: value })], {
+    type: "application/json",
+  }));
+  files.forEach((file) => body.append("files", file));
   const response = result(
     (
       await apiClient.post<Envelope<PublicIssueCompletion>>(
         `${path(id)}/actions`,
-        { actionDescription: value },
+        body,
+        { headers: { "Content-Type": undefined }, timeout: 120000 },
       )
     ).data,
   );
@@ -406,12 +416,21 @@ export async function completePublicIssueAction(
   )
     throw new Error("조치 완료 응답을 확인해 주세요.");
 
+  if (!Array.isArray(response.images) || !response.images.length)
+    throw new Error("조치 완료 사진 응답을 확인해 주세요.");
+  response.images.forEach((image) => {
+    validPublicId(image.imageId);
+    if (typeof image.imageUrl !== "string" || !image.imageUrl.trim())
+      throw new Error("조치 완료 사진 응답을 확인해 주세요.");
+  });
+
   return response;
 }
 
 export function validatePublicIssueImages(files: File[]) {
   if (
     !files.length ||
+    files.reduce((total, file) => total + file.size, 0) > 80 * 1024 ** 2 ||
     files.some(
       (file) =>
         !file.size ||
@@ -421,43 +440,8 @@ export function validatePublicIssueImages(files: File[]) {
     )
   )
     throw new Error(
-      "JPG·JPEG·PNG 사진을 파일당 0바이트 초과, 최대 10MiB로 선택해 주세요.",
+      "JPG·JPEG·PNG 사진을 1장 이상, 파일당 최대 10MiB·전체 80MiB 이하로 선택해 주세요.",
     );
-}
-
-export async function uploadPublicIssueImages(
-  id: number,
-  actionId: number,
-  files: File[],
-) {
-  const url = `${path(id)}/actions/${validPublicId(actionId)}/images`;
-
-  validatePublicIssueImages(files);
-  const body = new FormData();
-
-  files.forEach((file) => body.append("files", file));
-
-  const response = result(
-    (
-      await apiClient.post<
-        Envelope<{
-          publicIssueId: number;
-          actionId: number;
-          images: ActionImage[];
-        }>
-      >(url, body, { headers: { "Content-Type": undefined }, timeout: 120000 })
-    ).data,
-  );
-
-  if (
-    response.publicIssueId !== id ||
-    response.actionId !== actionId ||
-    !Array.isArray(response.images)
-  )
-    throw new Error("조치 사진 응답의 식별자를 확인해 주세요.");
-  response.images.forEach((image) => validPublicId(image.imageId));
-
-  return response;
 }
 
 export function publicIssueError(cause: unknown) {

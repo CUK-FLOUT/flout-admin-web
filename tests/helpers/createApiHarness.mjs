@@ -40,6 +40,7 @@ export function createApiHarness({ overrides = {}, environment = {}, wrapResult 
       module,
       exports: module.exports,
       FormData,
+      Blob,
       AbortController,
       Date,
       Error,
