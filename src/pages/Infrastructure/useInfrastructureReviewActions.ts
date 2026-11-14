@@ -229,8 +229,16 @@ export function useInfrastructureReviewActions({
           .filter((item) => item.status === "COMPLETED")
           .sort((a, b) => b.actionId - a.actionId)[0];
 
+        if (!action?.images.length) {
+          data.setError(
+            "조치 완료는 확인했지만 저장된 사진을 확인하지 못했습니다. 선택한 사진을 유지합니다. 관리자에게 사진 저장 상태를 확인해 주세요.",
+          );
+
+          return;
+        }
+
         applyCompletedPhotos(
-          (action?.images ?? []).map((image) => ({
+          action.images.map((image) => ({
             id: String(image.imageId),
             name: `조치 사진 ${image.imageId}`,
             src: image.imageUrl,

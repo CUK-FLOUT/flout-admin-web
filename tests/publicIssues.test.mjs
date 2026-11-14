@@ -978,3 +978,35 @@ test("통합 완료 요청 중 화면을 떠나면 후속 갱신·모달 이동�
   assert.equal(w.data.completions, 0);
   assert.equal(w.data.refreshes, 0);
 });
+
+test("완료 재조회에 사진이 없으면 선택 파일과 확인 창을 유지하고 완료 상태만 반영한다", async () => {
+  for (const actions of [[], [{ actionId: 71, status: "COMPLETED", actionDescription: "서버 완료 결과", images: [] }]]) {
+    let submissions = 0;
+    const w = reviewWorkspace({
+      completePublicIssueAction: async () => {
+        submissions++;
+        throw new Error("완료 응답 유실");
+      },
+      getPublicIssue: async () => ({ ...detail, status: "COMPLETED", actions }),
+    });
+    const file = new File(["image"], "preserved.jpg", { type: "image/jpeg" });
+    await w.panel().onUpload([file]);
+    prepareAction(w);
+    const selected = w.panel().draft.photos.find(photo => photo.file);
+    w.dialog().onConfirm();
+    await tick();
+    const panel = w.panel();
+    assert.equal(panel.readOnly, true);
+    assert.equal(w.data.issue.status, "조치 완료");
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.file, file);
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.src, selected.src);
+    assert.match(w.data.error, /저장된 사진을 확인하지 못했습니다/);
+    assert.doesNotMatch(w.data.error, /사진 저장 및 조치 완료를 확인했습니다/);
+    assert.ok(w.dialog());
+    assert.equal(w.data.refreshes, 0);
+    w.dialog().onConfirm();
+    await tick();
+    assert.equal(submissions, 1);
+    w.unmount();
+  }
+});
