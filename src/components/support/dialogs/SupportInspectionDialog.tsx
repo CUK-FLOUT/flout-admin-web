@@ -40,11 +40,15 @@ export default function SupportInspectionDialog({
       )}
       <dl className="flex flex-col gap-3">
         <Row label="취약지점">{result.selected.join(" · ")}</Row>
-        {!isOwner && <Row label="점검 설명">{result.summary}</Row>}
+        {!isOwner && result.summary && (
+          <Row label="점검 설명">{result.summary}</Row>
+        )}
       </dl>
       {isOwner && (
         <>
-          <p className="text-sm leading-[21px]">{result.summary}</p>
+          {result.summary && (
+            <p className="text-sm leading-[21px]">{result.summary}</p>
+          )}
           <div className="flex gap-2">
             {result.photos.slice(0, 2).map((p) => (
               <ResultImage
@@ -98,13 +102,11 @@ export default function SupportInspectionDialog({
           </p>
         </>
       ) : (
-        <p className="text-[13px] leading-5 text-[#64748b]">
-          {a.apiId ? (
-            "현장사진 정보는 현재 지원 조회 API에서 제공하지 않습니다."
-          ) : (
-            <>▧ 현장사진 {result.photos.length}개 · 주민에게 공개된 동일 자료</>
-          )}
-        </p>
+        result.photos.length > 0 && (
+          <p className="text-[13px] leading-5 text-[#64748b]">
+            현장사진 {result.photos.length}개 · 주민에게 공개된 동일 자료
+          </p>
+        )
       )}
       <button disabled={busy} onClick={onClose} className={supportSecondary}>
         닫기

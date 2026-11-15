@@ -158,6 +158,7 @@ function reviewHarness(overrides = {}) {
   let index = 0;
   const slots = [];
   let params = new URLSearchParams("dialog=approve");
+  const navigations = [];
   const api = {
     approveSupport: async () => ({ status: "APPROVED" }),
     rejectSupport: async () => ({ status: "REJECTED" }),
@@ -230,6 +231,7 @@ function reviewHarness(overrides = {}) {
         if (name === "react-router-dom")
           return {
             Link: "Link",
+            useNavigate: () => (path) => navigations.push(path),
             useParams: () => ({ requestId: "201" }),
             useSearchParams: () => [
               params,
@@ -262,6 +264,7 @@ function reviewHarness(overrides = {}) {
     dialog: () =>
       render().find((n) => String(n.type).endsWith("/SupportDialogs")),
     params: () => params,
+    navigations,
     unmount: () => cleanups.forEach((cleanup) => cleanup?.()),
   };
 }
@@ -873,4 +876,18 @@ test("이전 검토 데이터를 읽을 때 신청을 보존하고 확인 완료
   const malformed = { ...legacy[0], review: { ...legacy[0].review, consentSubmission: "invalid" } };
   stored = JSON.stringify([malformed]);
   assert.deepEqual(plain(model.readSupportApplications()), []);
+});
+
+
+test("승인 모달의 시공 확인은 중복 등록 API나 임시 안내 없이 시공 목록으로 이동한다", () => {
+  const h = reviewHarness();
+  h.dialog().props.onRegister();
+  assert.deepEqual(h.navigations, ["/construction"]);
+});
+
+test("지원 점검 결과에 제공되지 않은 설명을 구현 안내 문구로 대체하지 않는다", () => {
+  const { inspectionFor } = harness().load("src/pages/Support/model.ts");
+  const result = inspectionFor({ apiId: 1, vulnerabilities: [], recommendations: [], inspectionSummary: "" });
+  assert.equal(result.summary, "");
+  assert.deepEqual(plain(result.photos), []);
 });

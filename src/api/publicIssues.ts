@@ -4,8 +4,6 @@ import { apiClient } from "./client";
 export const publicIssueStatuses = [
   "RECEIVED",
   "UNDER_REVIEW",
-  "INSPECTION_REQUIRED",
-  "ACTION_IN_PROGRESS",
   "COMPLETED",
 ] as const;
 export type PublicIssueStatus = (typeof publicIssueStatuses)[number];
@@ -16,8 +14,7 @@ export const publicIssueTypes = [
   "BLOCKED_STORM_DRAIN",
 ] as const;
 export type PublicIssueType = (typeof publicIssueTypes)[number];
-export type FacilityReviewStatus =
-  "PENDING" | "UNDER_REVIEW" | "INSPECTION_REQUIRED";
+export type FacilityReviewStatus = "PENDING" | "UNDER_REVIEW";
 export type PublicIssueFilters = {
   district?: "원미구" | "소사구" | "오정구";
   status?: PublicIssueStatus;
@@ -99,7 +96,7 @@ export type PublicIssueDetail = {
   review: {
     reviewId: number;
     reviewTarget: string;
-    reviewStatus: FacilityReviewStatus | "ACTION_IN_PROGRESS" | "COMPLETED";
+    reviewStatus: FacilityReviewStatus | "COMPLETED";
     inspectionNotes: string | null;
     reviewReason: string | null;
     reviewerUserId: number;
@@ -133,7 +130,11 @@ export type FacilityReviewRequest = {
   inspectionNotes: string;
   reviewReason?: string | null;
 };
-export type FacilityReviewResponse = FacilityReviewRequest & {
+export type FacilityReviewResponse = Omit<
+  FacilityReviewRequest,
+  "reviewStatus"
+> & {
+  reviewStatus: FacilityReviewStatus | "COMPLETED";
   reviewId: number;
   publicIssueId: number;
   publicIssueStatus: PublicIssueStatus;
@@ -346,9 +347,7 @@ export async function savePublicIssueReview(
     !body.inspectionNotes.trim() ||
     body.inspectionNotes.trim().length > 4000 ||
     (body.reviewReason?.trim().length || 0) > 4000 ||
-    !["PENDING", "UNDER_REVIEW", "INSPECTION_REQUIRED"].includes(
-      body.reviewStatus,
-    )
+    !["PENDING", "UNDER_REVIEW"].includes(body.reviewStatus)
   )
     throw new Error(
       "검토 대상(1~100자), 점검 필요사항(1~4000자), 검토 상태를 확인해 주세요.",
@@ -392,9 +391,12 @@ export async function completePublicIssueAction(
   validatePublicIssueImages(files);
   const body = new FormData();
 
-  body.append("request", new Blob([JSON.stringify({ actionDescription: value })], {
-    type: "application/json",
-  }));
+  body.append(
+    "request",
+    new Blob([JSON.stringify({ actionDescription: value })], {
+      type: "application/json",
+    }),
+  );
   files.forEach((file) => body.append("files", file));
   const response = result(
     (

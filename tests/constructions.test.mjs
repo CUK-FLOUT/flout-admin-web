@@ -1180,3 +1180,34 @@ test("draft restore failure allows selecting another construction while preservi
   assert.equal(w.navigations.at(-1).pathname, "/construction/92");
   w.unmount();
 });
+
+
+test("시공 주소는 추가 요청 없이 지원 상세에서 합치며 동의 값 누락에도 주소는 보존한다", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  assert.equal(h.render().selected.address, "주소 조회 중");
+  h.reads[0].resolve({ supportApplicationId: 191, address: "부천시 원미구", detailAddress: "101호" });
+  await tick();
+  const state = h.render();
+  assert.equal(state.selected.address, "부천시 원미구 101호");
+  assert.equal(h.reads.length, 1);
+  assert.match(state.error, /동의/);
+  h.unmount();
+});
+
+test("다른 시공으로 이동한 뒤 늦게 도착한 주소는 현재 상세에 섞이지 않는다", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  h.render();
+  h.select("92");
+  h.render();
+  await tick();
+  h.render();
+  h.reads[0].resolve({ supportApplicationId: 191, address: "이전 주소", landlordConsentRequired: false, landlordConsentDocumentSubmitted: false });
+  h.reads[1].resolve({ supportApplicationId: 192, address: null, detailAddress: null, landlordConsentRequired: false, landlordConsentDocumentSubmitted: false });
+  await tick();
+  assert.equal(h.render().selected.address, "미입력");
+  h.unmount();
+});

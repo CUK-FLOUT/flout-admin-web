@@ -18,8 +18,6 @@ import type {
 const statuses: Record<PublicIssueStatus, ReviewStatus> = {
   RECEIVED: "검토 대기",
   UNDER_REVIEW: "검토 중",
-  INSPECTION_REQUIRED: "점검 필요",
-  ACTION_IN_PROGRESS: "조치 진행",
   COMPLETED: "조치 완료",
 };
 const kinds: Record<PublicIssueType, string> = {
@@ -160,9 +158,5 @@ export function publicIssueResidents(
 }
 
 export function publicReviewStatus(status: FacilityDraft["status"]) {
-  return status === "검토 대기"
-    ? "PENDING"
-    : status === "점검 필요"
-      ? "INSPECTION_REQUIRED"
-      : "UNDER_REVIEW";
+  return status === "검토 대기" ? "PENDING" : "UNDER_REVIEW";
 }

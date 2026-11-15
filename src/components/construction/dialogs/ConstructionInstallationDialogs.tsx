@@ -255,9 +255,6 @@ export default function ConstructionInstallationDialogs({
           >
             결과 확인·전체 완료
           </button>
-          <p className="text-xs leading-[18px] text-[#64748b]">
-            선택한 {a.id} 신청에만 적용됩니다.
-          </p>
         </>
       ) : (
         <p className="text-xs leading-[18px] text-[#64748b]">

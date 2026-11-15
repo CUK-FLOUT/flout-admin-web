@@ -152,16 +152,6 @@ export default function AdministrativeReview({
         <p className="text-xs leading-[18px] text-[#64748b]">
           세입자는 임대인 동의서가 제출되어야 승인할 수 있습니다.
         </p>
-        <label className="flex min-h-[21px] items-center gap-2 text-sm leading-[21px]">
-          <input
-            type="checkbox"
-            disabled={!!a.apiId || readOnly}
-            checked={draft.notify}
-            onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
-            className="size-[18px] shrink-0 accent-[#234f73]"
-          />
-          승인·미승인 확정 시 주민에게 알림
-        </label>
         {!readOnly && (
           <>
             <button
@@ -276,16 +266,6 @@ export default function AdministrativeReview({
           </label>
         )}
       </div>
-      <label className="mt-6 flex min-h-[21px] items-center gap-[10px] text-sm leading-[21px]">
-        <input
-          type="checkbox"
-          disabled={!!a.apiId || readOnly}
-          checked={draft.notify}
-          onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
-          className="size-[18px] shrink-0 accent-[#234f73]"
-        />
-        승인·미승인 확정 시 주민에게 알림
-      </label>
       <div className="mt-[27px] grid grid-cols-2 gap-[7px] pl-[3px]">
         <button
           type="button"

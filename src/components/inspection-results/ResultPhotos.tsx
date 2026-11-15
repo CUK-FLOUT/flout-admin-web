@@ -1,4 +1,9 @@
 import type { ChangeEvent } from "react";
+import {
+  photoUploadLayout,
+  photoThumbnailGrid,
+  photoFrame,
+} from "../common/photoStyles";
 import type { ResultContent } from "../../pages/InspectionResults/types";
 import ResultImage from "./ResultImage";
 import camera from "../../assets/inspection-results/camera.svg";
@@ -37,50 +42,51 @@ export default function ResultPhotos({
           <img src={camera} alt="" width={20} height={20} />
           현장사진 및 공개
         </h2>
-        {content.photos.map((photo) => (
-          <figure key={photo.id} className="flex flex-col gap-[7px]">
-            <div className="relative h-[140px]">
-              <ResultImage
-                source={photo.src}
-                alt={`현장사진 ${photo.name}`}
-                className="h-full w-full rounded-md object-cover"
+        <div className={readOnly ? photoThumbnailGrid : photoUploadLayout}>
+          <div className={photoThumbnailGrid}>
+            {content.photos.map((photo) => (
+              <figure key={photo.id} className="min-w-0">
+                <div className={photoFrame}>
+                  <ResultImage
+                    source={photo.src}
+                    alt={`현장사진 ${photo.name}`}
+                    className="h-full w-full rounded-md object-cover"
+                  />
+                  {!readOnly && allowRemove && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${photo.name} 삭제`}
+                      onClick={() => onRemove(photo.id)}
+                      className="absolute right-2 top-2 size-6"
+                    >
+                      <img src={remove} alt="" width={24} height={24} />
+                    </button>
+                  )}
+                </div>
+              </figure>
+            ))}
+          </div>
+          {!readOnly && (
+            <label className="relative flex h-[100px] cursor-pointer flex-col items-center justify-center gap-[5px] rounded-md border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-3 focus-within:outline-2 focus-within:outline-[#234f73]">
+              <span className="text-sm font-semibold text-[#1e2835]">
+                {busy ? "사진 불러오는 중…" : "＋  사진 추가"}
+              </span>
+              <span className="text-xs leading-[18px] text-[#64748b]">
+                JPG, PNG · 최대 10MB
+              </span>
+              <input
+                aria-label="현장사진 추가"
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                disabled={busy}
+                onChange={onUpload}
+                className="absolute inset-0 w-full cursor-pointer opacity-0"
               />
-              {!readOnly && allowRemove && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label={`${photo.name} 삭제`}
-                  onClick={() => onRemove(photo.id)}
-                  className="absolute right-2 top-2 size-6"
-                >
-                  <img src={remove} alt="" width={24} height={24} />
-                </button>
-              )}
-            </div>
-            <figcaption className="min-h-[19px] break-all text-sm leading-[21px] text-[#1e2835]">
-              {photo.name}
-            </figcaption>
-          </figure>
-        ))}
-        {!readOnly && (
-          <label className="relative flex h-[88px] cursor-pointer flex-col items-center justify-center gap-[5px] rounded-md border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-3 focus-within:outline-2 focus-within:outline-[#234f73]">
-            <span className="text-sm font-semibold text-[#1e2835]">
-              {busy ? "사진 불러오는 중…" : "＋  사진 추가"}
-            </span>
-            <span className="text-xs leading-[18px] text-[#64748b]">
-              JPG, PNG · 파일당 최대 10MB
-            </span>
-            <input
-              aria-label="현장사진 추가"
-              type="file"
-              accept="image/jpeg,image/png"
-              multiple
-              disabled={busy}
-              onChange={onUpload}
-              className="absolute inset-0 w-full cursor-pointer opacity-0"
-            />
-          </label>
-        )}
+            </label>
+          )}
+        </div>
       </div>
       <div className="flex gap-2">
         <button

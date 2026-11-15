@@ -85,12 +85,12 @@ export default function PriorityList({
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[780px] table-fixed border-collapse text-center text-[13px] leading-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <table className="w-full min-w-[640px] table-fixed border-collapse text-center text-[13px] leading-5">
           <caption className="sr-only">우선점검 신청 비교 목록</caption>
           <colgroup>
             {[59, 100, 88, 116, 190, 88, 139].map((width, i) => (
-              <col key={i} style={{ width }} />
+              <col key={i} style={{ width: `${(width / 780) * 100}%` }} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-white text-xs font-normal leading-[18px]">
@@ -193,7 +193,9 @@ export default function PriorityList({
                   </span>
                 </td>
                 <td>{a.floodExperience}</td>
-                <td className="font-normal">{a.reason}</td>
+                <td className="break-words font-normal [overflow-wrap:anywhere]">
+                  {a.reason}
+                </td>
                 <td className="font-normal">{a.nearby}건</td>
                 <td className="pr-[15px]">
                   <span

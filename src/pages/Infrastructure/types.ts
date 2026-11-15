@@ -1,10 +1,4 @@
-export const reviewStatuses = [
-  "검토 대기",
-  "검토 중",
-  "점검 필요",
-  "조치 진행",
-  "조치 완료",
-] as const;
+export const reviewStatuses = ["검토 대기", "검토 중", "조치 완료"] as const;
 export type ReviewStatus = (typeof reviewStatuses)[number];
 export const registrationTypes = [
   "반복 침수",
@@ -19,7 +13,12 @@ export const problemTypes = [
   "시설 파손",
   "기타",
 ] as const;
-export type InfrastructurePhoto = { id: string; name: string; src: string; file?: File };
+export type InfrastructurePhoto = {
+  id: string;
+  name: string;
+  src: string;
+  file?: File;
+};
 export type RelatedResident = {
   id: string;
   receiptNo?: string;
@@ -30,7 +29,7 @@ export type RelatedResident = {
 export type FacilityDraft = {
   target: string;
   requirements: string;
-  status: "검토 대기" | "검토 중" | "점검 필요";
+  status: "검토 대기" | "검토 중";
   result: string;
   photos: InfrastructurePhoto[];
   verified: boolean;
@@ -38,7 +37,7 @@ export type FacilityDraft = {
 export type InfrastructureIssue = {
   relatedCount?: number;
   reviewId?: number;
-  reviewState?: "PENDING" | "UNDER_REVIEW" | "INSPECTION_REQUIRED" | "ACTION_IN_PROGRESS" | "COMPLETED";
+  reviewState?: "PENDING" | "UNDER_REVIEW" | "COMPLETED";
   reviewReason?: string | null;
   actionId?: number;
   id: string;

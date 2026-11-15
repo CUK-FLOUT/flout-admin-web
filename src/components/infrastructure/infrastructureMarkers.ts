@@ -9,8 +9,6 @@ import type { KakaoMap, KakaoMaps } from "../../lib/kakao/maps";
 const pinImages: Record<ReviewStatus, string> = {
   "검토 대기": assets.waitingPin,
   "검토 중": assets.reviewPin,
-  "점검 필요": assets.reviewPin,
-  "조치 진행": assets.reviewPin,
   "조치 완료": assets.completedPin,
 };
 

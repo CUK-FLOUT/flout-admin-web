@@ -41,11 +41,7 @@ export default function SupportDecisionDialogs({
       >
         <div className="-mt-1 text-sm leading-[21px]">
           <p>{a.id + " · " + a.resident + "님의 신청"}</p>
-          <p>
-            {draft.notify
-              ? "승인 확정 시 주민에게 알림이 전송되며 시공 연계가 시작됩니다."
-              : "승인 확정 시 주민에게 결과가 공개되며 시공 연계가 시작됩니다."}
-          </p>
+          <p>승인 확정 시 주민에게 결과가 공개되며 시공 연계가 시작됩니다.</p>
         </div>
         {(issue || error) && (
           <p role="alert" className="text-sm leading-[21px] text-[#a53632]">
@@ -138,7 +134,7 @@ export default function SupportDecisionDialogs({
             {a.documents.find((d) => d.includes("동의")) ||
               "제출된 동의 자료 없음"}
           </Row>
-          <Row label="필요 여부 / 확인">
+          <Row label="동의 필요 여부 / 서류 제출 여부">
             {draft.consentRequired + " / " + draft.consentSubmission}
           </Row>
           <Row label="승인 지원 범위">{draft.scope || "입력 필요"}</Row>
