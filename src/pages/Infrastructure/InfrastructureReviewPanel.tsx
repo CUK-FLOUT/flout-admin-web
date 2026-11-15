@@ -39,7 +39,7 @@ export default function InfrastructureReviewPanel({
       aria-label="공공시설 검토 및 조치"
       className={infrastructureCard + " min-h-[671px] min-w-0"}
     >
-      <section className="relative min-h-[310px] px-[15.25px] pt-[19.25px] pb-[25px]">
+      <section className="relative flex min-h-[310px] flex-col px-[15.25px] pt-[19.25px] pb-[25px]">
         <h2 className="flex items-center gap-3 text-base font-bold leading-6">
           <img src={assets.facilityReview} alt="" width={22} height={22} />
           공공시설 점검·행정 검토
@@ -83,7 +83,7 @@ export default function InfrastructureReviewPanel({
           검토 내용 저장
         </button>
       </section>
-      <section className="min-h-[360px] border-t-[0.75px] border-[#c8d0d7] px-[15.25px] pt-[23.25px] pb-[30px]">
+      <section className="flex min-h-[360px] flex-col border-t-[0.75px] border-[#c8d0d7] px-[15.25px] pt-[23.25px] pb-[30px]">
         <div className="flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-3 text-base font-bold leading-6">
             <img src={assets.actionComplete} alt="" width={22} height={22} />
@@ -110,7 +110,7 @@ export default function InfrastructureReviewPanel({
             " mt-4 h-[43px] min-h-[43px] resize-y p-[11px] text-sm leading-[21px] placeholder:text-[#94a3b8]"
           }
         />
-        <div className="mt-5 flex min-h-[68px] gap-4 overflow-x-auto px-0.5">
+        <div className="mt-5 flex min-h-[100px] gap-4 overflow-x-auto px-0.5">
           {draft.photos.map((photo) => (
             <figure key={photo.id} className="w-32 shrink-0">
               <div className="relative h-[68px] overflow-hidden rounded-[7px] border-[0.75px] border-[#c8d0d7]">
@@ -165,23 +165,12 @@ export default function InfrastructureReviewPanel({
             e.target.value = "";
           }}
         />
-        <label className="mt-[19px] flex items-center gap-2 px-0.5 text-sm leading-[21px]">
-          <input
-            type="checkbox"
-            aria-label="공공시설 조치·결과 확인 완료"
-            disabled={readOnly || busy}
-            checked={draft.verified}
-            onChange={(e) => update("verified", e.target.checked)}
-            className="size-3.5 shrink-0 accent-[#234f73]"
-          />
-          공공시설 조치·결과 확인 완료
-        </label>
         <button
           disabled={busy || readOnly}
           onClick={requestComplete}
           className={
             infrastructurePrimary +
-            " mt-[22px] h-12 w-full rounded-md text-base"
+            " mt-[33px] h-12 w-full rounded-md text-base"
           }
         >
           {readOnly ? "조치 완료" : "조치 완료 처리"}

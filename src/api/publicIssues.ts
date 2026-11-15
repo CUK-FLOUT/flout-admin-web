@@ -41,7 +41,6 @@ export type PublicIssuePage = {
 export type PublicIssueCounts = {
   registeredCount: number;
   pendingOrUnderReviewCount: number;
-  actionInProgressCount: number;
   completedCount: number;
 };
 export type PublicIssueMarker = {
@@ -273,7 +272,6 @@ export async function getPublicIssueCounts(
     ![
       counts.registeredCount,
       counts.pendingOrUnderReviewCount,
-      counts.actionInProgressCount,
       counts.completedCount,
     ].every((value) => Number.isSafeInteger(value) && value >= 0)
   )

@@ -84,12 +84,10 @@ function ResultEditor({
 }) {
   const editor = useInspectionResultEditor(a);
   const {
-    params,
     loading,
     loaded,
     retry,
     removePhoto,
-    setParams,
     draft,
     error,
     busy,
@@ -192,14 +190,7 @@ function ResultEditor({
           }}
           readOnly={readOnly}
           onRegion={registerRegion}
-          addressQuery={params.get("addressQuery") || ""}
-          onSearchAddress={(query) => {
-            const next = new URLSearchParams(params);
 
-            next.set("dialog", "address-results");
-            next.set("addressQuery", query);
-            setParams(next);
-          }}
         />
       )}
     </div>

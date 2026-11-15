@@ -6,13 +6,14 @@ type Props = {
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
-  size: "small" | "region" | "address" | "actions";
+  size: "small" | "region" | "actions";
   rounded?: boolean;
+  showClose?: boolean;
+  closeDisabled?: boolean;
 };
 const widths = {
   small: "max-w-[480px]",
   region: "max-w-[520px]",
-  address: "max-w-[560px]",
   actions: "max-w-[580px]",
 };
 
@@ -22,6 +23,8 @@ export default function ResultDialog({
   children,
   size,
   rounded,
+  showClose = false,
+  closeDisabled = false,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = `result-dialog-${size}`;
@@ -61,30 +64,23 @@ export default function ResultDialog({
         )
           onClose();
       }}
-      className={`fixed inset-0 m-auto w-[calc(100vw_-_32px)] ${widths[size]} max-h-[calc(100dvh_-_32px)] overflow-y-auto border border-[#c8d0d7] bg-white p-[23px] text-[#202b36] backdrop:bg-black/30 ${size === "region" || size === "actions" || rounded ? "rounded-xl" : "rounded-lg"} ${size === "address" ? "h-[696px]" : ""} font-[family-name:Inter,Pretendard,sans-serif] ${inspectionFocus} [&_button:enabled]:cursor-pointer`}
+      className={`fixed inset-0 m-auto w-[calc(100vw_-_32px)] ${widths[size]} max-h-[calc(100dvh_-_32px)] overflow-y-auto border border-[#c8d0d7] bg-white p-[23px] text-[#202b36] backdrop:bg-black/30 ${size === "region" || size === "actions" || rounded ? "rounded-xl" : "rounded-lg"} font-[family-name:Inter,Pretendard,sans-serif] ${inspectionFocus} [&_button:enabled]:cursor-pointer`}
     >
-      <div
-        className={`flex flex-col ${size === "address" ? "gap-5" : "gap-3"}`}
-      >
-        <div
-          className={`flex items-start justify-between ${size === "address" ? "h-[30px]" : ""}`}
-        >
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
           <h2
             id={titleId}
-            className={
-              size === "address"
-                ? "font-[family-name:Pretendard,sans-serif] text-[22px] font-bold leading-[33px]"
-                : "text-base font-bold leading-6"
-            }
+            className="text-base font-bold leading-6"
           >
             {title}
           </h2>
-          {size === "address" && (
+          {showClose && (
             <button
               type="button"
-              aria-label="주소 검색 닫기"
+              aria-label="모달 닫기"
+              disabled={closeDisabled}
               onClick={onClose}
-              className="text-2xl leading-9 text-[#596672]"
+              className="flex size-6 shrink-0 items-center justify-center rounded text-2xl leading-6 text-[#596672] disabled:cursor-not-allowed"
             >
               ×
             </button>
