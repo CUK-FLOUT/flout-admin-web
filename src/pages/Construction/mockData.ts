@@ -28,7 +28,7 @@ function record(
     address,
     facility: "출입구 물막이판",
     scope: "승인된 시설 설치",
-    consent: "필요 · 확인 완료",
+    consent: "필요 · 제출 완료",
     preferred: "2026.10.21 · 오전(9~12시)",
     status,
     date: scheduled ? "2026-10-21" : "",

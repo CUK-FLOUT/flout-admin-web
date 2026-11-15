@@ -3,24 +3,22 @@ export const supportStatuses = [
   "승인",
   "미승인",
   "접수",
-  "동의 확인 필요",
   "일정 조율 중",
 ] as const;
 export const consentRequirements = ["검토 필요", "필요", "불필요"] as const;
-export const consentStates = [
+export const consentSubmissions = [
   "미확인",
-  "자료 요청",
-  "확인 중",
-  "확인 완료",
+  "미제출",
+  "제출 완료",
   "불필요",
 ] as const;
 export type SupportStatus = (typeof supportStatuses)[number];
 export type ConsentRequirement = (typeof consentRequirements)[number];
-export type ConsentState = (typeof consentStates)[number];
+export type ConsentSubmission = (typeof consentSubmissions)[number];
 export type ReviewDraft = {
   checks: [boolean, boolean, boolean];
   consentRequired: ConsentRequirement;
-  consentState: ConsentState;
+  consentSubmission: ConsentSubmission;
   scope: string;
   memo: string;
   notify: boolean;
@@ -68,6 +66,5 @@ export type SupportDialogKind =
 export type SupportFilters = {
   district: string;
   status: string;
-  consent: string;
   q: string;
 };

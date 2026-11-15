@@ -19,7 +19,6 @@ import {
   supportSearchFilters,
   supportDistrictOptions,
   supportStatusOptions,
-  supportConsentOptions,
 } from "./apiMapping";
 import { useSupportList, useSupportRecord } from "./useSupportApi";
 
@@ -34,8 +33,6 @@ const initialFilters = (p: URLSearchParams): SupportFilters => ({
   district:
     supportDistrictOptions.find((value) => value === p.get("district")) || "",
   status: supportStatusOptions.find((value) => value === p.get("status")) || "",
-  consent:
-    supportConsentOptions.find((value) => value === p.get("consent")) || "",
   q: p.get("q") || "",
 });
 const panel =
@@ -150,7 +147,7 @@ function SupportManagementScreen() {
 
   function reset() {
     setRevision((value) => value + 1);
-    setFilters({ district: "", status: "", consent: "", q: "" });
+    setFilters({ district: "", status: "", q: "" });
     const p = new URLSearchParams();
 
     change(p);
@@ -201,7 +198,7 @@ function SupportManagementScreen() {
       <form
         onSubmit={searchSubmit}
         aria-label="지원 신청 검색"
-        className="mt-4 grid h-[46px] grid-cols-[166px_180px_184px_minmax(160px,1fr)_101px_119px] gap-[10px] max-[1101px]:h-auto max-[1101px]:grid-cols-2"
+        className="mt-4 grid h-[46px] grid-cols-[166px_180px_minmax(160px,1fr)_101px_119px] gap-[10px] max-[1101px]:h-auto max-[1101px]:grid-cols-2"
       >
         <SupportSelect
           label="지역"
@@ -219,17 +216,6 @@ function SupportManagementScreen() {
             setFilters((f) => ({
               ...f,
               status: v === "지원 상태 전체" ? "" : v,
-            }))
-          }
-        />
-        <SupportSelect
-          label="동의 확인"
-          value={filters.consent || "동의 확인 전체"}
-          options={["동의 확인 전체", ...supportConsentOptions]}
-          onChange={(v) =>
-            setFilters((f) => ({
-              ...f,
-              consent: v === "동의 확인 전체" ? "" : v,
             }))
           }
         />
@@ -363,7 +349,7 @@ function SupportManagementScreen() {
                       <div
                         role="cell"
                         className={
-                          a.review.consentState === "확인 완료"
+                          a.review.consentSubmission === "제출 완료"
                             ? "text-[#27654d]"
                             : ""
                         }

@@ -6,8 +6,7 @@ export type HousingType =
   "SEMI_BASEMENT" | "FIRST_FLOOR" | "SECOND_FLOOR_OR_ABOVE";
 export type SupportSearchFilters = {
   district?: "원미구" | "소사구" | "오정구";
-  status?: SupportServerStatus | "REVIEWING" | "CONSENT_PENDING" | "SCHEDULING";
-  landlordConsentStatus?: "NOT_REQUIRED" | "PENDING" | "VERIFIED" | "CONFIRMED";
+  status?: SupportServerStatus | "REVIEWING" | "SCHEDULING";
 };
 export type SupportListItem = {
   supportApplicationId: number;
@@ -16,7 +15,6 @@ export type SupportListItem = {
   requestedFacility: string | null;
   landlordConsentRequired?: boolean;
   landlordConsentDocumentSubmitted?: boolean;
-  landlordConsentStatus?: "PENDING" | "VERIFIED" | "NOT_REQUIRED";
   status: SupportServerStatus;
 };
 export type SupportPage = {
@@ -52,13 +50,9 @@ export type SupportDetails = {
   inspectionStatus: string | null;
   inspectionResultPublished: boolean;
   attachments: { originalName: string; fileUrl: string }[];
-  landlordConsentStatus: SupportListItem["landlordConsentStatus"];
   status: SupportServerStatus;
 };
-export type SupportReviewDetails = Omit<
-  SupportDetails,
-  "landlordConsentStatus"
-> & {
+export type SupportReviewDetails = SupportDetails & {
   applicationId: number;
   vulnerabilityTypes: string[];
   landlordConsentRequired: boolean;
@@ -106,9 +100,6 @@ export async function getSupportApplications(
       size: 5,
       ...(filters.district ? { district: filters.district } : {}),
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.landlordConsentStatus
-        ? { landlordConsentStatus: filters.landlordConsentStatus }
-        : {}),
     },
     signal,
   });

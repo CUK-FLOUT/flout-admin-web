@@ -95,7 +95,7 @@ export default function ConstructionRegistrationDialogs({
         >
           {specific
             ? "검토 중·미승인 또는 필요한 동의 미확인 신청은 등록 대상에서 제외됩니다."
-            : "지원 승인·필요 동의 확인 후 등록 가능합니다."}
+            : "지원 승인·필요 동의서 제출 후 등록 가능합니다."}
         </p>
         {alert}
         {specific ? (
