@@ -24,7 +24,8 @@ const item = {
   receiptNo: "000002",
   applicantName: "테스트",
   requestedFacility: null,
-  landlordConsentStatus: "VERIFIED",
+  landlordConsentRequired: true,
+  landlordConsentDocumentSubmitted: true,
   status: "SUBMITTED",
 };
 test("목록은 백엔드가 지원하는 검색어와 서버 페이지 정보만 사용한다", async () => {
@@ -130,7 +131,7 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
   assert.equal(a.phone, "미입력");
   assert.equal(a.address, "부천시 101호");
   assert.equal(a.housing, "미입력");
-  assert.equal(a.review.consentState, "확인 완료");
+  assert.equal(a.review.consentSubmission, "제출 완료");
   assert.equal(a.review.scope, "설치 지원");
   assert.equal(a.programName, "침수 예방");
   assert.deepEqual(plain(a.vulnerabilities), ["출입구"]);
@@ -331,26 +332,26 @@ test("동의 필요 여부는 상세의 동의 상태가 아니라 검토 응답
   const review = { vulnerabilityTypes: [], landlordConsentRequired: false };
   assert.equal(
     mapSupportDetail(
-      { ...item, landlordConsentStatus: "PENDING", attachments: [] },
+      { ...item, landlordConsentRequired: true, attachments: [] },
       review,
     ).review.consentRequired,
     "불필요",
   );
   assert.equal(
     mapSupportDetail(
-      { ...item, landlordConsentStatus: "NOT_REQUIRED", attachments: [] },
+      { ...item, landlordConsentRequired: false, attachments: [] },
       { ...review, landlordConsentRequired: true },
     ).review.consentRequired,
     "필요",
   );
 });
 
-test("API 신청은 동의 확인 상태와 파일명으로 승인 요청을 막지 않고 서버가 최종 검증한다", () => {
+test("API 신청은 실제 제출 여부로 승인하고 파일명에 의존하지 않는다", () => {
   const h = harness();
   const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
   const { approvalIssue } = h.load("src/pages/Support/model.ts");
   const a = {
-    ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
+    ...mapSupport({ ...item, landlordConsentRequired: true }),
     inspectionPublished: true,
     reviewLoaded: true,
   };
@@ -371,12 +372,12 @@ test("API 신청은 동의 확인 상태와 파일명으로 승인 요청을 막
   );
 });
 
-test("기존 Mock 신청의 동의 검증은 그대로 유지한다", () => {
+test("미제출 신청은 API 여부와 관계없이 승인을 차단한다", () => {
   const h = harness();
   const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
   const { approvalIssue } = h.load("src/pages/Support/model.ts");
   const a = {
-    ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
+    ...mapSupport({ ...item, landlordConsentRequired: true, landlordConsentDocumentSubmitted: false }),
     apiId: undefined,
     inspectionPublished: true,
     reviewLoaded: true,
@@ -387,7 +388,7 @@ test("기존 Mock 신청의 동의 검증은 그대로 유지한다", () => {
       checks: [true, true, true],
       scope: "설치",
     }),
-    /동의 자료/,
+    /동의서/,
   );
 });
 
@@ -421,7 +422,6 @@ test("한국어 필터를 서버 코드로 변환해 검색·페이지와 함께
     size: 5,
     district: "원미구",
     status: "REVIEWING",
-    landlordConsentStatus: "VERIFIED",
   });
   assert.equal(h.requests[0].signal, controller.signal);
   assert.equal(page.totalElements, 12);
@@ -440,15 +440,7 @@ test("필터 초기화는 선택 조건을 요청에서 제외하고 모든 실�
     ["미승인", "REJECTED"],
   ])
     assert.equal(supportSearchFilters({ ...base, status }).status, code);
-  for (const [consent, code] of [
-    ["불필요", "NOT_REQUIRED"],
-    ["필요 · 확인 중", "PENDING"],
-    ["필요 · 확인 완료", "VERIFIED"],
-  ])
-    assert.equal(
-      supportSearchFilters({ ...base, consent }).landlordConsentStatus,
-      code,
-    );
+  assert.equal(supportSearchFilters({ ...base, consent: "필요 · 확인 완료" }).landlordConsentStatus, undefined);
   for (const district of ["원미구", "소사구", "오정구"])
     assert.equal(
       supportSearchFilters({ ...base, district }).district,
@@ -673,11 +665,11 @@ test("거주 형태와 동의 검토 매핑은 미입력과 모순된 상태를 
     );
   }
   const a = mapSupportDetail(
-    { ...item, landlordConsentStatus: "NOT_REQUIRED", attachments: [] },
+    { ...item, landlordConsentRequired: false, attachments: [] },
     { landlordConsentRequired: true },
   );
   assert.equal(a.review.consentRequired, "필요");
-  assert.equal(a.review.consentState, "미확인");
+  assert.equal(a.review.consentSubmission, "제출 완료");
 });
 
 test("동일한 파일명도 고유 문서 키로 각각의 URL을 보존한다", () => {
@@ -785,12 +777,12 @@ test("지원 현황은 최신 rejectedCount를 포함한 네 집계값과 0건�
 
 test("목록과 상세는 최신 동의 boolean을 동일하게 사용하고 누락된 예전 상태를 필요로 간주하지 않는다", () => {
   const { mapSupport, mapSupportDetail } = harness().load("src/pages/Support/apiMapping.ts");
-  const { landlordConsentStatus, ...currentItem } = item;
+  const { landlordConsentRequired, landlordConsentDocumentSubmitted, ...currentItem } = item;
   const cases = [
     [false, false, "불필요", "불필요"],
     [false, true, "불필요", "불필요"],
-    [true, false, "필요", "미확인"],
-    [true, true, "필요", "확인 중"],
+    [true, false, "필요", "미제출"],
+    [true, true, "필요", "제출 완료"],
   ];
   for (const [required, submitted, expectedRequired, expectedState] of cases) {
     const payload = {
@@ -807,10 +799,78 @@ test("목록과 상세는 최신 동의 boolean을 동일하게 사용하고 누
     });
     for (const result of [list, detail, review]) {
       assert.equal(result.review.consentRequired, expectedRequired);
-      assert.equal(result.review.consentState, expectedState);
+      assert.equal(result.review.consentSubmission, expectedState);
     }
   }
   assert.equal(mapSupport(currentItem).review.consentRequired, "검토 필요");
   assert.equal(mapSupport({ ...item, landlordConsentRequired: false }).review.consentRequired, "불필요");
-  assert.equal(mapSupportDetail({ ...item, landlordConsentRequired: false, attachments: [] }, { landlordConsentRequired: false }).review.consentState, "불필요");
+  assert.equal(mapSupportDetail({ ...item, landlordConsentRequired: false, attachments: [] }, { landlordConsentRequired: false }).review.consentSubmission, "불필요");
+});
+
+
+test("실제 동의서 제출 boolean만 승인 조건에 사용하고 파일명과 누락값을 신뢰하지 않는다", () => {
+  const h = harness();
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const { approvalIssue, consentLabel } = h.load("src/pages/Support/model.ts");
+  for (const [required, submitted, allowed, label] of [
+    [true, true, true, "제출 완료"],
+    [true, false, false, "미제출"],
+    [true, undefined, false, "미확인"],
+    [undefined, true, false, "필요 여부 검토 전"],
+    [false, false, true, "불필요"],
+  ]) {
+    const a = { ...mapSupport({ ...item, landlordConsentRequired: required, landlordConsentDocumentSubmitted: submitted }), inspectionPublished: true, reviewLoaded: true, documents: submitted ? [] : ["임대인 동의서.pdf"] };
+    const draft = { ...a.review, checks: [true, true, true], scope: "설치" };
+    assert.equal(approvalIssue(a, draft) === null, allowed);
+    assert.equal(consentLabel(a), label);
+  }
+});
+
+test("폐기된 동의 필터가 남아 있어도 API query에 전달하지 않는다", async () => {
+  const h = harness();
+  h.setResponse(() => ({ supportApplications: [], page: 0, totalElements: 0, totalPages: 0 }));
+  await h.load("src/api/supportApplications.ts").getSupportApplications("", 0, { landlordConsentStatus: "VERIFIED" });
+  assert.equal(Object.hasOwn(h.requests[0].params, "landlordConsentStatus"), false);
+});
+
+
+test("이전 검토 데이터를 읽을 때 신청을 보존하고 확인 완료를 제출 완료로 추정하지 않는다", () => {
+  let stored;
+  const h = createApiHarness({
+    overrides: {
+      "../InspectionResults/storage": { readResultsState: () => ({ records: {} }) },
+      "./mockData": { createSupportFixtures: () => [] },
+    },
+    environment: { localStorage: { getItem: () => stored, setItem: (_, value) => { stored = value; } } },
+  });
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const model = h.load("src/pages/Support/model.ts");
+  const base = mapSupport(item);
+  const legacy = ["미확인", "자료 요청", "확인 중", "확인 완료", "불필요"].map((consentState, i) => {
+    const review = { ...base.review, memo: "보존할 메모", consentState };
+    delete review.consentSubmission;
+    return { ...base, id: String(i + 1).padStart(6, "0"), review, documents: ["동의서.pdf"] };
+  });
+  const unnecessary = structuredClone(legacy[0]);
+  unnecessary.id = "000006";
+  unnecessary.review.consentRequired = "불필요";
+  const current = { ...base, id: "000007" };
+  stored = JSON.stringify([...legacy, unnecessary, current]);
+  const original = stored;
+  const result = model.readSupportApplications();
+  assert.equal(result.length, 7);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(result[i].review.consentSubmission, "미확인");
+    assert.equal(result[i].review.memo, "보존할 메모");
+    assert.deepEqual(plain(result[i].documents), ["동의서.pdf"]);
+    assert.equal(Object.hasOwn(result[i].review, "consentState"), false);
+  }
+  assert.equal(result[5].review.consentSubmission, "불필요");
+  assert.equal(result[6].review.consentSubmission, "제출 완료");
+  assert.equal(stored, original);
+  model.writeSupportApplications(result);
+  assert.deepEqual(plain(model.readSupportApplications()), plain(result));
+  const malformed = { ...legacy[0], review: { ...legacy[0].review, consentSubmission: "invalid" } };
+  stored = JSON.stringify([malformed]);
+  assert.deepEqual(plain(model.readSupportApplications()), []);
 });

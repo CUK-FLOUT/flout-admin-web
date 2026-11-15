@@ -20,12 +20,13 @@ export function useSupportList(
   revision = 0,
   filters: SupportSearchFilters = {},
 ) {
-  const { district, status, landlordConsentStatus } = filters;
-  const key = JSON.stringify([keyword, page, district, status, landlordConsentStatus]);
+  const { district, status } = filters;
+  const key = JSON.stringify([keyword, page, district, status]);
   const list = usePagePolling({
     queryKey: key,
     revision,
-    load: (signal) => getSupportApplications(keyword, page, { district, status, landlordConsentStatus }, signal),
+    load: (signal) =>
+      getSupportApplications(keyword, page, { district, status }, signal),
     errorMessage: supportError,
   });
   const counts = usePagePolling({

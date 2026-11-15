@@ -114,8 +114,7 @@ export function constructionCandidates(
       a.status === "승인" &&
       a.review.consentRequired !== "검토 필요" &&
       (a.review.consentRequired === "불필요" ||
-        (a.review.consentState === "확인 완료" &&
-          a.documents.some((d) => d.includes("동의")))),
+        a.review.consentSubmission === "제출 완료"),
   }));
 
   if (!support.some((a) => a.id === exampleCandidate.id))
@@ -134,7 +133,7 @@ export function enrollConstruction(
 
   if (!candidate?.eligible)
     throw new Error(
-      "지원 승인과 필요한 동의 확인이 완료된 신청만 등록할 수 있습니다.",
+      "지원 승인과 필요한 동의서가 제출된 신청만 등록할 수 있습니다.",
     );
   const { eligible: _eligible, ...info } = candidate;
 

@@ -165,7 +165,7 @@ export default function SupportDialogs({
               "제출된 동의 자료 없음"}
           </Row>
           <Row label="필요 여부 / 확인">
-            {draft.consentRequired + " / " + draft.consentState}
+            {draft.consentRequired + " / " + draft.consentSubmission}
           </Row>
           <Row label="승인 지원 범위">{draft.scope || "입력 필요"}</Row>
         </dl>
@@ -330,7 +330,7 @@ export default function SupportDialogs({
         </dl>
         <p className="text-xs leading-[18px] text-[#64748b]">
           {a.status === "승인"
-            ? "지원 결과와 동의 확인 상태는 주민 화면에도 표시됩니다."
+            ? "지원 결과와 동의서 제출 여부는 주민 화면에도 표시됩니다."
             : "검토 안내문은 행정 담당자가 입력한 내용입니다."}
         </p>
         {a.status === "승인" && (

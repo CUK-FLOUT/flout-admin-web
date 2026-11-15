@@ -100,6 +100,6 @@ export function constructionConsentLabel(
   return !required
     ? "불필요"
     : submitted
-      ? "필요 · 확인 완료"
-      : "필요 · 미확인";
+      ? "제출 완료"
+      : "미제출";
 }

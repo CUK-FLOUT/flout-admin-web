@@ -1020,8 +1020,8 @@ test("consent label uses explicit need/submission booleans without assuming miss
   );
   assert.equal(label(false, false), "불필요");
   assert.equal(label(false, true), "불필요");
-  assert.equal(label(true, true), "필요 · 확인 완료");
-  assert.equal(label(true, false), "필요 · 미확인");
+  assert.equal(label(true, true), "제출 완료");
+  assert.equal(label(true, false), "미제출");
   assert.throws(() => label(undefined, false), /응답/);
   assert.throws(() => label(true, undefined), /응답/);
 });
@@ -1084,7 +1084,7 @@ test("construction consent reads the linked support ID and updates independently
   });
   await tick();
   state = h.render();
-  assert.equal(state.selected.consent, "필요 · 확인 완료");
+  assert.equal(state.selected.consent, "제출 완료");
   assert.equal(state.error, "");
   h.unmount();
 });
@@ -1140,7 +1140,7 @@ test("consent metadata update preserves locally edited schedule and newly upload
     ],
   });
   render();
-  record = { ...record, consent: "필요 · 확인 완료" };
+  record = { ...record, consent: "제출 완료" };
   render();
   state = render();
   assert.equal(state.draft.date, "2099-12-31");
