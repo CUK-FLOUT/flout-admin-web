@@ -137,10 +137,10 @@ function mount(overrides = {}, requestId = "5", search = "") {
           ],
         };
       if (name.endsWith("api/priorityInspections")) return api;
-      if (name === "./usePriorityOrder" || name === "./apiMapping") {
+      if (["./usePriorityOrder", "./apiMapping", "./usePriorityData", "./usePrioritySelection", "./usePriorityDesignation"].includes(name)) {
         const child = { exports: {} };
         const code = ts.transpileModule(readFileSync(`src/pages/Priority/${name.slice(2)}.ts`, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText;
-        vm.runInNewContext(code, { module: child, exports: child.exports, require });
+        vm.runInNewContext(code, { module: child, exports: child.exports, require, AbortController });
         return child.exports;
       }
       if (name === "./priorityUtils") return utils.exports;
@@ -194,6 +194,10 @@ function mount(overrides = {}, requestId = "5", search = "") {
       historyKey = value.key;
       historyState = value.state;
       params = new URLSearchParams(value.search);
+      dirty = true;
+    },
+    setRequestId(value) {
+      requestId = value;
       dirty = true;
     },
     setSearch(value) {
@@ -503,4 +507,69 @@ test("정규화된 필터가 활성화되어 있으면 Hook도 저장 요청을 
   await h.flush();
   assert.equal(h.orders.length, 0);
   assert.match(h.find("PriorityModals").error, /초기화/);
+});
+
+
+test("늦게 도착한 이전 상세는 현재 선택과 담당자 메모를 덮어쓰지 않는다", async () => {
+  const previous = deferred();
+  const h = mount({
+    getPriorityInspection: (id) => id === 5 ? previous.promise : Promise.resolve({ ...detail, applicationId: id, receiptNo: "000006", internalMemo: "현재 신청 메모" }),
+  });
+  await h.flush();
+  h.setRequestId("6");
+  await h.flush();
+  assert.equal(h.find("PriorityDetail").application.applicationId, 6);
+  previous.resolve({ ...detail, internalMemo: "이전 신청 메모" });
+  await h.flush();
+  assert.equal(h.find("PriorityDetail").application.applicationId, 6);
+  assert.equal(h.find("PriorityDetail").application.memo, "현재 신청 메모");
+});
+
+test("목록 밖 지정 상태 조회 실패 시 임의의 지정·취소 요청을 보내지 않는다", async () => {
+  let writes = 0;
+  const h = mount({
+    getPriorityInspections: async () => ({ applications: [], page: 0, totalElements: 0, totalPages: 0 }),
+    getPriorityDesignation: async () => { throw new Error("지정 상태 조회 실패"); },
+    setPriorityDesignation: async () => { writes++; },
+  });
+  await h.flush();
+  assert.equal(h.find("PriorityDetail").application.designationKnown, false);
+  await h.find("PriorityModals").onDesignate();
+  assert.equal(writes, 0);
+});
+
+test("선정 순서 저장과 지정 요청은 같은 잠금을 사용한다", async () => {
+  const gate = deferred();
+  let writes = 0;
+  const h = mount({
+    getPriorityOrder: async () => [{ ...row, designated: true, selectionOrder: 1 }],
+    commitPriorityOrder: () => gate.promise,
+    setPriorityDesignation: async () => { writes++; },
+  });
+  await h.flush();
+  h.find("PriorityList").onOpenReorder();
+  await h.flush();
+  const saving = h.find("PriorityModals").onSaveOrder();
+  await h.find("PriorityModals").onDesignate();
+  assert.equal(writes, 0);
+  gate.resolve({ saved: true });
+  await saving;
+  await h.flush();
+  assert.equal(h.find("PriorityModals").busy, false);
+  assert.equal(h.find("PriorityModals").dialog, "saved");
+});
+
+test("처음 열린 목록은 첫 신청을 선택하고 페이지 변경 시 새 목록의 첫 신청을 조회한다", async () => {
+  const calls = [];
+  const h = mount({
+    getPriorityInspections: async ({ page }) => ({ applications: [{ ...row, applicationId: page ? 6 : 5 }], page, totalElements: 2, totalPages: 2 }),
+    getPriorityInspection: async (id) => { calls.push(id); return { ...detail, applicationId: id }; },
+  }, undefined);
+  h.setRequestId(undefined);
+  await h.flush();
+  assert.equal(h.find("PriorityDetail").application.applicationId, 5);
+  h.setSearch("page=1");
+  await h.flush();
+  assert.equal(h.find("PriorityDetail").application.applicationId, 6);
+  assert.equal(calls.at(-1), 6);
 });
