@@ -1,4 +1,9 @@
 import type { RefObject } from "react";
+import {
+  photoUploadLayout,
+  photoThumbnailGrid,
+  photoFrame,
+} from "../../components/common/photoStyles";
 
 import InfrastructureImage from "../../components/infrastructure/InfrastructureImage";
 import {
@@ -33,7 +38,6 @@ export default function InfrastructureReviewPanel({
   onComplete: requestComplete,
   onUpload: upload,
 }: Props) {
-
   return (
     <aside
       aria-label="공공시설 검토 및 조치"
@@ -78,7 +82,10 @@ export default function InfrastructureReviewPanel({
           type="button"
           disabled={readOnly || busy}
           onClick={save}
-          className={infrastructurePrimary + " mt-[19px] h-[46px] w-full rounded-md text-base"}
+          className={
+            infrastructurePrimary +
+            " mt-[19px] h-[46px] w-full rounded-md text-base"
+          }
         >
           검토 내용 저장
         </button>
@@ -89,15 +96,6 @@ export default function InfrastructureReviewPanel({
             <img src={assets.actionComplete} alt="" width={22} height={22} />
             공공시설 조치 완료
           </h2>
-          {!readOnly && (
-            <button
-              disabled={busy}
-              onClick={() => file.current?.click()}
-              className="text-xs text-[#234f73]"
-            >
-              사진 첨부
-            </button>
-          )}
         </div>
         <textarea
           aria-label="조치 결과"
@@ -110,47 +108,53 @@ export default function InfrastructureReviewPanel({
             " mt-4 h-[43px] min-h-[43px] resize-y p-[11px] text-sm leading-[21px] placeholder:text-[#94a3b8]"
           }
         />
-        <div className="mt-5 flex min-h-[100px] gap-4 overflow-x-auto px-0.5">
-          {draft.photos.map((photo) => (
-            <figure key={photo.id} className="w-32 shrink-0">
-              <div className="relative h-[68px] overflow-hidden rounded-[7px] border-[0.75px] border-[#c8d0d7]">
-                <InfrastructureImage
-                  source={photo.src}
-                  alt={"조치 사진 " + photo.name}
-                  className="h-full w-full object-cover"
-                />
-                {photo.file && !readOnly && (
-                  <button
-                    aria-label={photo.name + " 삭제"}
-                    disabled={busy}
-                    onClick={() =>
-                      update(
-                        "photos",
-                        draft.photos.filter((p) => p.id !== photo.id),
-                      )
-                    }
-                    className="absolute top-[5.25px] right-[5.25px] size-[22px]"
-                  >
-                    <img
-                      src={assets.removePhoto}
-                      alt=""
-                      width={22}
-                      height={22}
-                    />
-                  </button>
-                )}
-              </div>
-            </figure>
-          ))}
-          {!draft.photos.length && (
-            <button
-              disabled={busy || readOnly}
-              onClick={() => file.current?.click()}
-              className="h-[68px] w-32 shrink-0 rounded-[7px] border border-dashed border-[#c8d0d7] text-xs text-[#596672]"
-            >
-              {busy ? "사진 저장 중…" : "+ 조치 사진 첨부"}
-            </button>
-          )}
+        <div className={photoUploadLayout + " mt-5"}>
+          <div className={photoThumbnailGrid}>
+            {draft.photos.map((photo) => (
+              <figure key={photo.id} className="min-w-0">
+                <div className={photoFrame}>
+                  <InfrastructureImage
+                    source={photo.src}
+                    alt={"조치 사진 " + photo.name}
+                    className="h-full w-full object-cover"
+                  />
+                  {photo.file && !readOnly && (
+                    <button
+                      aria-label={photo.name + " 삭제"}
+                      disabled={busy}
+                      onClick={() =>
+                        update(
+                          "photos",
+                          draft.photos.filter((p) => p.id !== photo.id),
+                        )
+                      }
+                      className="absolute top-[5.25px] right-[5.25px] size-[22px]"
+                    >
+                      <img
+                        src={assets.removePhoto}
+                        alt=""
+                        width={22}
+                        height={22}
+                      />
+                    </button>
+                  )}
+                </div>
+              </figure>
+            ))}
+            {!draft.photos.length && (
+              <p className="grid h-[100px] place-items-center rounded-lg border border-[#c8d0d7] bg-[#f4f5f6] text-xs text-[#596672]">
+                등록된 사진 없음
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={busy || readOnly}
+            onClick={() => file.current?.click()}
+            className="h-[100px] min-w-0 rounded-lg border border-dashed border-[#c8d0d7] bg-[#f4f5f6] px-2 text-xs text-[#596672] disabled:opacity-60"
+          >
+            {busy ? "사진 저장 중…" : "사진 첨부"}
+          </button>
         </div>
         <input
           ref={file}

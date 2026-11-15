@@ -29,17 +29,7 @@ export function useInfrastructureReviewActions({
   data,
   onDialog,
 }: Options) {
-  const [draft, setDraft] = useState<FacilityDraft>(() => {
-    const initial = facilityDraft(issue);
-
-    return {
-      ...initial,
-      status:
-        issue.reviewState === "INSPECTION_REQUIRED"
-          ? "점검 필요"
-          : initial.status,
-    };
-  });
+  const [draft, setDraft] = useState<FacilityDraft>(() => facilityDraft(issue));
   const [previousIssue, setPreviousIssue] = useState(issue);
 
   if (issue !== previousIssue) {
@@ -109,7 +99,7 @@ export function useInfrastructureReviewActions({
     if (submitting.current || readOnly) return;
     const reviewStatus = issue.reviewState || publicReviewStatus(draft.status);
 
-    if (reviewStatus === "ACTION_IN_PROGRESS" || reviewStatus === "COMPLETED") {
+    if (reviewStatus === "COMPLETED") {
       data.setError("현재 조치 상태에서는 검토 내용을 저장할 수 없습니다.");
 
       return;
@@ -159,13 +149,8 @@ export function useInfrastructureReviewActions({
       return;
     }
 
-    if (
-      !draft.result.trim() ||
-      draft.result.trim().length > 4000
-    ) {
-      data.setError(
-        "조치 결과를 1~4000자로 입력해 주세요.",
-      );
+    if (!draft.result.trim() || draft.result.trim().length > 4000) {
+      data.setError("조치 결과를 1~4000자로 입력해 주세요.");
 
       return;
     }
@@ -275,9 +260,7 @@ export function useInfrastructureReviewActions({
         !draft.result.trim() ||
         draft.result.trim().length > 4000
       ) {
-        data.setError(
-          "저장된 검토 내용과 조치 결과를 확인해 주세요.",
-        );
+        data.setError("저장된 검토 내용과 조치 결과를 확인해 주세요.");
 
         return;
       }

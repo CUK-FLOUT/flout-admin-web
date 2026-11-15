@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import AdministrativeReview from "../../components/support/AdministrativeReview";
 import ReviewInformation from "../../components/support/ReviewInformation";
 import SupportDialogs from "../../components/support/SupportDialogs";
@@ -66,6 +71,7 @@ function SupportReviewScreen({
 }) {
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [a, setApplication] = useState(initial);
   const [error, setError] = useState("");
@@ -154,9 +160,7 @@ function SupportReviewScreen({
   }
 
   function register() {
-    window.alert(
-      "승인된 신청의 시공 연계는 서버에서 처리합니다. 시공 관리 API 연동 후 목록에서 확인할 수 있습니다.",
-    );
+    navigate("/construction");
   }
 
   return (

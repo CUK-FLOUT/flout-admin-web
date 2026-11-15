@@ -38,12 +38,11 @@ export default function SupportOutcomeDialogs({
           <Row label="동의 상태">{consentLabel(a)}</Row>
         </dl>
         <p className="text-sm leading-[21px] text-[#64748b]">
-          지원 승인과 필요한 동의가 확인되어 시공 대상 등록이 가능합니다.
+          승인된 신청의 시공 일정과 진행 상황은 시공 관리에서 확인할 수
+          있습니다.
         </p>
         <button onClick={onRegister} className={supportPrimary}>
-          {a.constructionRegistered
-            ? "시공 관리에서 확인"
-            : "승인한 신청을 시공 대상 등록"}
+          시공 관리에서 확인
         </button>
         <button disabled={busy} onClick={onClose} className={supportSecondary}>
           닫기
@@ -63,8 +62,8 @@ export default function SupportOutcomeDialogs({
           지원 미승인 · 주민에게 결과 공개
         </p>
         <p className="text-sm leading-[21px] text-[#64748b]">
-          담당자가 입력한 검토 안내가 주민 지원 상세에 표시됩니다. 시공 대상
-          등록은 비활성화됩니다.
+          담당자가 입력한 검토 안내가 주민 지원 상세에 표시됩니다. 시공 대상으로
+          연계되지 않습니다.
         </p>
         <dl className="flex flex-col gap-3">
           <Row label="신청">{a.id + " · " + a.resident}</Row>
@@ -139,9 +138,7 @@ export default function SupportOutcomeDialogs({
             <>
               <Row label="지원 범위">{a.review.scope}</Row>
               <Row label="임대인 동의">{consentLabel(a)}</Row>
-              <Row label="시공 연계">
-                {a.constructionRegistered ? "등록됨 · 진행" : "등록 전"}
-              </Row>
+              <Row label="시공 연계">시공 관리에서 확인</Row>
             </>
           ) : (
             <>
@@ -156,18 +153,7 @@ export default function SupportOutcomeDialogs({
             : "검토 안내문은 행정 담당자가 입력한 내용입니다."}
         </p>
         {a.status === "승인" && (
-          <Link
-            onClick={(event) => {
-              if (a.apiId) {
-                event.preventDefault();
-                window.alert(
-                  "시공 관리 API 연동 후 해당 신청의 시공 정보를 확인할 수 있습니다.",
-                );
-              }
-            }}
-            to={"/construction?requestId=" + a.id}
-            className={supportSecondary}
-          >
+          <Link to="/construction" className={supportSecondary}>
             시공 관리에서 확인
           </Link>
         )}

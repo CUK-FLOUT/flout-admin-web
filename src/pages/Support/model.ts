@@ -227,9 +227,7 @@ export function inspectionFor(a: SupportApplication) {
   if (a.apiId)
     return {
       selected: a.vulnerabilities,
-      summary:
-        a.inspectionSummary ||
-        "점검 결과의 상세 설명·사진은 현재 지원 조회 응답에 포함되지 않습니다.",
+      summary: a.inspectionSummary || "",
       actions: a.recommendations,
       photos: [],
     };

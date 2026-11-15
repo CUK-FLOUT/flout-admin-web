@@ -2,7 +2,7 @@ import { useApplicationMap } from "./useApplicationMap";
 import type { ApplicationMapOptions } from "./useApplicationMap";
 import highDot from "../../assets/gis/imgEllipse.svg";
 import mediumDot from "../../assets/gis/imgEllipse1.svg";
-import lowDot from "../../assets/gis/riskLowDot.svg";
+import lowDot from "../../assets/gis/imgEllipse2.svg";
 
 export default function ApplicationMap(props: ApplicationMapOptions) {
   const {
@@ -75,9 +75,13 @@ export default function ApplicationMap(props: ApplicationMapOptions) {
         {[
           [highDot, "높음", "#dc2626"],
           [mediumDot, "보통", "#d97706"],
-          [lowDot, "낮음", "#234f73"],
+          [lowDot, "낮음", "#16a34a"],
         ].map(([src, label, color]) => (
-          <span key={label} className="flex items-center gap-1" style={{ color }}>
+          <span
+            key={label}
+            className="flex items-center gap-1"
+            style={{ color }}
+          >
             <img src={src} alt="" width={14} height={14} />
             {label}
           </span>

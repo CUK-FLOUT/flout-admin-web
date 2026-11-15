@@ -1,4 +1,9 @@
 import { useRef } from "react";
+import {
+  photoUploadLayout,
+  photoThumbnailGrid,
+  photoFrame,
+} from "../common/photoStyles";
 import type { ConstructionPhoto } from "../../pages/Construction/types";
 import ConstructionImage from "./ConstructionImage";
 import uploadIcon from "../../assets/construction/upload.svg";
@@ -20,12 +25,12 @@ export default function ConstructionPhotos({
   const input = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_150px] items-start gap-[10px]">
-      <div className="flex min-h-[76px] min-w-0 snap-x gap-[10px] overflow-x-auto">
+    <div className={photoUploadLayout}>
+      <div className={photoThumbnailGrid}>
         {photos.length ? (
           photos.map((photo) => (
-            <div key={photo.id} className="w-full min-w-full snap-start">
-              <div className="relative h-[76px] overflow-hidden rounded-lg border border-[#c8d0d7]">
+            <div key={photo.id} className="min-w-0">
+              <div className={photoFrame}>
                 <ConstructionImage
                   source={photo.src}
                   alt={"완료사진 " + photo.name}
@@ -51,7 +56,7 @@ export default function ConstructionPhotos({
             </div>
           ))
         ) : (
-          <p className="grid h-[76px] w-full place-items-center rounded-lg border border-[#c8d0d7] bg-[#f4f5f6] text-xs text-[#596672]">
+          <p className="grid h-[100px] w-full place-items-center rounded-lg border border-[#c8d0d7] bg-[#f4f5f6] text-xs text-[#596672]">
             등록된 사진 없음
           </p>
         )}

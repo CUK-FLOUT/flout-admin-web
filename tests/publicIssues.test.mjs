@@ -914,7 +914,7 @@ test("완료된 문제는 조치 ID가 없어도 새 완료 요청을 보내지 
 });
 
 test("review content save preserves server review status and sends edited content", async () => {
-  for (const reviewStatus of ["PENDING", "UNDER_REVIEW", "INSPECTION_REQUIRED"]) {
+  for (const reviewStatus of ["PENDING", "UNDER_REVIEW"]) {
     const w = reviewWorkspace({}, { ...detail, review: { ...detail.review, reviewStatus } });
     w.panel().onUpdate("target", "수정한 대상");
     w.panel().onUpdate("requirements", "확인할 점검 내용");
@@ -1041,4 +1041,30 @@ test("현황은 최신 3개 필드만 검증하며 실제 응답과 0건을 정�
     h.respond(() => ({ isSuccess: true, result: payload }));
     await assert.rejects(h.api.getPublicIssueCounts({ keyword: "" }), /현황 응답/);
   }
+});
+
+
+test("공공인프라는 최신 3개 상태만 표시하고 오래된 URL 필터 상태를 요청에 넣지 않는다", () => {
+  const h = harness();
+  const mapping = h.load("src/pages/Infrastructure/apiMapping.ts");
+  const base = { district: "", query: "", kind: "", status: "" };
+  for (const [status, expected] of [["RECEIVED", "검토 대기"], ["UNDER_REVIEW", "검토 중"], ["COMPLETED", "조치 완료"]]) {
+    assert.equal(mapping.publicIssueRecord({ publicIssueId: 1, status }).status, expected);
+    assert.equal(mapping.infrastructureApiFilters({ ...base, status: expected }).status, status);
+  }
+  for (const status of ["점검 필요", "조치 진행", "INSPECTION_REQUIRED", "ACTION_IN_PROGRESS"])
+    assert.equal(mapping.infrastructureApiFilters({ ...base, status }).status, undefined);
+});
+
+test("제거된 목록·지도 필터와 완료 상태의 검토 저장은 HTTP 요청 전에 차단한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/publicIssues.ts");
+  for (const status of ["INSPECTION_REQUIRED", "ACTION_IN_PROGRESS"]) {
+    await assert.rejects(api.getPublicIssues({ keyword: "", status }, 0), /상태/);
+    await assert.rejects(api.getPublicIssueMap({ keyword: "", status }), /상태/);
+  }
+  for (const reviewStatus of ["INSPECTION_REQUIRED", "ACTION_IN_PROGRESS", "COMPLETED"]) {
+    await assert.rejects(api.savePublicIssueReview(1, { reviewTarget: "시설", inspectionNotes: "검토", reviewStatus }), /검토 상태/);
+  }
+  assert.equal(h.requests.length, 0);
 });
