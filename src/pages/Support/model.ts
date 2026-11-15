@@ -2,7 +2,11 @@ import entrance from "../../assets/gis/imgJpg.png";
 import drain from "../../assets/gis/imgJpg1.png";
 import { readResultsState } from "../InspectionResults/storage";
 import { createSupportFixtures } from "./mockData";
-import { consentRequirements, consentSubmissions, supportStatuses } from "./types";
+import {
+  consentRequirements,
+  consentSubmissions,
+  supportStatuses,
+} from "./types";
 import type { ReviewDraft, SupportApplication, SupportFilters } from "./types";
 
 export const supportStorageKey = "flout-support-management-v1";
@@ -53,12 +57,44 @@ function isApplication(value: unknown): value is SupportApplication {
   );
 }
 
+// Previous confirmation states do not prove that a consent document was submitted.
+function migrateStoredApplication(value: unknown): unknown {
+  if (!value || typeof value !== "object" || !("review" in value)) return value;
+  const review = value.review;
+
+  if (
+    !review ||
+    typeof review !== "object" ||
+    "consentSubmission" in review ||
+    !("consentState" in review) ||
+    !["미확인", "자료 요청", "확인 중", "확인 완료", "불필요"].some(
+      (state) => state === review.consentState,
+    )
+  )
+    return value;
+
+  const migratedReview = {
+    ...review,
+    consentSubmission:
+      "consentRequired" in review && review.consentRequired === "불필요"
+        ? "불필요"
+        : "미확인",
+  };
+
+  Reflect.deleteProperty(migratedReview, "consentState");
+
+  return { ...value, review: migratedReview };
+}
+
 export function readSupportApplications(): SupportApplication[] {
   try {
     const raw = localStorage.getItem(supportStorageKey);
 
     if (raw === null) return createSupportFixtures();
-    const value: unknown = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    const value: unknown = Array.isArray(parsed)
+      ? parsed.map(migrateStoredApplication)
+      : parsed;
 
     if (
       !Array.isArray(value) ||

@@ -832,3 +832,45 @@ test("폐기된 동의 필터가 남아 있어도 API query에 전달하지 않�
   await h.load("src/api/supportApplications.ts").getSupportApplications("", 0, { landlordConsentStatus: "VERIFIED" });
   assert.equal(Object.hasOwn(h.requests[0].params, "landlordConsentStatus"), false);
 });
+
+
+test("이전 검토 데이터를 읽을 때 신청을 보존하고 확인 완료를 제출 완료로 추정하지 않는다", () => {
+  let stored;
+  const h = createApiHarness({
+    overrides: {
+      "../InspectionResults/storage": { readResultsState: () => ({ records: {} }) },
+      "./mockData": { createSupportFixtures: () => [] },
+    },
+    environment: { localStorage: { getItem: () => stored, setItem: (_, value) => { stored = value; } } },
+  });
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const model = h.load("src/pages/Support/model.ts");
+  const base = mapSupport(item);
+  const legacy = ["미확인", "자료 요청", "확인 중", "확인 완료", "불필요"].map((consentState, i) => {
+    const review = { ...base.review, memo: "보존할 메모", consentState };
+    delete review.consentSubmission;
+    return { ...base, id: String(i + 1).padStart(6, "0"), review, documents: ["동의서.pdf"] };
+  });
+  const unnecessary = structuredClone(legacy[0]);
+  unnecessary.id = "000006";
+  unnecessary.review.consentRequired = "불필요";
+  const current = { ...base, id: "000007" };
+  stored = JSON.stringify([...legacy, unnecessary, current]);
+  const original = stored;
+  const result = model.readSupportApplications();
+  assert.equal(result.length, 7);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(result[i].review.consentSubmission, "미확인");
+    assert.equal(result[i].review.memo, "보존할 메모");
+    assert.deepEqual(plain(result[i].documents), ["동의서.pdf"]);
+    assert.equal(Object.hasOwn(result[i].review, "consentState"), false);
+  }
+  assert.equal(result[5].review.consentSubmission, "불필요");
+  assert.equal(result[6].review.consentSubmission, "제출 완료");
+  assert.equal(stored, original);
+  model.writeSupportApplications(result);
+  assert.deepEqual(plain(model.readSupportApplications()), plain(result));
+  const malformed = { ...legacy[0], review: { ...legacy[0].review, consentSubmission: "invalid" } };
+  stored = JSON.stringify([malformed]);
+  assert.deepEqual(plain(model.readSupportApplications()), []);
+});
