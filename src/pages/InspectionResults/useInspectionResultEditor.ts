@@ -8,9 +8,6 @@ import {
   deleteInspectionPhoto,
   getInspectionResult,
   inspectionError,
-  publishInspectionResult,
-  validateRecommendedFacilities,
-  saveInspectionDraft,
   uploadInspectionPhotos,
 } from "../../api/inspections";
 import {
@@ -18,9 +15,8 @@ import {
   publicIssueRequest,
   resultContent,
   resultFeedbacks,
-  resultRequest,
-  validateResult,
 } from "./apiContent";
+import { useInspectionResultPublish } from "./useInspectionResultPublish";
 import { categories, resultsDialogKinds } from "./types";
 import type {
   Category,
@@ -55,8 +51,6 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   const [loaded, setLoaded] = useState(false);
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [facilityWarning, setFacilityWarning] = useState(false);
-  const validatedSnapshot = useRef<string | null>(null);
   const inFlight = useRef(false);
   const active = useRef(true);
   const current = () => active.current && generation === getSessionGeneration();
@@ -68,6 +62,18 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   const dialog = resultsDialogKinds.includes(requestedDialog)
     ? requestedDialog
     : null;
+
+  const {
+    persist, facilityWarning, dismissFacilityWarning, editFacilityActions, confirmFacilityPublish,
+  } = useInspectionResultPublish({
+    id, draft, busy, readOnly,
+    inFlightRef: inFlight,
+    isCurrent: current,
+    setSaving, setError, setReadOnly, setDialog,
+    clearSavedDraft: () => {
+      if (generation === getSessionGeneration()) draftsFor(generation).delete(id);
+    },
+  });
 
   useEffect(() => {
     active.current = true;
@@ -157,76 +163,6 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
       entries.push({ category, feedback: content.details[category] });
     rememberDraft({ ...content, selected, feedbackEntries: entries });
     setError("");
-  }
-
-  async function persistResult(publish: boolean, confirmed = false) {
-    if (busy || inFlight.current || readOnly || !current()) return;
-    const problem = validateResult(draft, publish);
-
-    if (problem) {
-      setError(problem);
-
-      return;
-    }
-
-    inFlight.current = true;
-    setSaving(true);
-    setError("");
-    try {
-      const body = resultRequest(draft);
-
-      if (publish && !confirmed) {
-        const validation = await validateRecommendedFacilities(
-          body.recommendedActions.map((action) => action.description),
-        );
-
-        if (!current()) return;
-        if (!validation.hasFacilities) {
-          validatedSnapshot.current = JSON.stringify(body);
-          setFacilityWarning(true);
-
-          return;
-        }
-      }
-
-      if (publish) await publishInspectionResult(id, body);
-      else await saveInspectionDraft(id, body);
-      if (generation === getSessionGeneration()) draftsFor(generation).delete(id);
-      if (!current()) return;
-      setReadOnly(publish);
-      inFlight.current = false;
-      setDialog(publish ? "published" : "draft-saved");
-    } catch (cause) {
-      if (current()) setError(inspectionError(cause));
-    } finally {
-      inFlight.current = false;
-      if (current()) setSaving(false);
-    }
-  }
-
-  function dismissFacilityWarning() {
-    if (inFlight.current) return;
-    validatedSnapshot.current = null;
-    setFacilityWarning(false);
-  }
-
-  function editFacilityActions() {
-    if (busy || inFlight.current || readOnly || !current()) return;
-    dismissFacilityWarning();
-    setDialog("actions");
-  }
-
-  async function confirmFacilityPublish() {
-    if (inFlight.current || !facilityWarning || !current()) return;
-    if (validatedSnapshot.current !== JSON.stringify(resultRequest(draft))) {
-      dismissFacilityWarning();
-      setError("입력 내용이 변경되었습니다. 공개 버튼을 눌러 다시 검증해 주세요.");
-
-      return;
-    }
-
-    dismissFacilityWarning();
-    await persistResult(true, true);
   }
 
   async function registerRegion(
@@ -331,7 +267,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     update,
     updateFeedback,
     toggleCategory,
-    persist: (publish: boolean) => persistResult(publish),
+    persist,
     facilityWarning,
     dismissFacilityWarning,
     editFacilityActions,
