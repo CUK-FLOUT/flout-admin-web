@@ -782,3 +782,35 @@ test("지원 현황은 최신 rejectedCount를 포함한 네 집계값과 0건�
     assert.equal(h.requests.at(-1).signal, controller.signal);
   }
 });
+
+test("목록과 상세는 최신 동의 boolean을 동일하게 사용하고 누락된 예전 상태를 필요로 간주하지 않는다", () => {
+  const { mapSupport, mapSupportDetail } = harness().load("src/pages/Support/apiMapping.ts");
+  const { landlordConsentStatus, ...currentItem } = item;
+  const cases = [
+    [false, false, "불필요", "불필요"],
+    [false, true, "불필요", "불필요"],
+    [true, false, "필요", "미확인"],
+    [true, true, "필요", "확인 중"],
+  ];
+  for (const [required, submitted, expectedRequired, expectedState] of cases) {
+    const payload = {
+      ...currentItem,
+      landlordConsentRequired: required,
+      landlordConsentDocumentSubmitted: submitted,
+      attachments: [],
+    };
+    const list = mapSupport(payload);
+    const detail = mapSupportDetail(payload);
+    const review = mapSupportDetail(payload, {
+      landlordConsentRequired: required,
+      landlordConsentDocumentSubmitted: submitted,
+    });
+    for (const result of [list, detail, review]) {
+      assert.equal(result.review.consentRequired, expectedRequired);
+      assert.equal(result.review.consentState, expectedState);
+    }
+  }
+  assert.equal(mapSupport(currentItem).review.consentRequired, "검토 필요");
+  assert.equal(mapSupport({ ...item, landlordConsentRequired: false }).review.consentRequired, "불필요");
+  assert.equal(mapSupportDetail({ ...item, landlordConsentRequired: false, attachments: [] }, { landlordConsentRequired: false }).review.consentState, "불필요");
+});
