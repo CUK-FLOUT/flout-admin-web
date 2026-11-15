@@ -449,7 +449,7 @@ test("related request failures do not erase the detail, and successful completio
   h.unmount();
 });
 
-function reviewWorkspace(apiOverrides = {}, original = detail) {
+function reviewWorkspace(apiOverrides = {}, original = detail, environment = {}) {
   const hook = hooks();
   const react = hook.react;
   const mapping = harness().load("src/pages/Infrastructure/apiMapping.ts");
@@ -551,7 +551,7 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
       RelatedApplications: "Related",
     },
   };
-  const Component = harness(overrides).load(
+  const Component = harness(overrides, environment).load(
     "src/pages/Infrastructure/InfrastructureReview.tsx",
   ).default;
   const rootNode = Component();
@@ -1067,4 +1067,82 @@ test("제거된 목록·지도 필터와 완료 상태의 검토 저장은 HTTP 
     await assert.rejects(api.savePublicIssueReview(1, { reviewTarget: "시설", inspectionNotes: "검토", reviewStatus }), /검토 상태/);
   }
   assert.equal(h.requests.length, 0);
+});
+
+test("검토 저장의 공유 잠금은 기존 렌더의 조치 요청·사진 추가·입력 변경도 차단한다", async () => {
+  const pending = deferred();
+  let saves = 0;
+  const w = reviewWorkspace({ savePublicIssueReview: () => { saves++; return pending.promise; } });
+  await w.panel().onUpload([new File(["image"], "kept.jpg", { type: "image/jpeg" })]);
+  const panel = w.panel();
+  const original = panel.draft.result;
+  const saving = panel.onSave();
+  panel.onSave();
+  panel.onComplete();
+  panel.onUpdate("result", "저장 중 변경 금지");
+  await panel.onUpload([new File(["image"], "blocked.jpg", { type: "image/jpeg" })]);
+  assert.equal(saves, 1);
+  assert.equal(w.panel().draft.result, original);
+  assert.equal(w.panel().draft.photos.length, 1);
+  assert.equal(w.dialog(), undefined);
+  assert.equal(w.panel().busy, true);
+  pending.reject(new Error("저장 거절"));
+  await saving;
+  assert.equal(w.panel().busy, false);
+  w.panel().onUpdate("result", "실패 후 다시 작성");
+  assert.equal(w.panel().draft.result, "실패 후 다시 작성");
+  w.unmount();
+});
+
+test("조치 완료의 공유 잠금은 검토 저장·사진 추가·입력 변경을 차단하고 성공 후 읽기 전용을 유지한다", async () => {
+  const pending = deferred();
+  let saves = 0;
+  const w = reviewWorkspace({
+    savePublicIssueReview: async () => { saves++; throw new Error("호출되면 안 됨"); },
+    completePublicIssueAction: () => pending.promise,
+  });
+  await w.panel().onUpload([new File(["image"], "complete.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  const panel = w.panel();
+  w.dialog().onConfirm();
+  await panel.onSave();
+  await panel.onUpload([new File(["image"], "blocked.jpg", { type: "image/jpeg" })]);
+  panel.onUpdate("result", "완료 중 변경 금지");
+  assert.equal(saves, 0);
+  assert.equal(w.panel().draft.result, "정비 완료");
+  assert.equal(w.panel().draft.photos.length, 1);
+  pending.resolve(completed);
+  await tick();
+  assert.equal(w.panel().readOnly, true);
+  assert.equal(w.panel().busy, false);
+  await w.panel().onSave();
+  assert.equal(saves, 0);
+  w.unmount();
+});
+
+test("초안은 서버 갱신 중 편집값과 선택 사진을 보존하고 삭제·언마운트에서 URL을 한 번씩 해제한다", async () => {
+  const created = [], revoked = [];
+  const w = reviewWorkspace({}, detail, { URL: {
+    createObjectURL() { const url = `blob:qa-${created.length}`; created.push(url); return url; },
+    revokeObjectURL(url) { revoked.push(url); },
+  } });
+  w.panel().onUpdate("target", "작성 중인 대상");
+  w.panel().onUpdate("requirements", "작성 중인 검토 내용");
+  w.panel().onUpdate("result", "작성 중인 조치 결과");
+  await w.panel().onUpload([new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.jpg", { type: "image/jpeg" })]);
+  const photos = w.panel().draft.photos;
+  const removed = photos.find(photo => photo.file?.name === "a.jpg");
+  w.panel().onUpdate("photos", photos.filter(photo => photo.id !== removed.id));
+  assert.deepEqual(revoked, [removed.src]);
+  w.data.issue = { ...w.data.issue, target: "서버 대상", requirements: "서버 검토", action: { ...w.data.issue.action, photos: [{ id: "remote-1", name: "서버 사진", src: "https://example.com/remote.jpg" }] } };
+  let draft = w.panel().draft;
+  draft = w.panel().draft;
+  assert.equal(draft.target, "작성 중인 대상");
+  assert.equal(draft.requirements, "작성 중인 검토 내용");
+  assert.equal(draft.result, "작성 중인 조치 결과");
+  assert.ok(draft.photos.some(photo => photo.file?.name === "b.jpg"));
+  assert.ok(draft.photos.some(photo => photo.id === "remote-1"));
+  w.unmount();
+  assert.deepEqual([...revoked].sort(), [...created].sort());
+  assert.equal(new Set(revoked).size, revoked.length);
 });
