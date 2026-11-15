@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Application } from "../../pages/GIS/types";
 
@@ -8,8 +8,7 @@ import resident from "../../assets/gis/imgIconResident.svg";
 import attachment from "../../assets/gis/imgIconAttachment.svg";
 import memoIcon from "../../assets/gis/imgIconMemo.svg";
 import type { GisRecord } from "../../pages/GIS/useGisApi";
-import { gisError } from "../../api/gisApplications";
-import { getSessionGeneration } from "../../auth/session";
+import { useGisMemo } from "../../pages/GIS/useGisMemo";
 
 type Props = {
   application: Application;
@@ -53,57 +52,18 @@ export default function ApplicationDetail({
   record,
 }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("신청 정보");
-  const [memoSource, setMemoSource] = useState(record.internalMemo);
-  const [memo, setMemo] = useState(record.internalMemo ?? "");
-
-  if (memoSource !== record.internalMemo) {
-    setMemoSource(record.internalMemo);
-    setMemo(record.internalMemo ?? "");
-  }
-
-  const memoReady = record.internalMemo !== undefined && !record.errors.internalMemo;
+  const { memo, setMemo, memoReady, saving, saveError, saveMessage, saveMemo } = useGisMemo({
+    applicationId: a.id,
+    sourceMemo: record.internalMemo,
+    loadError: record.errors.internalMemo,
+    onSave: onAccept,
+  });
   const [photo, setPhoto] = useState<{
     src: string;
     title: string;
   } | null>(null);
 
   const dialog = useRef<HTMLDialogElement>(null);
-
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
-  const inFlight = useRef(false);
-  const active = useRef(true);
-  const generation = getSessionGeneration();
-
-  useEffect(() => {
-    active.current = true;
-
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  async function saveMemo() {
-    if (inFlight.current || !memoReady) return;
-    inFlight.current = true;
-    setSaving(true);
-    setSaveError("");
-    setSaveMessage("");
-    try {
-      const saved = await onAccept(a.id, memo);
-
-      if (active.current && generation === getSessionGeneration()) {
-        setMemo(saved);
-        setSaveMessage("내부 메모를 저장했습니다.");
-      }
-    } catch (error) {
-      if (active.current && generation === getSessionGeneration())
-        setSaveError(gisError(error));
-    } finally {
-      inFlight.current = false;
-      if (active.current) setSaving(false);
-    }
-  }
 
   const support = record.support;
   const construction = record.construction;
