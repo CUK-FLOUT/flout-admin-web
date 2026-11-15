@@ -546,7 +546,13 @@ function editorHarness(overrides = {}) {
     structuredClone,
     URLSearchParams,
     Error,
-    require(name) {
+    require: function require(name) {
+      if (name === "./useInspectionResultPublish") {
+        const child = { exports: {} };
+        const code = ts.transpileModule(readFileSync("src/pages/InspectionResults/useInspectionResultPublish.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText;
+        vm.runInNewContext(code, { module: child, exports: child.exports, require });
+        return child.exports;
+      }
       if (name === "react")
         return {
           useState(initial) {
@@ -960,4 +966,65 @@ test("경고 이후 입력이 바뀌면 이전 검증 결과로 공개하지 않
   await h.render().confirmFacilityPublish();
   assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
   assert.match(h.render().error, /다시 검증/);
+});
+
+test("시설 검증 중에는 같은 렌더의 임시 저장·사진 변경·공공 문제 등록도 요청하지 않는다", async () => {
+  let resolve;
+  const h = editorHarness({ validateRecommendedFacilities: () => new Promise(yes => { resolve = yes; }) });
+  h.render();
+  await settle();
+  const editor = h.render();
+  const pending = editor.persist(true);
+  await editor.persist(false);
+  await editor.upload({ target: { files: [{ name: "photo.png" }], value: "photo.png" } });
+  await editor.removePhoto("17");
+  assert.equal(await editor.registerRegion({ location: "부천시", kind: "반복 침수", description: "침수", findings: "확인" }), false);
+  for (const name of ["saveInspectionDraft", "uploadInspectionPhotos", "deleteInspectionPhoto", "createPublicIssue"])
+    assert.equal(h.calls.some(call => call.name === name), false);
+  resolve({ hasFacilities: true, facilities: ["물막이판"] });
+  await pending;
+  assert.equal(h.calls.filter(call => call.name === "publishInspectionResult").length, 1);
+});
+
+test("공개 실패 후 편집 초안을 재진입해 복원하고 재검증 후 다시 공개할 수 있다", async () => {
+  let attempts = 0;
+  const h = editorHarness({ publishInspectionResult: async () => { if (++attempts === 1) throw new Error("공개 실패"); return {}; } });
+  h.render();
+  await settle();
+  h.render().update("actions", ["물막이판 설치 권장"]);
+  await h.render().persist(true);
+  assert.equal(h.render().readOnly, false);
+  assert.equal(h.render().saving, false);
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.render().error, "공개 실패");
+  assert.equal(h.params().get("dialog"), null);
+  h.remount();
+  h.render();
+  await settle();
+  assert.deepEqual(plain(h.render().draft.actions), ["물막이판 설치 권장"]);
+  await h.render().persist(true);
+  assert.equal(attempts, 2);
+  assert.equal(h.calls.filter(call => call.name === "validateRecommendedFacilities").length, 2);
+  assert.equal(h.render().readOnly, true);
+  assert.equal(h.params().get("dialog"), "published");
+});
+
+test("시설 검증 중 인증 세션이 변경되면 이전 검증의 공개·경고·오류 후처리를 건너뛴다", async () => {
+  for (const failure of [false, true]) {
+    let resolve, reject;
+    const h = editorHarness({ validateRecommendedFacilities: () => new Promise((yes, no) => { resolve = yes; reject = no; }) });
+    h.render();
+    await settle();
+    const pending = h.render().persist(true);
+    h.changeSession();
+    if (failure) reject(new Error("이전 세션 검증 실패"));
+    else resolve({ hasFacilities: false, facilities: [] });
+    await pending;
+    assert.equal(h.calls.some(call => call.name === "publishInspectionResult"), false);
+    const editor = h.render();
+    assert.equal(editor.facilityWarning, false);
+    assert.equal(editor.error, "");
+    assert.equal(h.params().get("dialog"), null);
+    h.unmount();
+  }
 });
