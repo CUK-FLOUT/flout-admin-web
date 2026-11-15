@@ -1,5 +1,4 @@
-import { getSessionGeneration } from "../../auth/session";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssignmentPanel from "../../components/inspection/AssignmentPanel";
@@ -10,72 +9,50 @@ import InspectionStatusTabs from "../../components/inspection/InspectionStatusTa
 import InspectionDialog from "../../components/inspection/InspectionDialog";
 import type { InspectionDialogState } from "../../components/inspection/InspectionDialog";
 import { inspectionStatuses } from "./constants";
-import type { EditableStatus, InspectionApplication } from "./types";
+import type { EditableStatus } from "./types";
 import {
   inspectionFocus,
   inspectionPanel,
 } from "../../components/inspection/styles";
-import {
-  assignInspection,
-  getInspections,
-  inspectionError,
-} from "../../api/inspections";
-import { usePagePolling } from "../../hooks/usePagePolling";
-import { loadInspection } from "./loadInspection";
+import { useInspectionData } from "./useInspectionData";
+import { useInspectionAssignment } from "./useInspectionAssignment";
 import { inspectionRow, inspectionSearch } from "./apiModel";
-
-let pendingAssignment: { inspectionId: number; generation: number } | null = null;
 
 export default function InspectionManagement() {
   const navigate = useNavigate();
   const { requestId } = useParams();
   const [params, setParams] = useSearchParams();
-  const [selected, setSelected] = useState<InspectionApplication>();
-  const [storageError, setStorageError] = useState("");
-  const [inspectorsError, setInspectorsError] = useState("");
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  const active = useRef(true);
-  const generation = getSessionGeneration();
 
-  useEffect(() => {
-    active.current = true;
-    const pending = pendingAssignment;
-
-    pendingAssignment = null;
-    if (pending && pending.generation === getSessionGeneration())
-      navigate(`/inspection/${pending.inspectionId}?dialog=assignment-saved&target=예정`, { replace: true });
-
-    return () => {
-      active.current = false;
-    };
-  }, [navigate]);
   const [revision, setRevision] = useState(0);
-  const [inspectors, setInspectors] = useState<{ id: number; name: string }[]>(
-    [],
-  );
   const searchQuery = JSON.stringify(inspectionSearch(params));
   const selectedId =
     params.get("selected") === "none"
       ? undefined
       : requestId || params.get("selected") || undefined;
   const stage = params.get("stage") || "전체";
-  const list = usePagePolling({
-    queryKey: searchQuery,
-    revision,
-    paused: busy,
-    load: (signal) => getInspections(JSON.parse(searchQuery), signal),
-    errorMessage: inspectionError,
+  const {
+    selected,
+    setSelected,
+    storageError,
+    setStorageError,
+    inspectorsError,
+    inspectors,
+    list,
+    pageData,
+    loading,
+  } = useInspectionData({ searchQuery, selectedId, revision, busy });
+  const { save } = useInspectionAssignment({
+    params,
+    navigate,
+    setParams,
+    savingRef: saving,
+    setBusy,
+    setStorageError,
+    setSelected,
+    refresh: () => setRevision((value) => value + 1),
   });
-  const pageData = list.data;
-  const loading = list.loading;
-  const loadSelectedInspection = useEffectEvent((id: number, signal: AbortSignal) =>
-    loadInspection(
-      id,
-      signal,
-      pageData?.inspections.find((item) => item.inspectionId === id),
-    ),
-  );
   const filtered = (pageData?.inspections || []).map(inspectionRow);
   const searchEmpty =
     filtered.length === 0 &&
@@ -101,65 +78,6 @@ export default function InspectionManagement() {
     params.get("visit"),
     params.get("q"),
   ].join("|");
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      setStorageError("");
-      setSelected(undefined);
-      if (!selectedId || !/^[1-9]\d*$/.test(selectedId)) return;
-      try {
-        const detail = await loadSelectedInspection(Number(selectedId), controller.signal);
-
-        if (!controller.signal.aborted) setSelected(detail);
-      } catch (error) {
-        if (!controller.signal.aborted) setStorageError(inspectionError(error));
-      }
-    }
-
-    void load();
-
-    return () => controller.abort();
-  }, [selectedId, revision]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadInspectors() {
-      const names = new Map<number, string>();
-      let page = 0;
-      let totalPages = 1;
-
-      setInspectorsError("");
-
-      try {
-        while (page < totalPages) {
-          const response = await getInspections(
-            { status: "ALL", page, size: 100 },
-            controller.signal,
-          );
-
-          if (controller.signal.aborted) return;
-          response.inspections.forEach((item) => {
-            if (item.inspectorUserId != null && item.inspectorName)
-              names.set(item.inspectorUserId, item.inspectorName);
-          });
-          totalPages = response.totalPages;
-          page++;
-        }
-
-        setInspectors([...names].map(([id, name]) => ({ id, name })));
-      } catch (error) {
-        if (!controller.signal.aborted)
-          setInspectorsError(inspectionError(error));
-      }
-    }
-
-    void loadInspectors();
-
-    return () => controller.abort();
-  }, [revision]);
 
   function changeParams(values: Record<string, string | null>) {
     if (saving.current) return;
@@ -200,82 +118,6 @@ export default function InspectionManagement() {
 
     ["selected", "dialog", "target"].forEach((key) => next.delete(key));
     navigate(`/inspection/${id}?${next}`);
-  }
-
-  async function save(
-    application: InspectionApplication,
-    dialog: InspectionDialogState,
-  ) {
-    if (
-      saving.current ||
-      !application.inspectionId ||
-      dialog !== "assignment-saved"
-    )
-      return false;
-    saving.current = true;
-    setBusy(true);
-    setStorageError("");
-    try {
-      let saved = application;
-
-      if (dialog === "assignment-saved") {
-        const response = await assignInspection(application.inspectionId, {
-          visitDate: application.visitDate,
-          visitTime: application.visitTime,
-          preVisitNotice: application.notice,
-        });
-
-        if (!active.current) {
-          if (generation === getSessionGeneration())
-            pendingAssignment = { inspectionId: application.inspectionId, generation };
-
-          return false;
-        }
-
-        if (generation !== getSessionGeneration()) return false;
-        saved = {
-          ...application,
-          assignee: response.inspectorName,
-          inspectorUserId: response.inspectorId,
-          visitDate: response.visitDate,
-          visitTime: response.visitTime,
-          notice: response.preVisitNotice,
-          status: "예정",
-        };
-      }
-
-      setSelected(saved);
-      const query = new URLSearchParams(params);
-
-      [
-        "stage",
-        "district",
-        "assignee",
-        "visit",
-        "q",
-        "selected",
-        "page",
-      ].forEach((key) => query.delete(key));
-      query.set("dialog", dialog);
-      query.set("target", saved.status === "대기" ? "예정" : saved.status);
-      navigate(`/inspection/${application.inspectionId}?${query}`);
-      setRevision((value) => value + 1);
-
-      return true;
-    } catch (error) {
-      if (!active.current) return false;
-      setStorageError(inspectionError(error));
-      const query = new URLSearchParams(params);
-
-      query.delete("dialog");
-      query.delete("target");
-      setParams(query);
-
-      return false;
-    } finally {
-      saving.current = false;
-      if (active.current) setBusy(false);
-    }
   }
 
   function switchTab(tab: string) {
