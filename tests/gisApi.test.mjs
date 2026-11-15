@@ -217,3 +217,141 @@ test("마커 없는 신청에는 페이지 번호를 대신 붙이지 않는다"
   assert.equal(gisMarkerNumber(29),undefined);
   assert.equal(gisApplication({...detail,processingStatus:"RECEIVED"},gisMarkerNumber(99,markers)).number,undefined);
 });
+
+function memoHarness({ applicationId = "29", sourceMemo, loadError, onSave = async (_id, memo) => memo } = {}) {
+  const slots = [], effects = [];
+  let index = 0, dirty = false, generation = 0, writes = 0;
+  let options = { applicationId, sourceMemo, loadError, onSave };
+  const react = {
+    useState(initial) {
+      const i = index++;
+      if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
+      return [slots[i], value => { slots[i] = typeof value === "function" ? value(slots[i]) : value; dirty = true; writes++; }];
+    },
+    useRef(initial) { const i = index++; return slots[i] ??= { current: initial }; },
+    useEffect(effect, deps) {
+      const i = index++, old = slots[i];
+      if (!old || deps.some((value, j) => !Object.is(value, old.deps[j])))
+        effects.push(() => { old?.cleanup?.(); slots[i] = { deps, cleanup: effect() }; });
+    },
+  };
+  const h = harness({ overrides: { react, "../../auth/session": { getSessionGeneration: () => generation } } });
+  const { useGisMemo } = h.load("src/pages/GIS/useGisMemo.ts");
+  return {
+    render() {
+      let result;
+      for (let i = 0; i < 10; i++) {
+        dirty = false; index = 0;
+        result = useGisMemo(options);
+        effects.splice(0).forEach(effect => effect());
+        if (!dirty) return result;
+      }
+      throw new Error("Memo hook did not settle");
+    },
+    update(next) { options = { ...options, ...next }; },
+    generation(value) { generation = value; },
+    writes: () => writes,
+    unmount() { for (const slot of slots) slot?.cleanup?.(); },
+  };
+}
+
+const deferredMemo = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+
+test("GIS 메모는 조회 전·조회 실패 시 저장을 막고 기존 메모와 null을 구분해 동기화한다", async () => {
+  const calls = [];
+  const h = memoHarness({ onSave: async (...args) => { calls.push(args); return ""; } });
+  assert.equal(h.render().memoReady, false);
+  await h.render().saveMemo();
+  assert.equal(calls.length, 0);
+  h.update({ sourceMemo: "저장된 메모" });
+  assert.equal(h.render().memo, "저장된 메모");
+  assert.equal(h.render().memoReady, true);
+  h.render().setMemo("작성 중");
+  assert.equal(h.render().memo, "작성 중");
+  h.update({ sourceMemo: "서버에서 갱신된 메모" });
+  assert.equal(h.render().memo, "서버에서 갱신된 메모");
+  h.update({ sourceMemo: null });
+  assert.equal(h.render().memo, "");
+  assert.equal(h.render().memoReady, true);
+  h.update({ loadError: "조회 실패" });
+  assert.equal(h.render().memoReady, false);
+  await h.render().saveMemo();
+  assert.equal(calls.length, 0);
+  h.unmount();
+});
+
+test("GIS 메모 저장은 정확한 신청 ID·입력값을 한 번 전송하고 서버 반환값과 성공 안내를 반영한다", async () => {
+  const pending = deferredMemo(), calls = [];
+  const h = memoHarness({ sourceMemo: "기존 메모", onSave: (...args) => { calls.push(args); return pending.promise; } });
+  h.render().setMemo("수정 메모");
+  const saving = h.render().saveMemo();
+  await h.render().saveMemo();
+  assert.deepEqual(calls, [["29", "수정 메모"]]);
+  assert.equal(h.render().saving, true);
+  assert.equal(h.render().saveMessage, "");
+  pending.resolve("서버에 저장된 메모");
+  await saving;
+  assert.equal(h.render().memo, "서버에 저장된 메모");
+  assert.equal(h.render().saving, false);
+  assert.equal(h.render().saveMessage, "내부 메모를 저장했습니다.");
+  assert.equal(h.render().saveError, "");
+  h.unmount();
+});
+
+test("GIS 메모 저장 실패는 입력을 보존하고 오류 표시 후 재시도할 수 있다", async () => {
+  let attempts = 0;
+  const h = memoHarness({ sourceMemo: "기존", onSave: async (_id, memo) => { if (++attempts === 1) throw new Error("저장 거절"); return memo; } });
+  h.render().setMemo("수정 내용");
+  await h.render().saveMemo();
+  assert.equal(h.render().memo, "수정 내용");
+  assert.equal(h.render().saveError, "저장 거절");
+  assert.equal(h.render().saveMessage, "");
+  assert.equal(h.render().saving, false);
+  await h.render().saveMemo();
+  assert.equal(attempts, 2);
+  assert.equal(h.render().saveError, "");
+  assert.equal(h.render().saveMessage, "내부 메모를 저장했습니다.");
+  h.unmount();
+});
+
+test("신청 변경으로 상세가 언마운트되면 이전 메모의 성공·실패 응답은 상태를 갱신하지 않는다", async () => {
+  for (const failure of [false, true]) {
+    const pending = deferredMemo();
+    const previous = memoHarness({ sourceMemo: "이전 신청", onSave: () => pending.promise });
+    const saving = previous.render().saveMemo();
+    previous.unmount();
+    const writes = previous.writes();
+    const next = memoHarness({ applicationId: "30", sourceMemo: "현재 신청" });
+    if (failure) pending.reject(new Error("이전 요청 오류"));
+    else pending.resolve("이전 요청 결과");
+    await saving;
+    assert.equal(previous.writes(), writes);
+    assert.equal(next.render().memo, "현재 신청");
+    assert.equal(next.render().saveMessage, "");
+    assert.equal(next.render().saveError, "");
+    next.unmount();
+  }
+});
+
+test("인증 세션 변경 후 이전 메모 저장 응답의 값·성공·오류 안내를 반영하지 않는다", async () => {
+  for (const failure of [false, true]) {
+    const pending = deferredMemo();
+    const h = memoHarness({ sourceMemo: "기존", onSave: () => pending.promise });
+    h.render().setMemo("수정 내용");
+    const saving = h.render().saveMemo();
+    h.generation(1);
+    h.render();
+    if (failure) pending.reject(new Error("이전 세션 오류"));
+    else pending.resolve("이전 세션 결과");
+    await saving;
+    assert.equal(h.render().memo, "수정 내용");
+    assert.equal(h.render().saveMessage, "");
+    assert.equal(h.render().saveError, "");
+    assert.equal(h.render().saving, false);
+    h.unmount();
+  }
+});
