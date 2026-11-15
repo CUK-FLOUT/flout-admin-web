@@ -9,6 +9,7 @@ import type {
   SupportApplication,
   SupportFilters,
   SupportStatus,
+  ReviewDraft,
 } from "./types";
 
 const statuses: Record<SupportListItem["status"], SupportStatus> = {
@@ -66,9 +67,36 @@ const vulnerabilityLabels: Record<string, string> = {
   OTHER_STRUCTURE: "기타 구조",
 };
 
-export function mapSupport(item: SupportListItem): SupportApplication {
-  const required = item.landlordConsentStatus !== "NOT_REQUIRED";
+function mapSupportConsent(
+  item: Pick<
+    SupportListItem,
+    "landlordConsentRequired" | "landlordConsentDocumentSubmitted" | "landlordConsentStatus"
+  >,
+): Pick<ReviewDraft, "consentRequired" | "consentState"> {
+  const required = typeof item.landlordConsentRequired === "boolean"
+    ? item.landlordConsentRequired
+    : item.landlordConsentStatus === "NOT_REQUIRED"
+      ? false
+      : item.landlordConsentStatus === "PENDING" || item.landlordConsentStatus === "VERIFIED"
+        ? true
+        : undefined;
 
+  if (required === false)
+    return { consentRequired: "불필요", consentState: "불필요" };
+  if (required === undefined)
+    return { consentRequired: "검토 필요", consentState: "미확인" };
+
+  return {
+    consentRequired: "필요",
+    consentState: item.landlordConsentStatus === "VERIFIED"
+      ? "확인 완료"
+      : item.landlordConsentStatus === "PENDING" || item.landlordConsentDocumentSubmitted === true
+        ? "확인 중"
+        : "미확인",
+  };
+}
+
+export function mapSupport(item: SupportListItem): SupportApplication {
   return {
     id: item.receiptNo,
     apiId: item.supportApplicationId,
@@ -91,12 +119,7 @@ export function mapSupport(item: SupportListItem): SupportApplication {
     status: statuses[item.status],
     review: {
       checks: [false, false, false],
-      consentRequired: required ? "필요" : "불필요",
-      consentState: !required
-        ? "불필요"
-        : item.landlordConsentStatus === "VERIFIED"
-          ? "확인 완료"
-          : "확인 중",
+      ...mapSupportConsent(item),
       scope: "",
       memo: "",
       notify: false,
@@ -162,15 +185,12 @@ export function mapSupportDetail(
     programTarget: review?.program?.targetDescription,
     review: {
       ...a.review,
-      consentRequired: review
-        ? review.landlordConsentRequired
-          ? "필요"
-          : "불필요"
-        : a.review.consentRequired,
-      consentState:
-        review?.landlordConsentRequired && a.review.consentState === "불필요"
-          ? "미확인"
-          : a.review.consentState,
+      ...mapSupportConsent({
+        ...detail,
+        landlordConsentRequired: review?.landlordConsentRequired ?? detail.landlordConsentRequired,
+        landlordConsentDocumentSubmitted:
+          review?.landlordConsentDocumentSubmitted ?? detail.landlordConsentDocumentSubmitted,
+      }),
       scope: review?.supportScope || "",
     },
   };

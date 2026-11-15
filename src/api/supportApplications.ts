@@ -14,7 +14,9 @@ export type SupportListItem = {
   receiptNo: string;
   applicantName: string;
   requestedFacility: string | null;
-  landlordConsentStatus: "PENDING" | "VERIFIED" | "NOT_REQUIRED";
+  landlordConsentRequired?: boolean;
+  landlordConsentDocumentSubmitted?: boolean;
+  landlordConsentStatus?: "PENDING" | "VERIFIED" | "NOT_REQUIRED";
   status: SupportServerStatus;
 };
 export type SupportPage = {
