@@ -137,12 +137,18 @@ function mount(overrides = {}, requestId = "5", search = "") {
           ],
         };
       if (name.endsWith("api/priorityInspections")) return api;
+      if (name === "./usePriorityOrder" || name === "./apiMapping") {
+        const child = { exports: {} };
+        const code = ts.transpileModule(readFileSync(`src/pages/Priority/${name.slice(2)}.ts`, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText;
+        vm.runInNewContext(code, { module: child, exports: child.exports, require });
+        return child.exports;
+      }
       if (name === "./priorityUtils") return utils.exports;
       if (name === "./orderApi")
         return {
           commitPriorityOrder: async (...args) => {
             orders.push(args);
-            return { saved: true };
+            return overrides.commitPriorityOrder ? overrides.commitPriorityOrder(...args) : { saved: true };
           },
         };
       if (name.includes("components/priority/"))
@@ -446,4 +452,55 @@ test("메모 입력란은 읽기 전용이며 편집·Enter·blur 저장 이벤�
     for (const event of ["onChange", "onBlur", "onKeyDown"])
       assert.equal(input[event], undefined);
   }
+});
+
+
+test("순서 Hook은 전체 대상 정렬·이동·저장·재조회를 유지한다", async () => {
+  let requests = 0;
+  const rows = [{ ...row, selectionOrder: 2 }, { ...row, applicationId: 8, receiptNo: "000008", selectionOrder: 1 }];
+  const h = mount({ getPriorityOrder: async () => { requests++; return rows; } });
+  await h.flush();
+  h.find("PriorityList").onOpenReorder();
+  await h.flush();
+  assert.deepEqual([...h.find("PriorityModals").modalOrder], ["000008", "000005"]);
+  h.find("PriorityModals").onMove("000005", -1);
+  await h.flush();
+  await h.find("PriorityModals").onSaveOrder();
+  await h.flush();
+  assert.deepEqual([...h.orders[0][0]], [5, 8]);
+  assert.deepEqual([...h.orders[0][1]], [8, 5]);
+  assert.equal(h.orders.length, 1);
+  assert.equal(requests, 2);
+  assert.equal(h.find("PriorityModals").dialog, "saved");
+});
+
+test("순서 저장 중 중복 요청·이동을 막고 409의 최신 전체 대상을 표시한다", async () => {
+  const pending = deferred();
+  const h = mount({ getPriorityOrder: async () => [{ ...row, selectionOrder: 1 }], commitPriorityOrder: () => pending.promise });
+  await h.flush();
+  h.find("PriorityList").onOpenReorder();
+  await h.flush();
+  const saving = h.find("PriorityModals").onSaveOrder();
+  await h.find("PriorityModals").onSaveOrder();
+  await h.flush();
+  assert.equal(h.orders.length, 1);
+  h.find("PriorityModals").onMove("000005", 1);
+  pending.resolve({ saved: false, applications: [{ ...row, applicationId: 9, receiptNo: "000009", selectionOrder: 1 }] });
+  await saving;
+  await h.flush();
+  assert.deepEqual([...h.find("PriorityModals").modalOrder], ["000009"]);
+  assert.equal(h.find("PriorityModals").dialog, "reorder");
+  assert.equal(h.find("PriorityModals").orderReady, true);
+  assert.match(h.find("PriorityModals").error, /지정 대상이 변경/);
+});
+
+test("정규화된 필터가 활성화되어 있으면 Hook도 저장 요청을 보내지 않는다", async () => {
+  const h = mount({ getPriorityOrder: async () => [{ ...row, selectionOrder: 1 }] }, "5", "risk=높음");
+  await h.flush();
+  h.find("PriorityList").onOpenReorder();
+  await h.flush();
+  await h.find("PriorityModals").onSaveOrder();
+  await h.flush();
+  assert.equal(h.orders.length, 0);
+  assert.match(h.find("PriorityModals").error, /초기화/);
 });

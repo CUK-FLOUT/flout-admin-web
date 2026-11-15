@@ -15,42 +15,14 @@ import {
   getPriorityInspections,
   getPriorityInspection,
   getPriorityDesignation,
-  getPriorityOrder,
   setPriorityDesignation,
   priorityError,
 } from "../../api/priorityInspections";
-import type {
-  PriorityItem,
-  PriorityDetailResponse,
-} from "../../api/priorityInspections";
-import { commitPriorityOrder } from "./orderApi";
-import {
-  changePosition,
-  normalizePriorityOrder,
-  normalizePriorityFilters,
-} from "./priorityUtils";
+import type { PriorityDetailResponse } from "../../api/priorityInspections";
+import { normalizePriorityFilters } from "./priorityUtils";
 import type { PriorityApplication } from "./types";
-
-function toApplication(item: PriorityItem): PriorityApplication {
-  return {
-    applicationId: item.applicationId,
-    id: item.receiptNo,
-    resident: "",
-    address: item.address,
-    district: "",
-    risk: ({ HIGH: "높음", CAUTION: "주의", LOW: "낮음" } as const)[
-      item.riskLevel
-    ],
-    floodExperience: ({ YES: "있음", NO: "없음", UNKNOWN: "모름" } as const)[
-      item.floodExperience
-    ],
-    reason: item.requestReason || "미입력",
-    nearby: item.nearbyApplicationCount,
-    designated: item.designated,
-    assigned: false,
-    memo: "",
-  };
-}
+import { toPriorityApplication as toApplication } from "./apiMapping";
+import { usePriorityOrder } from "./usePriorityOrder";
 
 export default function PriorityManagement() {
   const navigate = useNavigate();
@@ -78,14 +50,9 @@ export default function PriorityManagement() {
     token: string;
     entryKey?: string;
   } | null>(null);
-  const [eligible, setEligible] = useState<PriorityApplication[]>([]);
-  const [draftOrder, setDraftOrder] = useState<string[]>([]);
-  const [orderLoading, setOrderLoading] = useState(false);
-  const [orderReady, setOrderReady] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const mutation = useRef(false);
-  const orderRequest = useRef(0);
   const [cancelledDesignation, setCancelledDesignation] = useState(false);
   const ordering = false;
   const dialog = params.get("dialog") || "";
@@ -101,19 +68,41 @@ export default function PriorityManagement() {
   const hasFilters = Boolean(
     keyword.trim() || district || riskLevel || designated !== undefined,
   );
+  const {
+    eligible,
+    modalOrder,
+    orderLoading,
+    orderReady,
+    loadOrder,
+    moveOrder,
+    saveOrder,
+    invalidateOrder,
+    resetOrder,
+  } = usePriorityOrder({
+    hasFilters,
+    mutationRef: mutation,
+    setBusy,
+    setError,
+    onRefresh: () => setRevision((value) => value + 1),
+    onSaved: () => patch({ mode: null, dialog: "saved" }),
+  });
   const checkedIds = selection.key === listKey ? selection.ids : [];
   const list = usePagePolling({
     queryKey: JSON.stringify([filterKey, page]),
     revision,
     paused: checkedIds.length > 0 || !!dialog || busy || orderLoading,
-    load: (signal) => getPriorityInspections({
-      keyword,
-      district: district || undefined,
-      riskLevel,
-      designated,
-      page,
-      size: 10,
-    }, signal),
+    load: (signal) =>
+      getPriorityInspections(
+        {
+          keyword,
+          district: district || undefined,
+          riskLevel,
+          designated,
+          page,
+          size: 10,
+        },
+        signal,
+      ),
     errorMessage: priorityError,
   });
   const data = list.data;
@@ -148,9 +137,10 @@ export default function PriorityManagement() {
     key: string;
     id?: number;
   }>({ key: "" });
-  const automaticId = automaticSelection.key === selectionKey
-    ? automaticSelection.id ?? filtered[0]?.applicationId
-    : filtered[0]?.applicationId;
+  const automaticId =
+    automaticSelection.key === selectionKey
+      ? (automaticSelection.id ?? filtered[0]?.applicationId)
+      : filtered[0]?.applicationId;
 
   if (
     automaticSelection.key !== selectionKey ||
@@ -202,7 +192,6 @@ export default function PriorityManagement() {
   )
     setBulkTargets({ ...bulkTargets, entryKey: location.key });
 
-  const modalOrder = normalizePriorityOrder(draftOrder, eligible);
   const searchEmpty = Boolean(data && !data.totalElements && hasFilters);
 
   useEffect(() => {
@@ -243,13 +232,6 @@ export default function PriorityManagement() {
     return () => controller.abort();
   }, [detailData, selectionInList, data, detailKey]);
 
-  useEffect(
-    () => () => {
-      orderRequest.current += 1;
-    },
-    [],
-  );
-
   function patch(
     values: Record<string, string | null>,
     bulkToken: string | null = null,
@@ -289,106 +271,11 @@ export default function PriorityManagement() {
     if (!mutation.current) navigate("/priority");
   }
 
-  async function loadOrder() {
-    const request = ++orderRequest.current;
-
-    setOrderLoading(true);
-    setOrderReady(false);
-    setEligible([]);
-    setDraftOrder([]);
-    try {
-      const items = await getPriorityOrder();
-
-      if (request !== orderRequest.current) return;
-      const rows = [...items]
-        .sort(
-          (a, b) =>
-            a.selectionOrder - b.selectionOrder ||
-            a.applicationId - b.applicationId,
-        )
-        .map(toApplication);
-
-      setEligible(rows);
-      setDraftOrder(rows.map((a) => a.id));
-      setOrderReady(true);
-    } catch (cause) {
-      if (request === orderRequest.current) setError(priorityError(cause));
-    } finally {
-      if (request === orderRequest.current) setOrderLoading(false);
-    }
-  }
-
   function beginOrder() {
     if (mutation.current) return;
     setError("");
     patch({ dialog: "reorder" });
     void loadOrder();
-  }
-
-  function moveOrder(id: string, delta: number) {
-    if (!mutation.current && orderReady)
-      setDraftOrder((order) =>
-        changePosition(normalizePriorityOrder(order, eligible), id, delta),
-      );
-  }
-
-  async function saveOrder() {
-    if (mutation.current || !orderReady || orderLoading) return;
-    if (hasFilters) {
-      setError("선정 순서를 저장하려면 검색어와 필터를 초기화해주세요.");
-
-      return;
-    }
-
-    const ids = modalOrder.map(
-      (id) => eligible.find((a) => a.id === id)?.applicationId,
-    );
-
-    if (ids.length !== eligible.length || ids.some((id) => id === undefined)) {
-      setError("전체 대상 목록을 다시 조회해 주세요.");
-
-      return;
-    }
-
-    mutation.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await commitPriorityOrder(
-        ids as number[],
-        eligible.map((a) => a.applicationId!),
-        hasFilters,
-      );
-
-      if (!result.saved) {
-        const rows = [...result.applications]
-          .sort(
-            (a, b) =>
-              a.selectionOrder - b.selectionOrder ||
-              a.applicationId - b.applicationId,
-          )
-          .map(toApplication);
-
-        setEligible(rows);
-        setDraftOrder(rows.map((a) => a.id));
-        setError(
-          "지정 대상이 변경되어 저장하지 못했습니다. 최신 목록을 확인하고 다시 저장해 주세요.",
-        );
-        setRevision((value) => value + 1);
-
-        return;
-      }
-
-      await loadOrder();
-      setRevision((value) => value + 1);
-      patch({ mode: null, dialog: "saved" });
-    } catch (cause) {
-      setOrderReady(false);
-      setError(priorityError(cause));
-    } finally {
-      mutation.current = false;
-      setBusy(false);
-    }
   }
 
   async function designate() {
@@ -427,9 +314,7 @@ export default function PriorityManagement() {
       setSelection({ key: listKey, ids: [] });
       setCancelledDesignation(cancel);
       setRevision((value) => value + 1);
-      setOrderReady(false);
-      setEligible([]);
-      setDraftOrder([]);
+      resetOrder();
       patch({ dialog: "designated" });
     } catch (cause) {
       setError(priorityError(cause));
@@ -441,8 +326,7 @@ export default function PriorityManagement() {
 
   function closeModal() {
     if (mutation.current) return;
-    orderRequest.current += 1;
-    setOrderLoading(false);
+    invalidateOrder();
     setError("");
     setBulkTargets(null);
     patch({ dialog: null, mode: null });
