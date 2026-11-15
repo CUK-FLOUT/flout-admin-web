@@ -81,9 +81,9 @@ export default function InfrastructureMap(props: InfrastructureMapOptions) {
       </div>
       <div className="absolute z-10 bottom-[30px] left-4 flex min-h-11 max-w-[calc(100%_-_32px)] flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-[0.75px] border-[#c8d0d7] bg-white px-3 py-2 text-sm leading-5">
         {[
-          [assets.waitingDot, "검토 대기", "#a53632"],
-          [assets.reviewDot, "검토 중", "#865a16"],
-          [assets.completedDot, "조치 완료", "#27654d"],
+          [assets.waitingDot, "검토 대기", "#dc2626"],
+          [assets.reviewDot, "검토 중", "#d97706"],
+          [assets.completedDot, "조치 완료", "#16a34a"],
         ].map(([src, label, color]) => (
           <span
             key={label}

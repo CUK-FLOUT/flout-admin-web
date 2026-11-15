@@ -45,7 +45,7 @@ export default function WorkClock() {
   const date = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 
   return (
-    <time className="max-sm:hidden" dateTime={new Date(now).toISOString()}>
+    <time className="inline-block w-[290px] shrink-0 whitespace-nowrap tabular-nums max-sm:hidden" dateTime={new Date(now).toISOString()}>
       업무일자: {date}
     </time>
   );
