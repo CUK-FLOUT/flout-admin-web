@@ -319,11 +319,6 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
       count: counts?.pendingOrUnderReviewCount,
     },
     {
-      label: "조치 진행",
-      icon: assets.metricProgress,
-      count: counts?.actionInProgressCount,
-    },
-    {
       label: "조치 완료",
       icon: assets.metricCompleted,
       count: counts?.completedCount,
@@ -331,7 +326,7 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
   ];
 
   return (
-    <div className="mt-4 grid h-[90px] shrink-0 grid-cols-4 gap-4 max-[700px]:h-auto max-[700px]:grid-cols-2">
+    <div className="mt-4 grid h-[90px] shrink-0 grid-cols-3 gap-4 max-[700px]:h-auto max-[700px]:grid-cols-1">
       {metrics.map(({ label, icon, count }) => (
         <div
           key={label}
@@ -351,12 +346,12 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
             height={24}
             className="absolute top-[31.25px] left-[23.25px]"
           />
-          <p className="absolute top-[17.25px] left-[67.25px] text-xs leading-[18px]">
-            {label}
-          </p>
-          <p className="absolute top-[40.25px] left-[67.25px] text-2xl font-bold leading-9">
-            {count === undefined ? "—" : count + "건"}
-          </p>
+          <div className="absolute top-[17.25px] left-[67.25px] flex flex-col">
+            <p className="text-xs leading-[18px]">{label}</p>
+            <p className="text-2xl font-bold leading-7">
+              {count === undefined ? "—" : count + "건"}
+            </p>
+          </div>
         </div>
       ))}
     </div>

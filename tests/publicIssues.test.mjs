@@ -91,7 +91,6 @@ const page = {
 const counts = {
   registeredCount: 12,
   pendingOrUnderReviewCount: 6,
-  actionInProgressCount: 4,
   completedCount: 2,
 };
 const detail = {
@@ -579,7 +578,6 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
 
 function prepareAction(w) {
   w.panel().onUpdate("result", "정비 완료");
-  w.panel().onUpdate("verified", true);
   w.panel().onComplete();
 }
 
@@ -1008,5 +1006,39 @@ test("완료 재조회에 사진이 없으면 선택 파일과 확인 창을 유
     await tick();
     assert.equal(submissions, 1);
     w.unmount();
+  }
+});
+
+test("확인 체크박스 없이 조치 결과와 사진을 입력하면 통합 완료할 수 있다", async () => {
+  const w = reviewWorkspace();
+  await w.panel().onUpload([new File(["image"], "unchecked.jpg", { type: "image/jpeg" })]);
+  assert.equal(w.panel().draft.verified, false);
+  w.panel().onUpdate("result", "현장 조치 완료");
+  w.panel().onComplete();
+  assert.ok(w.dialog());
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(w.requests[0][0], "complete");
+  assert.equal(w.requests[0][2], "현장 조치 완료");
+  assert.equal(w.panel().readOnly, true);
+  w.unmount();
+});
+
+test("현황은 최신 3개 필드만 검증하며 실제 응답과 0건을 정상 처리한다", async () => {
+  const h = apiHarness();
+  for (const payload of [
+    { registeredCount: 8, pendingOrUnderReviewCount: 5, completedCount: 3 },
+    { registeredCount: 0, pendingOrUnderReviewCount: 0, completedCount: 0 },
+  ]) {
+    h.respond(() => ({ isSuccess: true, result: payload }));
+    assert.deepEqual(plain(await h.api.getPublicIssueCounts({ keyword: "" })), payload);
+  }
+  for (const payload of [
+    { registeredCount: 8, pendingOrUnderReviewCount: 5 },
+    { registeredCount: -1, pendingOrUnderReviewCount: 0, completedCount: 0 },
+    { registeredCount: 8, pendingOrUnderReviewCount: "5", completedCount: 3 },
+  ]) {
+    h.respond(() => ({ isSuccess: true, result: payload }));
+    await assert.rejects(h.api.getPublicIssueCounts({ keyword: "" }), /현황 응답/);
   }
 });

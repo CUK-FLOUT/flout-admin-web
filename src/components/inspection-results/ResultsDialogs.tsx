@@ -1,7 +1,5 @@
 import { resultFeedbacks } from "../../pages/InspectionResults/apiContent";
-import { inspectionError, searchInspectionAddresses } from "../../api/inspections";
-import type { AddressSearchResponse } from "../../api/inspections";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 import type { InspectionApplication } from "../../pages/Inspection/types";
 import type {
@@ -24,8 +22,6 @@ type Props = {
   onRegion: (
     issue: Omit<RegionIssue, "id" | "source" | "status" | "applicationId">,
   ) => Promise<boolean>;
-  addressQuery: string;
-  onSearchAddress: (query: string) => void;
 };
 function ActionsForm({
   content,
@@ -89,18 +85,14 @@ function ActionsForm({
 }
 
 function RegionForm({
-  kind,
   application: a,
   setDialog,
   onRegion,
-  addressQuery,
-  onSearchAddress,
   busy = false,
   readOnly = false,
   content,
 }: Props) {
-  const [location, setLocation] = useState(a.address);
-  const [postcode, setPostcode] = useState("");
+  const location = a.address;
   const [type, setType] = useState("반복 침수");
   const [description, setDescription] = useState(content.summary);
   const [findings, setFindings] = useState(
@@ -118,41 +110,7 @@ function RegionForm({
     setFindings(resultFeedbacks(content).map(({ feedback }) => feedback.findings).filter(Boolean).join("\n"));
   }
 
-  const [query, setQuery] = useState(addressQuery);
-  const [addressError, setAddressError] = useState("");
   const [error, setError] = useState("");
-  const addressOpen = kind === "address" || kind === "address-results";
-  const [addressPage, setAddressPage] = useState(1);
-  const [addressData, setAddressData] = useState<AddressSearchResponse | null>(null);
-  const [addressLoading, setAddressLoading] = useState(false);
-  const [searchRevision, setSearchRevision] = useState(0);
-  const results = addressData?.addresses ?? [];
-
-  useEffect(() => {
-    if (kind !== "address-results" || !addressQuery.trim()) return;
-    const controller = new AbortController();
-
-    async function search() {
-      setAddressLoading(true);
-      setAddressError("");
-      setAddressData(null);
-      try {
-        const response = await searchInspectionAddresses(
-          addressQuery, addressPage, controller.signal,
-        );
-
-        if (!controller.signal.aborted) setAddressData(response);
-      } catch (cause) {
-        if (!controller.signal.aborted) setAddressError(inspectionError(cause));
-      } finally {
-        if (!controller.signal.aborted) setAddressLoading(false);
-      }
-    }
-
-    void search();
-
-    return () => controller.abort();
-  }, [kind, addressQuery, addressPage, searchRevision]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -173,7 +131,7 @@ function RegionForm({
     try {
       const registered = await onRegion({
         location: location.trim(),
-        postcode,
+        postcode: "",
         kind: type,
         description: description.trim(),
         findings: findings.trim(),
@@ -194,6 +152,8 @@ function RegionForm({
       <ResultDialog
         size="region"
         title="지역·공공 문제 등록"
+        showClose
+        closeDisabled={busy}
         onClose={() => {
           if (!busy) setDialog(null);
         }}
@@ -206,22 +166,12 @@ function RegionForm({
             >
               위치
             </label>
-            <div className="flex gap-2">
-              <input
-                id="region-location"
-                maxLength={255}
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className={`${resultInput} h-10 flex-1 px-[15px] py-0`}
-              />
-              <button
-                type="button"
-                onClick={() => setDialog("address")}
-                className={`${resultSecondary} w-[112px] shrink-0 text-[#234f73]`}
-              >
-                주소 검색
-              </button>
-            </div>
+            <input
+              id="region-location"
+              readOnly
+              value={location}
+              className={`${resultInput} h-10 px-[15px] py-0`}
+            />
             <p className="text-sm font-bold leading-[21px]">문제 유형</p>
             <div
               className="grid grid-cols-2 gap-2"
@@ -290,137 +240,7 @@ function RegionForm({
           </fieldset>
         </form>
       </ResultDialog>
-      {addressOpen && (
-        <ResultDialog
-          size="address"
-          title="주소 검색"
-          onClose={() => setDialog("region")}
-        >
-          <p className="text-sm leading-[22px] text-[#43515e]">
-            도로명·건물명·지번으로 검색하세요.
-          </p>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (query.trim()) {
-                setAddressError("");
-                setAddressPage(1);
-                setSearchRevision((value) => value + 1);
-                onSearchAddress(query.trim());
-              } else setAddressError("검색할 주소를 입력해 주세요.");
-            }}
-          >
-            <input
-              aria-label="도로명·건물명·지번 검색"
-              placeholder="예) 길주로 210, 부천시청, 중동 1156"
-              value={query}
-              maxLength={100}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setAddressError("");
-              }}
-              className={`${resultInput} h-11 min-w-0 flex-1 border-[#234f73] px-[11px] py-0`}
-            />
-            <button
-              className={`${resultPrimary} w-[112px] shrink-0`}
-              type="submit"
-            >
-              검색
-            </button>
-          </form>
-          {addressError && (
-            <p role="alert" className="text-sm leading-[21px] text-[#a53632]">
-              {addressError}
-            </p>
-          )}
-          {kind === "address" ? (
-            <>
-              <div className="flex h-[324px] shrink-0 flex-col gap-4 rounded-lg bg-[#f4f5f6] px-6 pt-8 text-sm leading-[22px]">
-                <h3 className="text-lg font-bold leading-[27px]">
-                  이렇게 검색해 보세요
-                </h3>
-                <p className="font-bold">도로명 + 건물번호</p>
-                <p className="text-[#596672]">예) 길주로 210</p>
-                <p className="font-bold">지역명 + 건물명 또는 지번</p>
-                <p className="text-[#596672]">예) 부천시청 / 중동 1156</p>
-                <p className="text-[13px] leading-5 text-[#43515e]">
-                  정확한 주소를 입력하면 더 쉽게 찾을 수 있어요.
-                </p>
-              </div>
-              <p className="text-[13px] leading-5 text-[#596672]">
-                주소를 선택하면 우편번호와 도로명주소가 자동 입력됩니다.
-              </p>
-            </>
-          ) : (
-            <>
-              <p
-                className="text-sm font-bold leading-[22px]"
-                aria-live="polite"
-              >
-                {addressLoading ? "주소 검색 중…" : `검색 결과 ${results.length}건`}
-              </p>
-              <div className="flex flex-col gap-2">
-                {results.map((address) => (
-                  <button
-                    type="button"
-                    key={`${address.roadAddress}|${address.jibunAddress}|${address.zipCode}`}
-                    onClick={() => {
-                      setLocation(address.roadAddress);
-                      setPostcode(address.zipCode);
-                      setDialog("region");
-                    }}
-                    className="flex min-h-[112px] flex-col gap-2 rounded-md border border-[#c8d0d7] p-[15px] text-left text-sm leading-[22px]"
-                  >
-                    <span className="font-bold text-[#234f73]">
-                      {address.zipCode}
-                    </span>
-                    <strong>{address.roadAddress}</strong>
-                    <span className="text-[13px] text-[#596672]">
-                      지번 {address.jibunAddress} · {address.buildingName}
-                    </span>
-                  </button>
-                ))}
-                {!addressLoading && !addressError && addressData && !results.length && (
-                  <p
-                    role="status"
-                    className="py-12 text-center text-sm text-[#596672]"
-                  >
-                    검색 결과가 없습니다. 다른 검색어로 검색해 주세요.
-                  </p>
-                )}
-              </div>
-              {addressData && (
-                <nav
-                  aria-label="주소 검색 페이지"
-                  className="flex justify-center gap-4 text-sm text-[#234f73]"
-                >
-                  <button
-                    type="button"
-                    disabled={addressLoading || addressData.currentPage <= 1}
-                    onClick={() => setAddressPage(addressData.currentPage - 1)}
-                    aria-label="이전 주소 검색 페이지"
-                  >
-                    ‹
-                  </button>
-                  <span aria-current="page">{addressData.currentPage}</span>
-                  <button
-                    type="button"
-                    disabled={addressLoading || !addressData.hasMore || addressData.nextPage == null}
-                    onClick={() => {
-                      if (addressData.hasMore && addressData.nextPage != null)
-                        setAddressPage(addressData.nextPage);
-                    }}
-                    aria-label="다음 주소 검색 페이지"
-                  >
-                    ›
-                  </button>
-                </nav>
-              )}
-            </>
-          )}
-        </ResultDialog>
-      )}
+
     </>
   );
 }
@@ -429,7 +249,7 @@ export default function ResultsDialogs(props: Props) {
   const { kind, application: a, content, setDialog, onActions } = props;
   const close = () => setDialog(null);
 
-  if (["region", "address", "address-results"].includes(kind))
+  if (kind === "region")
     return <RegionForm {...props} />;
   if (kind === "actions")
     return (

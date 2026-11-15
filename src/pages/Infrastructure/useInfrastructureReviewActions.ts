@@ -161,11 +161,10 @@ export function useInfrastructureReviewActions({
 
     if (
       !draft.result.trim() ||
-      draft.result.trim().length > 4000 ||
-      !draft.verified
+      draft.result.trim().length > 4000
     ) {
       data.setError(
-        "조치 결과(1~4000자)와 조치·결과 확인 항목을 확인해 주세요.",
+        "조치 결과를 1~4000자로 입력해 주세요.",
       );
 
       return;
@@ -273,12 +272,11 @@ export function useInfrastructureReviewActions({
     if (!completionUncertain.current) {
       if (
         !issue.reviewId ||
-        !draft.verified ||
         !draft.result.trim() ||
         draft.result.trim().length > 4000
       ) {
         data.setError(
-          "저장된 검토 내용과 조치 결과·확인 항목을 확인해 주세요.",
+          "저장된 검토 내용과 조치 결과를 확인해 주세요.",
         );
 
         return;
