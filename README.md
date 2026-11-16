@@ -223,7 +223,7 @@ VITE_KAKAO_MAP_KEY=your-kakao-javascript-key
 npm run dev
 ```
 
-기본 주소는 **http://localhost:5173**입니다. 포트가 사용 중이면 개발 서버가 안내하는 주소를 확인합니다.
+기본 주소는 http://localhost:5173입니다. 포트가 사용 중이면 개발 서버가 안내하는 주소를 확인합니다.
 
 <a id="validation"></a>
 
