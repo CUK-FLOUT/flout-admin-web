@@ -39,10 +39,13 @@ export function inspectionManagementPath(
 export function inspectionResultPath(
   id: number | undefined,
   params: URLSearchParams,
+  viewOnly = false,
 ) {
-  return validId(id)
-    ? `/inspection/${id}/results${filterSuffix(params)}`
-    : inspectionManagementPath(undefined, params);
+  if (!validId(id)) return inspectionManagementPath(undefined, params);
+  const suffix = filterSuffix(params);
+  const view = viewOnly ? `${suffix ? "&" : "?"}view=readonly` : "";
+
+  return `/inspection/${id}/results${suffix}${view}`;
 }
 
 

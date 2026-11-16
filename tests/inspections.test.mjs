@@ -1222,3 +1222,20 @@ test("조회 전용 결과는 서버 내용을 표시하고 편집 초안과 모
   await settle();
   assert.equal(h.render().content.summary, "저장하지 않은 편집 초안");
 });
+
+
+test("조회 전용 결과 링크는 빈 검색 조건과 기존 필터를 보존하며 원본 파라미터를 변경하지 않는다", () => {
+  const { inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  assert.equal(inspectionResultPath(91, new URLSearchParams(), true), "/inspection/91/results?view=readonly");
+  const params = new URLSearchParams("page=2&q=주소&dialog=assignment-saved&view=readonly");
+  const original = params.toString();
+  const readonly = new URL(inspectionResultPath(91, params, true), "https://example.com");
+  assert.equal(readonly.searchParams.get("page"), "2");
+  assert.equal(readonly.searchParams.get("q"), "주소");
+  assert.equal(readonly.searchParams.get("view"), "readonly");
+  assert.equal(readonly.searchParams.has("dialog"), false);
+  const editable = new URL(inspectionResultPath(91, params), readonly.origin);
+  assert.equal(editable.searchParams.has("view"), false);
+  assert.equal(inspectionResultPath(undefined, params, true), "/inspection?q=%EC%A3%BC%EC%86%8C&page=2");
+  assert.equal(params.toString(), original);
+});

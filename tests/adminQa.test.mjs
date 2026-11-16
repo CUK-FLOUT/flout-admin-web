@@ -30,6 +30,8 @@ test("완료된 점검만 결과 보기로 표시하고 기존 점검 ID·검색
     const url = new URL(link.props.to, "https://example.com");
     assert.equal(url.pathname, "/inspection/91/results");
     assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("stage"), "완료");
+    assert.equal(url.searchParams.get("view"), status === "완료" ? "readonly" : null);
   }
 });
 
