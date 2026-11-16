@@ -3,30 +3,49 @@ import { loadInspection } from "../Inspection/loadInspection";
 import { inspectionError } from "../../api/inspections";
 import type { InspectionApplication } from "../Inspection/types";
 
+type RequestState = {
+  requestId: string | undefined;
+  revision: number;
+  application?: InspectionApplication;
+  error: string;
+  loading: boolean;
+};
+
 export function useInspectionResultApplication(requestId: string | undefined) {
-  const [application, setApplication] = useState<InspectionApplication>();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<RequestState>();
   const [revision, setRevision] = useState(0);
+  const current =
+    state?.requestId === requestId && state?.revision === revision
+      ? state
+      : undefined;
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function load() {
-      setLoading(true);
-      setApplication(undefined);
-      setError("");
+      setState({ requestId, revision, error: "", loading: true });
       try {
-        const result = await loadInspection(
+        const application = await loadInspection(
           Number(requestId),
           controller.signal,
         );
 
-        if (!controller.signal.aborted) setApplication(result);
+        if (!controller.signal.aborted)
+          setState({
+            requestId,
+            revision,
+            application,
+            error: "",
+            loading: false,
+          });
       } catch (error) {
-        if (!controller.signal.aborted) setError(inspectionError(error));
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted)
+          setState({
+            requestId,
+            revision,
+            error: inspectionError(error),
+            loading: false,
+          });
       }
     }
 
@@ -36,9 +55,9 @@ export function useInspectionResultApplication(requestId: string | undefined) {
   }, [requestId, revision]);
 
   return {
-    application,
-    error,
-    loading,
+    application: current?.application,
+    error: current?.error ?? "",
+    loading: current?.loading ?? true,
     retry: () => setRevision((value) => value + 1),
   };
 }

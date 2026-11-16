@@ -137,14 +137,20 @@ test("결과 신청 조회 Hook은 실패 후 재시도하고 선택 변경·화
   assert.equal(state.error, "조회 실패");
   assert.equal(state.loading, false);
   state.retry();
-  h.render();
+  const retrying = h.render();
+  assert.equal(retrying.loading, true);
+  assert.equal(retrying.error, "");
+  assert.equal(retrying.application, undefined);
   assert.equal(requests[0].signal.aborted, true);
   requests[1].resolve({ inspectionId: 91 });
   await settle();
   state = h.render();
   assert.equal(state.application.inspectionId, 91);
   assert.equal(state.error, "");
-  h.render("92");
+  const changed = h.render("92");
+  assert.equal(changed.loading, true);
+  assert.equal(changed.application, undefined);
+  assert.equal(changed.error, "");
   h.render("93");
   assert.equal(requests[2].signal.aborted, true);
   requests[3].resolve({ inspectionId: 93 });
@@ -173,4 +179,28 @@ test("분리한 복귀 링크는 저장 중 이동을 막고 일반 조회에서
     assert.equal(prevented, blocked);
     assert.match(text(link), /지원 관리로 돌아가기/);
   }
+});
+
+
+test("같은 점검을 재시도한 첫 렌더에서도 이전 성공 데이터를 반환하지 않는다", async () => {
+  const requests = [];
+  const h = mountResultApplication((id) => new Promise((resolve, reject) => requests.push({ id, resolve, reject })));
+  h.render();
+  requests[0].resolve({ inspectionId: 91 });
+  await settle();
+  const loaded = h.render();
+  assert.equal(loaded.application.inspectionId, 91);
+  loaded.retry();
+  const retrying = h.render();
+  assert.equal(retrying.loading, true);
+  assert.equal(retrying.application, undefined);
+  assert.equal(retrying.error, "");
+  requests[1].reject(new Error("재시도 실패"));
+  await settle();
+  assert.equal(h.render().error, "재시도 실패");
+  const changed = h.render("92");
+  assert.equal(changed.loading, true);
+  assert.equal(changed.application, undefined);
+  assert.equal(changed.error, "");
+  h.unmount();
 });
