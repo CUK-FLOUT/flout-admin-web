@@ -190,7 +190,7 @@ export default function AssignmentPanel({
           to={inspectionResultPath(a.inspectionId, params)}
           className="flex h-[42px] items-center justify-center rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5"
         >
-          점검 결과 등록
+          {a.status === "완료" ? "점검 결과 보기" : "점검 결과 등록"}
         </Link>
       </div>
     </section>

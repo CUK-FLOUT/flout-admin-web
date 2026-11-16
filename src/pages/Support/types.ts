@@ -44,6 +44,7 @@ export type SupportApplication = {
   documents: string[];
   vulnerabilities: string[];
   recommendations: string[];
+  inspectionId?: number | null;
   inspectionSummary: string;
   inspectionPublished: boolean;
   status: SupportStatus;

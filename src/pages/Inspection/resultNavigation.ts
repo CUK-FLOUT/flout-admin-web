@@ -44,3 +44,31 @@ export function inspectionResultPath(
     ? `/inspection/${id}/results${filterSuffix(params)}`
     : inspectionManagementPath(undefined, params);
 }
+
+
+function validSupportReturnPath(path: string | null): path is string {
+  return path !== null && /^\/support(?:\/[1-9]\d*)?(?:\?[^#]*)?$/.test(path);
+}
+
+export function supportInspectionResultPath(
+  inspectionId: number | null | undefined,
+  returnTo: string,
+) {
+  if (!validId(inspectionId ?? undefined) || !validSupportReturnPath(returnTo)) return null;
+  const params = new URLSearchParams({ supportReturnTo: returnTo, view: "readonly" });
+
+  return `/inspection/${inspectionId}/results?${params}`;
+}
+
+export type InspectionResultReturn = { to: string; label: string };
+
+export function inspectionResultReturn(
+  id: string | undefined,
+  params: URLSearchParams,
+): InspectionResultReturn {
+  const supportReturnTo = params.get("supportReturnTo");
+
+  return validSupportReturnPath(supportReturnTo)
+    ? { to: supportReturnTo, label: "지원 관리로 돌아가기" }
+    : { to: inspectionManagementPath(id, params), label: "현장점검 관리로 돌아가기" };
+}

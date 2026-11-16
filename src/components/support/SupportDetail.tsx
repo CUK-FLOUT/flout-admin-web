@@ -35,12 +35,14 @@ export function DetailRow({
 type Props = {
   application?: SupportApplication;
   onReview: () => void;
+  onInspection?: () => void;
   onDialog: (kind: SupportDialogKind, document?: string) => void;
   className: string;
 };
 export default function SupportDetail({
   application: a,
   onReview,
+  onInspection,
   onDialog,
   className,
 }: Props) {
@@ -117,7 +119,8 @@ export default function SupportDetail({
             </button>
             <button
               type="button"
-              onClick={() => onDialog("inspection")}
+              onClick={onInspection}
+              disabled={!onInspection}
               className={supportSecondary}
             >
               점검 결과 보기

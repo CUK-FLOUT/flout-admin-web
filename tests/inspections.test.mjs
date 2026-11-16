@@ -1180,3 +1180,45 @@ test("늦은 상세 응답은 변경된 선택을 덮어쓰지 않는다", async
   await settle();
   assert.equal(h.render("useInspectionData").selected.inspectionId, 92);
 });
+
+
+test("지원관리 결과 연결은 점검 ID를 사용하며 검색·선택 위치로 안전하게 복귀한다", () => {
+  const { supportInspectionResultPath, inspectionResultReturn } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const back = "/support/201?page=3&district=%EC%9B%90%EB%AF%B8%EA%B5%AC&q=abc";
+  const path = new URL(supportInspectionResultPath(91, back), "https://example.com");
+  assert.equal(path.pathname, "/inspection/91/results");
+  assert.equal(path.searchParams.get("view"), "readonly");
+  assert.equal(path.searchParams.get("supportReturnTo"), back);
+  const result = inspectionResultReturn("91", path.searchParams);
+  assert.equal(result.to, back);
+  assert.equal(result.label, "지원 관리로 돌아가기");
+  for (const id of [undefined, null, 0, -1, NaN, 9007199254740992])
+    assert.equal(supportInspectionResultPath(id, back), null);
+  for (const to of ["https://evil.example", "//evil.example", "/support/../login", "/support/201#fragment"])
+    assert.equal(supportInspectionResultPath(91, to), null);
+  const invalid = inspectionResultReturn("91", new URLSearchParams({ supportReturnTo: "https://evil.example", page: "2" }));
+  assert.equal(invalid.to, "/inspection/91?page=2");
+});
+
+test("조회 전용 결과는 서버 내용을 표시하고 편집 초안과 모든 저장 요청을 보호한다", async () => {
+  const h = editorHarness();
+  h.render();
+  await settle();
+  h.render().update("summary", "저장하지 않은 편집 초안");
+  h.remount();
+  h.params().set("view", "readonly");
+  assert.equal(h.render().readOnly, true);
+  await settle();
+  const view = h.render();
+  assert.equal(view.content.summary, savedResult.summary);
+  view.update("summary", "조회 화면 변경 시도");
+  await view.persist(false);
+  await view.persist(true);
+  await view.removePhoto("17");
+  assert.equal(h.calls.filter(({ name }) => ["saveInspectionDraft", "publishInspectionResult", "deleteInspectionPhoto", "validateRecommendedFacilities"].includes(name)).length, 0);
+  h.remount();
+  h.params().delete("view");
+  h.render();
+  await settle();
+  assert.equal(h.render().content.summary, "저장하지 않은 편집 초안");
+});
