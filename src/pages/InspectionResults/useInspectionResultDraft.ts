@@ -3,6 +3,11 @@ import type { RefObject } from "react";
 import { getSessionGeneration } from "../../auth/session";
 import { getInspectionResult, inspectionError } from "../../api/inspections";
 import { emptyResultContent, resultContent } from "./apiContent";
+import {
+  restoreInspectionDraft,
+  storeInspectionDraft,
+  clearInspectionDraft,
+} from "./inspectionResultDrafts";
 import type { ResultContent } from "./types";
 
 type Options = {
@@ -10,28 +15,18 @@ type Options = {
   generation: number;
   inFlightRef: RefObject<boolean>;
   setError: (message: string) => void;
+  viewOnly?: boolean;
 };
-
-let draftGeneration: number | undefined;
-const unsavedDrafts = new Map<number, ResultContent>();
-
-function draftsFor(generation: number) {
-  if (draftGeneration !== generation) {
-    unsavedDrafts.clear();
-    draftGeneration = generation;
-  }
-
-  return unsavedDrafts;
-}
 
 export function useInspectionResultDraft({
   id,
   generation,
   inFlightRef,
   setError,
+  viewOnly = false,
 }: Options) {
   const [draft, setDraft] = useState<ResultContent>(() =>
-    structuredClone(draftsFor(generation).get(id) ?? emptyResultContent()),
+    restoreInspectionDraft(id, generation, emptyResultContent(), viewOnly),
   );
   const [readOnly, setReadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,6 +35,8 @@ export function useInspectionResultDraft({
 
   useEffect(() => {
     const controller = new AbortController();
+    const isCurrentRequest = () =>
+      !controller.signal.aborted && generation === getSessionGeneration();
 
     async function load() {
       setLoading(true);
@@ -49,31 +46,28 @@ export function useInspectionResultDraft({
         const result = await getInspectionResult(id, controller.signal);
         const content = resultContent(result);
 
-        if (controller.signal.aborted || generation !== getSessionGeneration())
-          return;
+        if (!isCurrentRequest()) return;
         const published = result?.resultStatus === "PUBLISHED";
 
-        if (published) draftsFor(generation).delete(id);
+        const useServerContent = published || viewOnly;
+
+        if (published) clearInspectionDraft(id, generation);
         setDraft(
-          structuredClone(
-            published ? content : (draftsFor(generation).get(id) ?? content),
-          ),
+          restoreInspectionDraft(id, generation, content, useServerContent),
         );
-        setReadOnly(result?.resultStatus === "PUBLISHED");
+        setReadOnly(useServerContent);
         setLoaded(true);
       } catch (cause) {
-        if (!controller.signal.aborted && generation === getSessionGeneration())
-          setError(inspectionError(cause));
+        if (isCurrentRequest()) setError(inspectionError(cause));
       } finally {
-        if (!controller.signal.aborted && generation === getSessionGeneration())
-          setLoading(false);
+        if (isCurrentRequest()) setLoading(false);
       }
     }
 
     void load();
 
     return () => controller.abort();
-  }, [id, generation, revision, setError]);
+  }, [id, generation, revision, setError, viewOnly]);
 
   function rememberDraft(
     value: ResultContent | ((previous: ResultContent) => ResultContent),
@@ -81,7 +75,7 @@ export function useInspectionResultDraft({
     setDraft((previous) => {
       const next = typeof value === "function" ? value(previous) : value;
 
-      draftsFor(generation).set(id, structuredClone(next));
+      storeInspectionDraft(id, generation, next);
 
       return next;
     });
@@ -96,7 +90,7 @@ export function useInspectionResultDraft({
     rememberDraft,
     clearSavedDraft: () => {
       if (generation === getSessionGeneration())
-        draftsFor(generation).delete(id);
+        clearInspectionDraft(id, generation);
     },
     retry: () => {
       if (!inFlightRef.current) setRevision((value) => value + 1);

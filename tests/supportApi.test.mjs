@@ -115,6 +115,7 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
     residentRequest: null,
     preferredConstructionDate: null,
     preferredTimeSlot: null,
+    inspectionId: 91,
     inspectionResultPublished: true,
     attachments: [
       { originalName: "동의.pdf", fileUrl: "https://example.test/file" },
@@ -128,6 +129,7 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
   });
   assert.equal(a.id, "000002");
   assert.equal(a.apiId, 201);
+  assert.equal(a.inspectionId, 91);
   assert.equal(a.phone, "미입력");
   assert.equal(a.address, "부천시 101호");
   assert.equal(a.housing, "미입력");

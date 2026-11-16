@@ -158,6 +158,7 @@ export function mapSupportDetail(
     vulnerabilities: (review?.vulnerabilityTypes ?? []).map(
       (type) => vulnerabilityLabels[type] ?? type,
     ),
+    inspectionId: detail.inspectionId,
     inspectionPublished: detail.inspectionResultPublished,
     programName: review?.program?.name,
     programTarget: review?.program?.targetDescription,

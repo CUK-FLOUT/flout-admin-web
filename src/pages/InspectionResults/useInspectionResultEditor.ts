@@ -19,6 +19,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   const [params, setParams] = useSearchParams();
   const id = a.inspectionId!;
   const generation = getSessionGeneration();
+  const viewOnly = params.get("view") === "readonly";
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
@@ -26,7 +27,7 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
   const current = () => active.current && generation === getSessionGeneration();
   const {
     draft,
-    readOnly,
+    readOnly: resultReadOnly,
     setReadOnly,
     loading,
     loaded,
@@ -38,7 +39,9 @@ export default function useInspectionResultEditor(a: InspectionApplication) {
     generation,
     inFlightRef: inFlight,
     setError,
+    viewOnly,
   });
+  const readOnly = viewOnly || resultReadOnly;
   const busy = saving || loading || !loaded;
   const editingPublished = false;
   const content = draft;

@@ -1,8 +1,9 @@
+import { useSupportNavigation } from "./useSupportNavigation";
 import { searchInputText } from "../../components/common/searchStyles";
 import Pagination from "../../components/common/Pagination";
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import SupportSelect from "../../components/support/SupportSelect";
 import SupportDetail from "../../components/support/SupportDetail";
 import SupportBadge from "../../components/support/SupportBadge";
@@ -50,7 +51,6 @@ export default function SupportManagement() {
 
 function SupportManagementScreen() {
   const { requestId } = useParams();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [filters, setFilters] = useState(() => initialFilters(params));
   const [revision, setRevision] = useState(0);
@@ -87,6 +87,7 @@ function SupportManagementScreen() {
         : automaticId;
   const record = useSupportRecord(selectedApiId, true);
   const selected = record.application;
+  const { navigate, returnQuery, change, showDialog, inspectionPath, review } = useSupportNavigation(params, selected);
   const error = response.error || record.error || record.reviewError;
   const total = response.page?.totalElements ?? 0;
   const stats = [
@@ -110,26 +111,11 @@ function SupportManagementScreen() {
   const kind = params.get("dialog") as SupportDialogKind | null;
   const dialog =
     selected &&
-    ["inspection", "document", "approved-view", "rejected-view"].includes(
+    ["document", "approved-view", "rejected-view"].includes(
       kind || "",
     )
       ? kind
       : null;
-  const returnQuery = () => {
-    const p = new URLSearchParams(params);
-
-    p.delete("dialog");
-    p.delete("document");
-
-    return p;
-  };
-
-  function change(next: URLSearchParams, id?: string, replace = false) {
-    navigate(
-      { pathname: "/support" + (id ? "/" + id : ""), search: next.toString() },
-      { replace },
-    );
-  }
 
   function searchSubmit(e: FormEvent) {
     e.preventDefault();
@@ -151,37 +137,6 @@ function SupportManagementScreen() {
     const p = new URLSearchParams();
 
     change(p);
-  }
-
-  function showDialog(value: SupportDialogKind, document?: string) {
-    if (!selected) return;
-    const p = returnQuery();
-
-    p.set("dialog", value);
-    if (document) p.set("document", document);
-    change(p, String(selected.apiId));
-  }
-
-  function review() {
-    if (!selected) return;
-    if (selected.status === "승인" || selected.status === "미승인") {
-      showDialog(
-        selected.status === "승인" ? "approved-view" : "rejected-view",
-      );
-
-      return;
-    }
-
-    const p = returnQuery();
-
-    p.delete("selected");
-    p.set(
-      "returnTo",
-      "/support/" +
-        String(selected.apiId) +
-        (returnQuery().size ? "?" + returnQuery().toString() : ""),
-    );
-    navigate("/support/" + selected.apiId + "/review?" + p.toString());
   }
 
   return (
@@ -382,6 +337,7 @@ function SupportManagementScreen() {
         <SupportDetail
           application={selected}
           onReview={review}
+          onInspection={inspectionPath ? () => navigate(inspectionPath) : undefined}
           onDialog={showDialog}
           className={panel}
         />
