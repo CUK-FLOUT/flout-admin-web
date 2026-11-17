@@ -135,13 +135,13 @@ export default function PriorityDetail({
             <span className="absolute left-px top-[6px] h-[1.5px] w-[10px] rounded-[0.75px] bg-[#234f73]" />
             <span className="absolute left-px top-[10px] h-[1.5px] w-[7px] rounded-[0.75px] bg-[#234f73]" />
           </span>
-          담당자 선정 메모
+          메모 조회
         </label>
         <input
           id="priority-memo"
           value={application.memo}
           readOnly
-          className="block h-[42px] w-full rounded-md border border-[#c8d0d7] bg-white px-[14px] text-[13px] leading-[21px] focus:outline-2 focus:outline-[#234f73]"
+          className="block h-[42px] w-full rounded-md border border-[#c8d0d7] bg-white px-[14px] text-[13px] leading-[21px] focus:border-[#234f73] focus:outline-none focus:ring-1 focus:ring-[#234f73]"
         />
       </div>
 
