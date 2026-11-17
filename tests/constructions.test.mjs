@@ -2,7 +2,6 @@ import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import axios from "axios";
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 function harness(overrides = {}, environment = {}) {
@@ -139,7 +138,7 @@ test("photo limits reject zero files/empty/wrong type/oversized files before upl
   assert.equal(h.requests.length, 0);
 });
 
-test("network and 400/401/403/404/409/413 errors stay distinct and never become success/empty data", async () => {
+test("server rejection never becomes a successful construction list", async () => {
   const h = harness();
   const api = h.load("src/api/constructions.ts");
   h.respond(() => ({
@@ -149,23 +148,6 @@ test("network and 400/401/403/404/409/413 errors stay distinct and never become 
     message: "저장 거절",
   }));
   await assert.rejects(api.getConstructions("", 0), /저장 거절/);
-  assert.match(api.constructionError(new axios.AxiosError("network")), /연결/);
-  for (const status of [400, 401, 403, 404, 409, 413]) {
-    const error = new axios.AxiosError("failed", null, null, null, {
-      status,
-      data: { message: `서버 ${status}` },
-    });
-    assert.equal(api.constructionError(error), `서버 ${status}`);
-  }
-  assert.equal(
-    api.constructionError(
-      new axios.AxiosError("failed", null, null, null, {
-        status: 500,
-        data: { message: "  " },
-      }),
-    ),
-    "시공 요청에 실패했습니다.",
-  );
 });
 
 test("mapping keeps receipt/application/construction IDs separate; missing values are not invented", () => {

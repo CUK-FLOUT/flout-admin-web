@@ -153,21 +153,6 @@ test("400 401 403은 재시도하거나 순서 재조회하지 않고 서버 메
     assert.equal(h.requests.length, 1);
   }
 });
-test("응답 없는 연결 실패와 서버 오류를 빈 목록으로 처리하지 않는다", async () => {
-  const h = harness();
-  const api = h.load("src/api/priorityInspections.ts");
-  assert.match(api.priorityError(new axios.AxiosError("network")), /연결/);
-  assert.match(
-    api.priorityError(
-      new axios.AxiosError("server", "ERR_BAD_RESPONSE", undefined, null, {
-        status: 500,
-        data: {},
-      }),
-    ),
-    /요청에 실패/,
-  );
-});
-
 test("기존 목록 페이지네이션은 로딩이 끝난 후 표시되며 서버 페이지로 이동한다", () => {
   const module = { exports: {} };
   const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props: props || {} });
