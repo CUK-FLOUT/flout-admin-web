@@ -57,7 +57,7 @@ function isApplication(value: unknown): value is SupportApplication {
   );
 }
 
-// Previous confirmation states do not prove that a consent document was submitted.
+// 이전의 확인 완료 상태를 동의서 제출 완료로 간주하지 않는다.
 function migrateStoredApplication(value: unknown): unknown {
   if (!value || typeof value !== "object" || !("review" in value)) return value;
   const review = value.review;

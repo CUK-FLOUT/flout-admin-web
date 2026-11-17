@@ -56,6 +56,7 @@ export function useInfrastructureCompletion({
     onDialog("complete-confirm");
   }
 
+  // 응답 유실은 미완료를 뜻하지 않으므로 서버 상태를 확인하기 전에는 완료 요청을 재전송하지 않는다.
   async function reconcileCompletion(failure = "") {
     try {
       const latest = await getPublicIssue(Number(issue.id));

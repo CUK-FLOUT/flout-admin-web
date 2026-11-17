@@ -58,8 +58,7 @@ export function usePagePolling<T>({
   });
 
   useEffect(() => {
-    // A confirmed mutation/manual retry may refresh once even with a dialog open.
-    // Pausing still blocks all scheduled polling requests.
+    // 명시적 갱신은 일시 정지 중에도 한 번 허용하고, 이후 주기 조회는 다시 막는다.
     let manualRefresh = revision !== lastRevision.current;
 
     lastRevision.current = revision;
@@ -90,11 +89,11 @@ export function usePagePolling<T>({
     };
 
     const unsubscribe = subscribeSession(() => {
-      // Token rotation is not a reason to start another business request.
+      // 토큰 재발급만으로 목록을 다시 조회하지 않고, 현재 조회 허용 여부만 확인한다.
       if (!allowed()) polling.suspend();
     });
 
-    // Defer the first request so StrictMode's setup/cleanup probe cannot send it twice.
+    // StrictMode의 효과 재실행으로 첫 요청이 중복되지 않도록 다음 타이머로 미룬다.
     const initial = setTimeout(update, 0);
 
     document.addEventListener("visibilitychange", update);

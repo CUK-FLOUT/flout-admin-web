@@ -141,6 +141,7 @@ export function refreshSession(): Promise<AdminSession> {
     );
   }
 
+  // 같은 세션의 동시 요청은 한 번의 재발급을 공유해 Refresh Token 중복 사용을 막는다.
   if (refreshFlight?.session === previous) return refreshFlight.promise;
   const promise = requestAuthentication("/api/auth/refresh", {
     refreshToken: previous.refreshToken,
@@ -157,6 +158,7 @@ export function refreshSession(): Promise<AdminSession> {
       return next;
     })
     .catch((error: unknown) => {
+      // 일시적인 통신·권한·서버 오류로 세션을 지우지 않아 재시도할 수 있게 한다.
       const invalidSession =
         !(error instanceof AuthenticationError) ||
         error.status === 401 ||
@@ -186,7 +188,7 @@ export function logoutAdmin(): Promise<void> {
     refreshFlight?.session === previous ? refreshFlight.promise : undefined;
   const promise = Promise.resolve()
     .then(async () => {
-      // A rotation consumes the old refresh token. Revoke the newly issued one.
+      // 재발급 중이었다면 폐기된 이전 토큰 대신 새 Refresh Token으로 로그아웃한다.
       if (pendingRefresh) await pendingRefresh;
       if (getSessionGeneration() !== generation) return;
       const current = getSession();

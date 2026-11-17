@@ -81,7 +81,6 @@ export function createSupportFixtures(): SupportApplication[] {
     notify: true,
   };
   first.push(owner);
-  // 관할 전체 통계(42/16/8/21)를 재현하는 Mock 신청. 첫 5행은 Figma와 동일합니다.
   for (let i = 0; i < 36; i++) {
     const status: SupportStatus =
       i < 13 ? "검토 중" : i < 32 ? "승인" : "미승인";

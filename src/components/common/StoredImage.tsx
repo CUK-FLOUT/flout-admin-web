@@ -14,10 +14,7 @@ type ResolvedPhoto = {
   failed: boolean;
 };
 
-/**
- * Renders normal image URLs directly and loads idb: photo references on demand.
- * Results from a previous source are never displayed after the source changes.
- */
+// 사진 경로가 바뀐 첫 렌더에서도 이전 사진이 보이지 않도록 조회 결과의 경로를 함께 확인한다.
 export default function StoredImage({
   source,
   alt,

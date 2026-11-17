@@ -1,8 +1,4 @@
-/**
- * Local-only photo persistence used by the inspection, construction and
- * infrastructure mock workflows. Keep the database names stable so existing
- * photos remain readable after a refactor.
- */
+// 기존에 저장한 사진을 계속 읽을 수 있도록 IndexedDB의 DB 이름과 키 형식은 유지한다.
 export type StoredPhoto = { id: string; name: string; src: string };
 
 type PhotoWrite = { id: string; source: string };

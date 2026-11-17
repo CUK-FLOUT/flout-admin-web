@@ -7,7 +7,7 @@ export type MapLocation = {
 };
 export const BUCHEON_CENTER = { latitude: 37.5034, longitude: 126.766 };
 
-// UI test points only. These are NOT geocoded locations of the masked addresses.
+// 샘플 화면용 좌표이며 실제 주소를 변환한 값이 아니다. 접수번호가 있는 실제 신청에는 사용하지 않는다.
 const demoCoordinates: Record<string, [number, number]> = {
   "000001": [37.4986, 126.7618],
   "000002": [37.4957, 126.7698],
