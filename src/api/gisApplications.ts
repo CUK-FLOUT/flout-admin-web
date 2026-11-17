@@ -1,5 +1,5 @@
+import { apiErrorMessage } from "./errorMessage";
 import { getPriorityInspection } from "./priorityInspections";
-import axios from "axios";
 import { apiClient } from "./client";
 
 export type ProcessingStatus =
@@ -177,19 +177,10 @@ export const getGisConstruction = (id: number, signal?: AbortSignal) =>
   );
 export { savePriorityInternalMemo as saveGisMemo } from "./priorityInspections";
 export function gisError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (!error.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const message: unknown = error.response.data?.message;
-
-    return typeof message === "string" && message.trim()
-      ? message
-      : "GIS 요청에 실패했습니다.";
-  }
-
-  return error instanceof Error
-    ? error.message
-    : "GIS 요청을 처리하지 못했습니다.";
+  return apiErrorMessage(error, {
+    request: "GIS 요청에 실패했습니다.",
+    unknown: "GIS 요청을 처리하지 못했습니다.",
+  });
 }
 
 export const getGisMemo = (id: number, signal?: AbortSignal) =>

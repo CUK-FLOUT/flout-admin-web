@@ -49,7 +49,7 @@ export function useGisApi(query: string, id: string | undefined) {
       setRecord({ key, data: value });
       const number = Number(id);
 
-      if (!/^[1-9]\d*$/.test(id!) || !Number.isSafeInteger(number)) {
+      if (!/^[1-9]\d*$/.test(key) || !Number.isSafeInteger(number)) {
         setRecord({
           key,
           data: { errors: { detail: "올바른 신청 ID가 아닙니다." } },

@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export const publicIssueStatuses = [
@@ -444,20 +444,9 @@ export function validatePublicIssueImages(files: File[]) {
     );
 }
 
-export function publicIssueError(cause: unknown) {
-  if (axios.isAxiosError(cause)) {
-    if (!cause.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    if (cause.response.status >= 500)
-      return "공공인프라 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const message: unknown = cause.response.data?.message;
-
-    return typeof message === "string" && message.trim()
-      ? message
-      : "공공인프라 요청에 실패했습니다.";
-  }
-
-  return cause instanceof Error
-    ? cause.message
-    : "공공인프라 요청에 실패했습니다.";
+export function publicIssueError(cause: unknown): string {
+  return apiErrorMessage(cause, {
+    request: "공공인프라 요청에 실패했습니다.",
+    server: "공공인프라 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  });
 }

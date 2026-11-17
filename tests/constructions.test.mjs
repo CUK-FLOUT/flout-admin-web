@@ -1211,3 +1211,63 @@ test("다른 시공으로 이동한 뒤 늦게 도착한 주소는 현재 상세
   assert.equal(h.render().selected.address, "미입력");
   h.unmount();
 });
+
+
+test("일정 저장 중에는 사진 변경도 같은 잠금으로 차단되고 실패 후 다시 편집할 수 있다", async () => {
+  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord(detail);
+  const gate = deferred();
+  const w = await workspace(record, { saveConstructionSchedule: () => gate.promise });
+  w.panel().onUpload([new File(["a"], "keep.jpg", { type: "image/jpeg" })]);
+  const panel = w.panel();
+  panel.onChange({ ...panel.draft, date: "2099-12-31", time: "10:00" });
+  w.panel().onSchedule();
+  const blocked = w.panel();
+  blocked.onUpload([new File(["b"], "blocked.jpg", { type: "image/jpeg" })]);
+  blocked.onRemovePhoto(blocked.draft.photos[0].id);
+  assert.equal(w.panel().draft.photos.length, 1);
+  assert.equal(w.panel().draft.photos[0].name, "keep.jpg");
+  gate.reject(new Error("일정 거절"));
+  await tick();
+  w.panel().onRemovePhoto(w.panel().draft.photos[0].id);
+  assert.equal(w.panel().draft.photos.length, 0);
+  assert.equal(w.panel().busy, false);
+  w.unmount();
+});
+
+test("완료 사진 업로드 중에는 선택·삭제·완료 중복 요청이 차단된다", async () => {
+  const upload = deferred();
+  let uploads = 0;
+  const w = await workspace(scheduledRecord(), {
+    uploadConstructionPhotos: () => { uploads++; return upload.promise; },
+  });
+  w.panel().onUpload([new File(["a"], "keep.jpg", { type: "image/jpeg" })]);
+  confirmWorkspace(w);
+  await tick();
+  const blocked = w.panel();
+  blocked.onUpload([new File(["b"], "blocked.jpg", { type: "image/jpeg" })]);
+  blocked.onRemovePhoto(blocked.draft.photos[0].id);
+  w.dialog().onConfirm();
+  assert.equal(uploads, 1);
+  assert.equal(w.panel().draft.photos.length, 1);
+  upload.resolve({ photos: [{ photoId: 8, fileName: "keep.jpg", url: "https://example.com/8" }] });
+  await tick();
+  assert.equal(w.requests.filter(([name]) => name === "complete").length, 1);
+  assert.equal(w.dialog().kind, "overall-saved");
+  w.unmount();
+});
+
+test("완료 전 일정·내용·사진 검증의 순서와 기존 안내 문구를 유지한다", async () => {
+  const w = await workspace(scheduledRecord());
+  const draft = w.panel().draft;
+  w.panel().onChange({ ...draft, date: "2099-12-30", note: "" });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "저장된 시공 일정과 입력값이 다릅니다. 최신 일정을 확인해 주세요.");
+  w.panel().onChange({ ...draft, note: "  " });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "최종 설치 결과를 1~4000자로 입력해 주세요.");
+  w.panel().onChange({ ...draft, note: "완료 확인" });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "시공 사진을 1장 이상 선택해 주세요.");
+  assert.equal(w.requests.length, 0);
+  w.unmount();
+});

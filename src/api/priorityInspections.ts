@@ -1,3 +1,4 @@
+import { apiErrorMessage } from "./errorMessage";
 import axios from "axios";
 import { apiClient } from "./client";
 
@@ -65,21 +66,10 @@ function unwrap<T>(data: Envelope<T>): T {
 }
 
 export function priorityError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (!error.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const body: unknown = error.response.data;
-    const message =
-      body && typeof body === "object" && "message" in body
-        ? body.message
-        : null;
-
-    return typeof message === "string" && message.trim()
-      ? message
-      : "우선점검 요청에 실패했습니다. 다시 시도해 주세요.";
-  }
-
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+  return apiErrorMessage(error, {
+    request: "우선점검 요청에 실패했습니다. 다시 시도해 주세요.",
+    unknown: "요청을 처리하지 못했습니다.",
+  });
 }
 
 export function isPriorityConflict(error: unknown) {
