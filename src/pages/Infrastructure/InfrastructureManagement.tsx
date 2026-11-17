@@ -1,7 +1,7 @@
 import { searchInputText } from "../../components/common/searchStyles";
 import Pagination from "../../components/common/Pagination";
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import InfrastructureSelect from "../../components/infrastructure/InfrastructureSelect";
 import InfrastructureMap from "../../components/infrastructure/InfrastructureMap";
 import InfrastructureBadge from "../../components/infrastructure/InfrastructureBadge";
@@ -13,33 +13,18 @@ import {
   infrastructureSecondary,
 } from "../../components/infrastructure/styles";
 import { infrastructureAssets as assets } from "./assets";
-import { emptyFilters } from "./model";
 import { registrationTypes, reviewStatuses } from "./types";
-import type { InfrastructureFilters, InfrastructureIssue } from "./types";
+import type { InfrastructureIssue } from "./types";
 import { useInfrastructureData } from "./useInfrastructureData";
 import { infrastructureApiFilters } from "./apiMapping";
+import { infrastructureFiltersFrom } from "./listQuery";
+import { useInfrastructureList } from "./useInfrastructureList";
 import type { PublicIssueCounts } from "../../api/publicIssues";
-
-function filtersFrom(params: URLSearchParams): InfrastructureFilters {
-  return {
-    district:
-      ["원미구", "소사구", "오정구"].find(
-        (value) => value === params.get("district"),
-      ) || emptyFilters.district,
-    status:
-      reviewStatuses.find((value) => value === params.get("status")) ||
-      emptyFilters.status,
-    kind:
-      registrationTypes.find((value) => value === params.get("kind")) ||
-      emptyFilters.kind,
-    query: params.get("q") || "",
-  };
-}
 
 export default function InfrastructureManagement() {
   const [params] = useSearchParams();
   const data = useInfrastructureData({
-    filters: infrastructureApiFilters(filtersFrom(params)),
+    filters: infrastructureApiFilters(infrastructureFiltersFrom(params)),
     page: Math.max(0, (Math.floor(Number(params.get("page"))) || 1) - 1),
   });
 
@@ -61,80 +46,11 @@ function InfrastructureList({
 }: {
   data: ReturnType<typeof useInfrastructureData>;
 }) {
-  const [params] = useSearchParams(),
-    navigate = useNavigate();
-  const applied = filtersFrom(params);
-  const [filters, setFilters] = useState(applied),
-    [showMarkers, setShowMarkers] = useState(true);
-  const pages = Math.max(1, data.totalPages);
-  const page = Math.max(1, Math.floor(Number(params.get("page"))) || 1);
-  const visible = data.records;
-  const selected =
-    visible.find((issue) => issue.id === params.get("selected")) || visible[0];
-
-  useEffect(() => {
-    if (data.loading || data.listError || page <= pages) return;
-    const next = new URLSearchParams(params);
-
-    next.set("page", String(pages));
-    navigate({ search: next.toString() }, { replace: true });
-  }, [data.loading, data.listError, page, pages, params, navigate]);
-
-  function clean() {
-    const p = new URLSearchParams(params);
-
-    p.delete("dialog");
-
-    return p;
-  }
-
-  function go(p: URLSearchParams, replace = false) {
-    navigate(
-      { pathname: "/infrastructure", search: p.toString() },
-      { replace },
-    );
-  }
-
-  function search() {
-    const p = clean();
-
-    ["district", "status", "kind", "q", "page", "selected", "dataset"].forEach(
-      (k) => p.delete(k),
-    );
-    if (filters.district !== emptyFilters.district)
-      p.set("district", filters.district);
-    if (filters.status !== emptyFilters.status) p.set("status", filters.status);
-    if (filters.kind !== emptyFilters.kind) p.set("kind", filters.kind);
-    if (filters.query.trim()) p.set("q", filters.query.trim());
-    if (
-      page === 1 &&
-      JSON.stringify(infrastructureApiFilters(filters)) ===
-        JSON.stringify(infrastructureApiFilters(applied))
-    )
-      data.refresh();
-    go(p);
-  }
-
-  function reset() {
-    data.setError("");
-    data.refresh();
-    setFilters({ ...emptyFilters });
-    go(new URLSearchParams());
-  }
-
-  function select(id: string) {
-    const p = clean();
-
-    p.set("selected", id);
-    go(p, true);
-  }
-
-  function openDetail(id: string) {
-    navigate({
-      pathname: "/infrastructure/" + id + "/review",
-      search: clean().toString(),
-    });
-  }
+  const [showMarkers, setShowMarkers] = useState(true);
+  const {
+    applied, filters, setFilters, page, visible, selected,
+    search, reset, select, openDetail, changePage,
+  } = useInfrastructureList(data);
 
   return (
     <div
@@ -291,13 +207,7 @@ function InfrastructureList({
               page={page}
               totalPages={data.totalPages}
               disabled={data.loading}
-              onPageChange={(number) => {
-                const p = clean();
-
-                p.set("page", String(number));
-                p.delete("selected");
-                go(p);
-              }}
+              onPageChange={changePage}
             />
           </div>
         </section>
