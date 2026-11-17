@@ -1146,3 +1146,115 @@ test("초안은 서버 갱신 중 편집값과 선택 사진을 보존하고 삭
   assert.deepEqual([...revoked].sort(), [...created].sort());
   assert.equal(new Set(revoked).size, revoked.length);
 });
+
+function listWorkspace(search = "") {
+  const hook = hooks();
+  const navigations = [];
+  let params = new URLSearchParams(search);
+  const navigate = (to, options) => navigations.push({ to, options });
+  const data = {
+    records: [{ id: "8" }, { id: "9" }],
+    totalPages: 3,
+    loading: false,
+    listError: undefined,
+    refreshes: 0,
+    error: "이전 오류",
+    refresh() { data.refreshes++; },
+    setError(value) { data.error = value; },
+  };
+  const { useInfrastructureList } = harness({
+    react: hook.react,
+    "react-router-dom": {
+      useSearchParams: () => [params],
+      useNavigate: () => navigate,
+    },
+  }).load("src/pages/Infrastructure/useInfrastructureList.ts");
+  return {
+    data, navigations,
+    render: () => hook.render(() => useInfrastructureList(data)),
+    setParams(value) { params = new URLSearchParams(value); },
+  };
+}
+
+test("공공인프라 목록 검색은 초안과 적용 조건을 구분하고 같은 첫 페이지 검색을 재조회한다", () => {
+  const w = listWorkspace("district=원미구&status=검토 중&q=배수&dialog=view&selected=9&dataset=old&keep=1");
+  let list = w.render();
+  list.search();
+  assert.equal(w.data.refreshes, 1);
+  let query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("keep"), "1");
+  for (const key of ["page", "selected", "dialog", "dataset"]) assert.equal(query.has(key), false);
+  list.setFilters(values => ({ ...values, query: "  새 검색  ", status: "조치 완료" }));
+  list = w.render();
+  assert.equal(list.applied.query, "배수");
+  list.search();
+  assert.equal(w.data.refreshes, 1);
+  query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("q"), "새 검색");
+  assert.equal(query.get("status"), "조치 완료");
+});
+
+test("공공인프라 선택·상세·페이지 이동은 필터를 유지하고 기존 히스토리 정책을 따른다", () => {
+  const w = listWorkspace("district=소사구&page=2&selected=9&dialog=view");
+  const list = w.render();
+  assert.equal(list.selected.id, "9");
+  list.select("8");
+  assert.equal(w.navigations.at(-1).options.replace, true);
+  assert.equal(new URLSearchParams(w.navigations.at(-1).to.search).get("selected"), "8");
+  list.openDetail("9");
+  assert.equal(w.navigations.at(-1).to.pathname, "/infrastructure/9/review");
+  list.changePage(3);
+  const query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("district"), "소사구");
+  assert.equal(query.get("page"), "3");
+  assert.equal(query.has("selected"), false);
+  assert.equal(query.has("dialog"), false);
+  assert.equal(w.navigations.at(-1).options.replace, false);
+  w.setParams("selected=missing");
+  assert.equal(w.render().selected.id, "8");
+  w.data.records = [];
+  assert.equal(w.render().selected, undefined);
+});
+
+test("공공인프라 페이지 보정은 조회 성공 후에만 실행하고 검색·선택 파라미터를 보존한다", () => {
+  const w = listWorkspace("page=5&selected=9&q=배수");
+  w.data.loading = true;
+  w.render();
+  assert.equal(w.navigations.length, 0);
+  w.data.loading = false;
+  w.data.listError = "조회 실패";
+  w.render();
+  assert.equal(w.navigations.length, 0);
+  w.data.listError = undefined;
+  w.render();
+  const { to, options } = w.navigations.at(-1);
+  const query = new URLSearchParams(to.search);
+  assert.equal(query.get("page"), "3");
+  assert.equal(query.get("q"), "배수");
+  assert.equal(query.get("selected"), "9");
+  assert.equal(options.replace, true);
+});
+
+test("공공인프라 초기화는 초안·오류·URL을 초기화하고 목록을 재조회한다", () => {
+  const w = listWorkspace("district=원미구&q=배수&page=2");
+  w.render().reset();
+  const list = w.render();
+  assert.deepEqual(plain(list.filters), {
+    district: "지역 전체", status: "검토 상태 전체", kind: "문제 유형 전체", query: "",
+  });
+  assert.equal(w.data.error, "");
+  assert.equal(w.data.refreshes, 1);
+  assert.equal(w.navigations.at(-1).to.search, "");
+});
+
+test("공공인프라 URL 필터는 제거된 상태와 알 수 없는 지역·유형을 기본값으로 처리한다", () => {
+  const w = listWorkspace("district=invalid&status=ACTION_IN_PROGRESS&kind=invalid&page=-4&q=검색");
+  const list = w.render();
+  assert.equal(list.page, 1);
+  assert.deepEqual(plain(list.applied), {
+    district: "지역 전체", status: "검토 상태 전체", kind: "문제 유형 전체", query: "검색",
+  });
+  list.search();
+  const query = new URLSearchParams(w.navigations.at(-1).to.search);
+  for (const key of ["district", "status", "kind"]) assert.equal(query.has(key), false);
+});
