@@ -12,7 +12,6 @@ function harness() {
   return createApiHarness({
     overrides: {
       "../InspectionResults/storage": { readResultsState: () => ({ records: {} }) },
-      "./mockData": { createSupportFixtures: () => [] },
     },
   });
 }
@@ -815,7 +814,7 @@ test("이전 검토 데이터를 읽을 때 신청을 보존하고 확인 완료
     environment: { localStorage: { getItem: () => stored, setItem: (_, value) => { stored = value; } } },
   });
   const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
-  const model = h.load("src/pages/Support/model.ts");
+  const model = h.load("src/pages/Support/legacyStorage.ts");
   const base = mapSupport(item);
   const legacy = ["미확인", "자료 요청", "확인 중", "확인 완료", "불필요"].map((consentState, i) => {
     const review = { ...base.review, memo: "보존할 메모", consentState };

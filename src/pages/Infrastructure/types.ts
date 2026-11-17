@@ -67,13 +67,6 @@ export type InfrastructureFilters = {
   kind: string;
   query: string;
 };
-export type RegistrationDraft = {
-  location: string;
-  postcode: string;
-  kind: string;
-  description: string;
-  findings: string;
-};
 export const infrastructureDialogs = [
   "register",
   "address",

@@ -2,7 +2,7 @@ import { searchInputText } from "../common/searchStyles";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Filters } from "../../pages/GIS/types";
-import { emptyFilters } from "../../pages/GIS/mockData";
+import { emptyFilters } from "../../pages/GIS/filterDefaults";
 import searchIcon from "../../assets/gis/imgSearch1.svg";
 import GisFilterSelect from "./GisFilterSelect";
 
