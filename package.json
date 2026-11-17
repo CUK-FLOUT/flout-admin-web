@@ -12,7 +12,7 @@
     "test:photo": "node --experimental-strip-types --test tests/photoStorage.test.mjs",
     "test:priority": "node --experimental-strip-types --test tests/priorityUtils.test.mjs tests/priorityApi.test.mjs tests/priorityOrderModal.test.mjs tests/priorityManagement.test.mjs",
     "test:support": "node --test tests/supportApi.test.mjs",
-    "test:inspection": "node --test tests/inspections.test.mjs",
+    "test:inspection": "node --test tests/inspections.test.mjs tests/resultDialogs.test.mjs",
     "test:gis": "node --test tests/gisApi.test.mjs tests/gisDetail.test.mjs",
     "test:construction": "node --test tests/constructions.test.mjs",
     "test:infrastructure": "node --test tests/publicIssues.test.mjs",
