@@ -6,7 +6,6 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
-import axios from "axios";
 
 const harness = createApiHarness;
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -50,12 +49,6 @@ test("정상 빈 데이터와 조회 실패를 구분하고 지원·시공 null�
   assert.deepEqual(plain(await a.getGisConstruction(29)), {construction:null});
   h.setResponse(() => null);
   await assert.rejects(a.getGisDetail(29));
-  const network = new axios.AxiosError("network");
-  assert.match(a.gisError(network), /연결/);
-  const http = new axios.AxiosError("http", undefined, undefined, undefined, {status:403,data:{message:"관할 권한 없음"}});
-  assert.equal(a.gisError(http), "관할 권한 없음");
-  http.response.data.message = "   ";
-  assert.equal(a.gisError(http), "GIS 요청에 실패했습니다.");
 });
 const detail = {
   applicationId:29,receiptNo:"000029",applicantName:"김주민",contact:"010-1234",

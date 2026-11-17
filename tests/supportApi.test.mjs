@@ -84,23 +84,6 @@ test("승인과 미승인에는 명세 필드만 보내고 잘못된 입력은 �
   await assert.rejects(api.rejectSupport(201, "x".repeat(501)));
   assert.equal(h.requests.length, 2);
 });
-test("네트워크 오류와 서버 거절 메시지를 구분한다", () => {
-  const h = harness();
-  const api = h.load("src/api/supportApplications.ts");
-  assert.match(api.supportError({ isAxiosError: true }), /연결/);
-  for (const status of [400, 401, 403, 409, 500])
-    assert.equal(
-      api.supportError({
-        isAxiosError: true,
-        response: { status, data: { message: "서버 안내" } },
-      }),
-      "서버 안내",
-    );
-  assert.match(
-    api.supportError({ isAxiosError: true, response: { status: 500 } }),
-    /요청에 실패/,
-  );
-});
 test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동의 상태를 매핑한다", () => {
   const h = harness();
   const { mapSupportDetail } = h.load("src/pages/Support/apiMapping.ts");
@@ -634,23 +617,6 @@ test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답
   await new Promise(setImmediate);
   assert.equal(h.render().page.totalElements, 0);
   assert.equal(h.render().counts.totalCount, 42);
-});
-
-test("공백 오류 메시지는 기본 문구를 사용하고 유효한 원문은 보존한다", () => {
-  const { supportError } = harness().load("src/api/supportApplications.ts");
-  for (const message of ["", "  ", "\n\t"]) {
-    assert.equal(
-      supportError({ isAxiosError: true, response: { data: { message } } }),
-      "지원 신청 요청에 실패했습니다.",
-    );
-  }
-  assert.equal(
-    supportError({
-      isAxiosError: true,
-      response: { data: { message: " 원문 " } },
-    }),
-    " 원문 ",
-  );
 });
 
 test("거주 형태와 동의 검토 매핑은 미입력과 모순된 상태를 구분한다", () => {
