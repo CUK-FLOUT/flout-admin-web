@@ -93,6 +93,7 @@ export function useConstructionDraft(
   }, [id, onError]);
 
   useEffect(() => {
+    // 복원 전이나 복원 실패 상태에서 저장하면 기기에 남은 초안을 덮어쓸 수 있다.
     if (!id || !state.ready || !state.draft) return;
     let active = true;
 

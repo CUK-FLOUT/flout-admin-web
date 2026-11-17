@@ -4,7 +4,7 @@ export interface PollingOptions {
   interval?: number;
 }
 
-/** One request at a time; a cancelled request must settle before resuming. */
+// 취소된 요청도 정리될 때까지 기다려야 조회를 재개할 때 요청이 겹치지 않는다.
 export function createPagePolling({
   request,
   allowed,

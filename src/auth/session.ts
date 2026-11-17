@@ -70,7 +70,7 @@ function restoreSession(): AdminSession | null {
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {
-      /* Storage may be unavailable. */
+      // 저장소 접근이 막혀도 복원 실패는 비로그인 상태로 처리한다.
     }
 
     return null;
@@ -107,10 +107,11 @@ export function setSession(next: AdminSession | null, rotation = false) {
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {
-      /* The in-memory session is still cleared. */
+      // 저장소 삭제가 실패해도 현재 메모리의 인증 정보는 비운다.
     }
   }
 
+  // 토큰 교체는 같은 로그인으로 보고, 로그인·로그아웃 시에만 이전 요청을 무효화한다.
   if (!rotation) generation += 1;
   session = next;
   listeners.forEach((listener) => listener());

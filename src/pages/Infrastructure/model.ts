@@ -95,7 +95,7 @@ export function readInfrastructureIssues(): InfrastructureIssue[] {
     records = initialInfrastructureIssues();
   }
 
-  // Read the existing 05 flow without writing to its storage or changing its pages.
+  // 이전 점검 흐름의 지역 문제를 가져오되 원본 저장소는 수정하지 않는다.
   for (const issue of readResultsState().issues) {
     try {
       const externalKey = issue.id + ":" + issue.applicationId;
@@ -121,7 +121,7 @@ export function readInfrastructureIssues(): InfrastructureIssue[] {
       ];
       records = [...records, created];
     } catch {
-      // Skip an invalid imported record without preventing the remaining imports.
+      // 한 건의 잘못된 데이터 때문에 나머지 지역 문제까지 누락되지 않도록 건너뛴다.
       continue;
     }
   }
