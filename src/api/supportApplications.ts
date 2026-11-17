@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export type SupportServerStatus = "SUBMITTED" | "APPROVED" | "REJECTED";
@@ -171,18 +171,8 @@ export async function rejectSupport(id: number, reason: string) {
   );
 }
 
-export function supportError(cause: unknown) {
-  if (axios.isAxiosError(cause)) {
-    if (!cause.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const data = cause.response.data as { message?: unknown } | undefined;
-
-    return typeof data?.message === "string" && data.message.trim()
-      ? data.message
-      : "지원 신청 요청에 실패했습니다.";
-  }
-
-  return cause instanceof Error
-    ? cause.message
-    : "지원 신청 요청에 실패했습니다.";
+export function supportError(cause: unknown): string {
+  return apiErrorMessage(cause, {
+    request: "지원 신청 요청에 실패했습니다.",
+  });
 }

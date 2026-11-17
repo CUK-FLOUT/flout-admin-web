@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export type InspectionApiStatus =
@@ -129,22 +129,10 @@ function result<T>(data: Envelope<T>): T {
 }
 
 export function inspectionError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (!error.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-
-    const data: unknown = error.response.data;
-    const body =
-      data && typeof data === "object"
-        ? (data as Record<string, unknown>)
-        : null;
-
-    return typeof body?.message === "string" && body.message.trim()
-      ? body.message
-      : "현장점검 요청에 실패했습니다. 다시 시도해 주세요.";
-  }
-
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+  return apiErrorMessage(error, {
+    request: "현장점검 요청에 실패했습니다. 다시 시도해 주세요.",
+    unknown: "요청을 처리하지 못했습니다.",
+  });
 }
 
 export async function getInspections(

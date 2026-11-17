@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export type ConstructionServerStatus =
@@ -225,16 +225,8 @@ export async function uploadConstructionPhotos(id: number, files: File[]) {
   );
 }
 
-export function constructionError(cause: unknown) {
-  if (axios.isAxiosError(cause)) {
-    if (!cause.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const message: unknown = cause.response.data?.message;
-
-    return typeof message === "string" && message.trim()
-      ? message
-      : "시공 요청에 실패했습니다.";
-  }
-
-  return cause instanceof Error ? cause.message : "시공 요청에 실패했습니다.";
+export function constructionError(cause: unknown): string {
+  return apiErrorMessage(cause, {
+    request: "시공 요청에 실패했습니다.",
+  });
 }
