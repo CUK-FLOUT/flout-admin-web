@@ -141,7 +141,7 @@ export default function PriorityDetail({
           id="priority-memo"
           value={application.memo}
           readOnly
-          className="block h-[42px] w-full rounded-md border border-[#c8d0d7] bg-white px-[14px] text-[13px] leading-[21px] focus:border-[#234f73] focus:outline-none focus:ring-1 focus:ring-[#234f73]"
+          className="block h-[42px] w-full rounded-md border border-[#c8d0d7] bg-white px-[14px] text-[13px] leading-[21px] focus:border-[#234f73] focus:outline-hidden focus:ring-1 focus:ring-[#234f73]"
         />
       </div>
 
