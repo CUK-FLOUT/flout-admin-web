@@ -1,4 +1,4 @@
-import type { PriorityApplication } from "./mockData";
+import type { PriorityApplication } from "./types";
 
 export function normalizePriorityOrder(
   order: string[],

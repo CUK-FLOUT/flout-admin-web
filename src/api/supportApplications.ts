@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export type SupportServerStatus = "SUBMITTED" | "APPROVED" | "REJECTED";
@@ -6,15 +6,15 @@ export type HousingType =
   "SEMI_BASEMENT" | "FIRST_FLOOR" | "SECOND_FLOOR_OR_ABOVE";
 export type SupportSearchFilters = {
   district?: "원미구" | "소사구" | "오정구";
-  status?: SupportServerStatus | "REVIEWING" | "CONSENT_PENDING" | "SCHEDULING";
-  landlordConsentStatus?: "NOT_REQUIRED" | "PENDING" | "VERIFIED" | "CONFIRMED";
+  status?: SupportServerStatus | "REVIEWING" | "SCHEDULING";
 };
 export type SupportListItem = {
   supportApplicationId: number;
   receiptNo: string;
   applicantName: string;
   requestedFacility: string | null;
-  landlordConsentStatus: "PENDING" | "VERIFIED" | "NOT_REQUIRED";
+  landlordConsentRequired?: boolean;
+  landlordConsentDocumentSubmitted?: boolean;
   status: SupportServerStatus;
 };
 export type SupportPage = {
@@ -27,7 +27,7 @@ export type SupportPage = {
 export type SupportCounts = {
   totalCount: number;
   reviewingCount: number;
-  consentRequiredCount: number;
+  rejectedCount: number;
   approvedCount: number;
 };
 export type SupportDetails = {
@@ -50,13 +50,9 @@ export type SupportDetails = {
   inspectionStatus: string | null;
   inspectionResultPublished: boolean;
   attachments: { originalName: string; fileUrl: string }[];
-  landlordConsentStatus: SupportListItem["landlordConsentStatus"];
   status: SupportServerStatus;
 };
-export type SupportReviewDetails = Omit<
-  SupportDetails,
-  "landlordConsentStatus"
-> & {
+export type SupportReviewDetails = SupportDetails & {
   applicationId: number;
   vulnerabilityTypes: string[];
   landlordConsentRequired: boolean;
@@ -104,9 +100,6 @@ export async function getSupportApplications(
       size: 5,
       ...(filters.district ? { district: filters.district } : {}),
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.landlordConsentStatus
-        ? { landlordConsentStatus: filters.landlordConsentStatus }
-        : {}),
     },
     signal,
   });
@@ -178,18 +171,8 @@ export async function rejectSupport(id: number, reason: string) {
   );
 }
 
-export function supportError(cause: unknown) {
-  if (axios.isAxiosError(cause)) {
-    if (!cause.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const data = cause.response.data as { message?: unknown } | undefined;
-
-    return typeof data?.message === "string" && data.message.trim()
-      ? data.message
-      : "지원 신청 요청에 실패했습니다.";
-  }
-
-  return cause instanceof Error
-    ? cause.message
-    : "지원 신청 요청에 실패했습니다.";
+export function supportError(cause: unknown): string {
+  return apiErrorMessage(cause, {
+    request: "지원 신청 요청에 실패했습니다.",
+  });
 }

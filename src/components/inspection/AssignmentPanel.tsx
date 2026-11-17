@@ -1,19 +1,13 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import type {
-  AssignmentDraft,
-  InspectionApplication,
-} from "../../pages/Inspection/mockData";
-import {
-  formatDate,
-  getAssignmentDraft,
-} from "../../pages/Inspection/mockData";
+import { Link, useSearchParams } from "react-router-dom";
+import type { InspectionApplication } from "../../pages/Inspection/types";
+import { formatDate } from "../../pages/Inspection/formatDate";
 import { CalendarIcon, ClockIcon } from "./InspectionIcons";
-import StatusDropdown from "./StatusDropdown";
-import { inspectionCheckbox, inspectionDate, inspectionPanel } from "./styles";
+import { inspectionDate, inspectionPanel } from "./styles";
 import person from "../../assets/inspection/person.svg";
 import { getSession } from "../../auth/session";
 import { validateAssignment } from "../../pages/Inspection/apiModel";
+import { inspectionResultPath } from "../../pages/Inspection/resultNavigation";
 import type { InspectionDialogState } from "./InspectionDialog";
 
 type Props = {
@@ -23,42 +17,45 @@ type Props = {
     kind: InspectionDialogState,
   ) => Promise<boolean>;
   busy: boolean;
-  onRefresh: () => void;
 };
+type AssignmentForm = Pick<
+  InspectionApplication,
+  "assignee" | "visitDate" | "visitTime" | "notice"
+>;
 const input =
   "h-10 w-full min-w-0 rounded-md border border-[#c8d0d7] bg-white px-3 text-[13px] font-medium leading-[19px]";
 
 export default function AssignmentPanel({
   application: a,
   onSave,
-  onRefresh,
   busy,
 }: Props) {
-  const [draft, setDraft] = useState(() => ({
-    ...getAssignmentDraft(a),
+  const [params] = useSearchParams();
+  const readOnly = a.inspectorUserId != null || a.status === "진행" || a.status === "완료";
+  const [draft, setDraft] = useState<AssignmentForm>(() => ({
+    visitDate: a.visitDate,
     visitTime: a.visitTime,
-    assignee:
-      a.inspectorUserId != null ? a.assignee : getSession()?.name || "본인",
-    notifyResident: false,
+    notice: a.notice,
+    assignee: readOnly ? a.assignee : getSession()?.name || "본인",
   }));
   const [error, setError] = useState("");
 
-  function update<K extends keyof AssignmentDraft>(
+  function update<K extends keyof AssignmentForm>(
     key: K,
-    value: AssignmentDraft[K],
+    value: AssignmentForm[K],
   ) {
     setDraft((current) => ({ ...current, [key]: value }));
     setError("");
   }
 
   function save() {
+    if (busy || readOnly) return;
     const next = {
       ...a,
       assignee: draft.assignee,
       visitDate: draft.visitDate,
       visitTime: draft.visitTime,
       notice: draft.notice,
-      notifyResident: draft.notifyResident,
       status: a.status,
     };
 
@@ -133,7 +130,7 @@ export default function AssignmentPanel({
               aria-label="확정 방문일"
               type="date"
               required
-              disabled={busy || a.inspectorUserId != null}
+              disabled={busy || readOnly}
               value={draft.visitDate}
               onInput={(event) =>
                 update("visitDate", event.currentTarget.value)
@@ -153,7 +150,7 @@ export default function AssignmentPanel({
               aria-label="방문 시간"
               type="time"
               required
-              disabled={busy || a.inspectorUserId != null}
+              disabled={busy || readOnly}
               value={draft.visitTime}
               onInput={(event) =>
                 update("visitTime", event.currentTarget.value)
@@ -168,51 +165,13 @@ export default function AssignmentPanel({
         주민 방문 전 안내
         <input
           aria-label="주민 방문 전 안내"
-          disabled={busy || a.inspectorUserId != null}
+          disabled={busy || readOnly}
           maxLength={2000}
           value={draft.notice}
           onChange={(event) => update("notice", event.target.value)}
           className={`${input} h-[42px] font-normal`}
         />
       </label>
-      <div className="flex shrink-0 flex-col gap-[6px]">
-        <label
-          htmlFor="inspection-status"
-          className="text-[13px] font-bold leading-[19px]"
-        >
-          점검 상태
-        </label>
-        <div className="flex gap-2">
-          <StatusDropdown
-            value={a.status}
-            disabled
-            onChange={(value) => update("status", value)}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRefresh}
-            className="h-10 w-[88px] shrink-0 rounded-md bg-[#234f73] px-3 text-sm font-semibold text-white"
-          >
-            상태 확인
-          </button>
-        </div>
-      </div>
-      <label className="flex shrink-0 items-center gap-2 text-[13px] font-medium leading-[19px]">
-        <input
-          type="checkbox"
-          disabled
-          checked={false}
-          onChange={(event) => update("notifyResident", event.target.checked)}
-          className={inspectionCheckbox}
-        />
-        주민과 변경 일정 협의 후 최종 알림
-      </label>
-      <p className="text-xs text-[#64748b]">
-        본인에게 최초 1회 배정할 수 있습니다. 배정 시 예정, 방문 시간이 되면
-        진행, 결과 공개 시 완료로 자동 변경됩니다. 일정 변경·알림 발송과 저장된
-        확정 일정 재조회는 현재 API에서 지원하지 않습니다.
-      </p>
       {error && (
         <p role="alert" className="text-[13px] leading-[19px] text-[#a53632]">
           {error}
@@ -221,17 +180,17 @@ export default function AssignmentPanel({
       <div className="flex shrink-0 flex-col gap-[10px]">
         <button
           type="button"
-          disabled={busy || a.inspectorUserId != null}
+          disabled={busy || readOnly}
           onClick={save}
           className="h-[42px] rounded-md bg-[#234f73] text-sm font-bold leading-5 text-white"
         >
           배정·일정 저장
         </button>
         <Link
-          to={`/inspection/${a.inspectionId}/results`}
+          to={inspectionResultPath(a.inspectionId, params, a.status === "완료")}
           className="flex h-[42px] items-center justify-center rounded-md border border-[#c8d0d7] bg-white text-sm font-bold leading-5"
         >
-          점검 결과 등록
+          {a.status === "완료" ? "점검 결과 보기" : "점검 결과 등록"}
         </Link>
       </div>
     </section>

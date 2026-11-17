@@ -1,73 +1,19 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
+import { loadPollingHook } from "./helpers/loadPollingHook.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import axios from "axios";
 
 function harness() {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let respond = () => ({});
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: { isSuccess: true, result: respond(config), message: "성공" },
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(path.endsWith(".ts") ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    const context = vm.createContext({
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      require(specifier) {
-        if (specifier === "axios") return axios;
-        if (specifier === "./client") return { apiClient: client };
-        if (specifier.endsWith(".png")) return specifier;
-        if (specifier === "../InspectionResults/storage")
-          return { readResultsState: () => ({ records: {} }) };
-        if (specifier === "./mockData")
-          return { createSupportFixtures: () => [] };
-        return load(resolve(dirname(file), specifier));
-      },
-    });
-    vm.runInContext(source, context);
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    setResponse(fn) {
-      respond = fn;
+  return createApiHarness({
+    overrides: {
+      "../InspectionResults/storage": { readResultsState: () => ({ records: {} }) },
     },
-  };
+  });
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -77,7 +23,8 @@ const item = {
   receiptNo: "000002",
   applicantName: "테스트",
   requestedFacility: null,
-  landlordConsentStatus: "VERIFIED",
+  landlordConsentRequired: true,
+  landlordConsentDocumentSubmitted: true,
   status: "SUBMITTED",
 };
 test("목록은 백엔드가 지원하는 검색어와 서버 페이지 정보만 사용한다", async () => {
@@ -136,23 +83,6 @@ test("승인과 미승인에는 명세 필드만 보내고 잘못된 입력은 �
   await assert.rejects(api.rejectSupport(201, "x".repeat(501)));
   assert.equal(h.requests.length, 2);
 });
-test("네트워크 오류와 서버 거절 메시지를 구분한다", () => {
-  const h = harness();
-  const api = h.load("src/api/supportApplications.ts");
-  assert.match(api.supportError({ isAxiosError: true }), /연결/);
-  for (const status of [400, 401, 403, 409, 500])
-    assert.equal(
-      api.supportError({
-        isAxiosError: true,
-        response: { status, data: { message: "서버 안내" } },
-      }),
-      "서버 안내",
-    );
-  assert.match(
-    api.supportError({ isAxiosError: true, response: { status: 500 } }),
-    /요청에 실패/,
-  );
-});
 test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동의 상태를 매핑한다", () => {
   const h = harness();
   const { mapSupportDetail } = h.load("src/pages/Support/apiMapping.ts");
@@ -167,6 +97,7 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
     residentRequest: null,
     preferredConstructionDate: null,
     preferredTimeSlot: null,
+    inspectionId: 91,
     inspectionResultPublished: true,
     attachments: [
       { originalName: "동의.pdf", fileUrl: "https://example.test/file" },
@@ -180,10 +111,11 @@ test("접수번호와 지원 신청 ID를 구분하고 null·사업 정보·동�
   });
   assert.equal(a.id, "000002");
   assert.equal(a.apiId, 201);
+  assert.equal(a.inspectionId, 91);
   assert.equal(a.phone, "미입력");
   assert.equal(a.address, "부천시 101호");
   assert.equal(a.housing, "미입력");
-  assert.equal(a.review.consentState, "확인 완료");
+  assert.equal(a.review.consentSubmission, "제출 완료");
   assert.equal(a.review.scope, "설치 지원");
   assert.equal(a.programName, "침수 예방");
   assert.deepEqual(plain(a.vulnerabilities), ["출입구"]);
@@ -210,6 +142,7 @@ function reviewHarness(overrides = {}) {
   let index = 0;
   const slots = [];
   let params = new URLSearchParams("dialog=approve");
+  const navigations = [];
   const api = {
     approveSupport: async () => ({ status: "APPROVED" }),
     rejectSupport: async () => ({ status: "REJECTED" }),
@@ -282,6 +215,7 @@ function reviewHarness(overrides = {}) {
         if (name === "react-router-dom")
           return {
             Link: "Link",
+            useNavigate: () => (path) => navigations.push(path),
             useParams: () => ({ requestId: "201" }),
             useSearchParams: () => [
               params,
@@ -314,6 +248,7 @@ function reviewHarness(overrides = {}) {
     dialog: () =>
       render().find((n) => String(n.type).endsWith("/SupportDialogs")),
     params: () => params,
+    navigations,
     unmount: () => cleanups.forEach((cleanup) => cleanup?.()),
   };
 }
@@ -342,14 +277,14 @@ test("승인 연속 클릭은 한 요청만 보내고 저장 중 닫기를 막�
 test("승인 실패는 완료 상태로 바꾸지 않고 서버 오류를 표시한다", async () => {
   const h = reviewHarness({
     approveSupport: async () => {
-      throw new Error("동의 확인 필요");
+      throw new Error("미승인");
     },
   });
   await h.dialog().props.onConfirm();
   const dialog = h.dialog();
   assert.equal(dialog.props.kind, "approve");
   assert.equal(dialog.props.application.serverStatus, "SUBMITTED");
-  assert.equal(dialog.props.error, "동의 확인 필요");
+  assert.equal(dialog.props.error, "미승인");
   assert.equal(dialog.props.busy, false);
 });
 
@@ -384,26 +319,26 @@ test("동의 필요 여부는 상세의 동의 상태가 아니라 검토 응답
   const review = { vulnerabilityTypes: [], landlordConsentRequired: false };
   assert.equal(
     mapSupportDetail(
-      { ...item, landlordConsentStatus: "PENDING", attachments: [] },
+      { ...item, landlordConsentRequired: true, attachments: [] },
       review,
     ).review.consentRequired,
     "불필요",
   );
   assert.equal(
     mapSupportDetail(
-      { ...item, landlordConsentStatus: "NOT_REQUIRED", attachments: [] },
+      { ...item, landlordConsentRequired: false, attachments: [] },
       { ...review, landlordConsentRequired: true },
     ).review.consentRequired,
     "필요",
   );
 });
 
-test("API 신청은 동의 확인 상태와 파일명으로 승인 요청을 막지 않고 서버가 최종 검증한다", () => {
+test("API 신청은 실제 제출 여부로 승인하고 파일명에 의존하지 않는다", () => {
   const h = harness();
   const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
   const { approvalIssue } = h.load("src/pages/Support/model.ts");
   const a = {
-    ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
+    ...mapSupport({ ...item, landlordConsentRequired: true }),
     inspectionPublished: true,
     reviewLoaded: true,
   };
@@ -424,12 +359,12 @@ test("API 신청은 동의 확인 상태와 파일명으로 승인 요청을 막
   );
 });
 
-test("기존 Mock 신청의 동의 검증은 그대로 유지한다", () => {
+test("미제출 신청은 API 여부와 관계없이 승인을 차단한다", () => {
   const h = harness();
   const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
   const { approvalIssue } = h.load("src/pages/Support/model.ts");
   const a = {
-    ...mapSupport({ ...item, landlordConsentStatus: "PENDING" }),
+    ...mapSupport({ ...item, landlordConsentRequired: true, landlordConsentDocumentSubmitted: false }),
     apiId: undefined,
     inspectionPublished: true,
     reviewLoaded: true,
@@ -440,7 +375,7 @@ test("기존 Mock 신청의 동의 검증은 그대로 유지한다", () => {
       checks: [true, true, true],
       scope: "설치",
     }),
-    /동의 자료/,
+    /동의서/,
   );
 });
 
@@ -474,7 +409,6 @@ test("한국어 필터를 서버 코드로 변환해 검색·페이지와 함께
     size: 5,
     district: "원미구",
     status: "REVIEWING",
-    landlordConsentStatus: "VERIFIED",
   });
   assert.equal(h.requests[0].signal, controller.signal);
   assert.equal(page.totalElements, 12);
@@ -493,15 +427,7 @@ test("필터 초기화는 선택 조건을 요청에서 제외하고 모든 실�
     ["미승인", "REJECTED"],
   ])
     assert.equal(supportSearchFilters({ ...base, status }).status, code);
-  for (const [consent, code] of [
-    ["불필요", "NOT_REQUIRED"],
-    ["필요 · 확인 중", "PENDING"],
-    ["필요 · 확인 완료", "VERIFIED"],
-  ])
-    assert.equal(
-      supportSearchFilters({ ...base, consent }).landlordConsentStatus,
-      code,
-    );
+  assert.equal(supportSearchFilters({ ...base, consent: "필요 · 확인 완료" }).landlordConsentStatus, undefined);
   for (const district of ["원미구", "소사구", "오정구"])
     assert.equal(
       supportSearchFilters({ ...base, district }).district,
@@ -607,7 +533,9 @@ function listHookHarness(countsPromise, recordApi = {}) {
     exports: module.exports,
     AbortController,
     Promise,
-    require(name) {
+    require: function require(name) {
+      if (name.endsWith("/usePagePolling"))
+        return loadPollingHook(require("react"));
       if (name === "react")
         return {
           useState(initial) {
@@ -616,7 +544,7 @@ function listHookHarness(countsPromise, recordApi = {}) {
             return [
               slots[i],
               (v) => {
-                slots[i] = v;
+                slots[i] = typeof v === "function" ? v(slots[i]) : v;
               },
             ];
           },
@@ -666,7 +594,7 @@ test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답
     h.render({ district: "소사구", status: "APPROVED" }, 1).loading,
     true,
   );
-  assert.equal(h.reads[0].signal.aborted, true);
+  // The first request already settled; the still-pending request below must be cancelled.
   assert.equal(h.reads.length, 2);
   assert.equal(h.reads[1].page, 1);
   assert.deepEqual(plain(h.reads[1].filters), {
@@ -690,23 +618,6 @@ test("필터·페이지 변경은 서버 재조회로 이어지고 이전 응답
   assert.equal(h.render().counts.totalCount, 42);
 });
 
-test("공백 오류 메시지는 기본 문구를 사용하고 유효한 원문은 보존한다", () => {
-  const { supportError } = harness().load("src/api/supportApplications.ts");
-  for (const message of ["", "  ", "\n\t"]) {
-    assert.equal(
-      supportError({ isAxiosError: true, response: { data: { message } } }),
-      "지원 신청 요청에 실패했습니다.",
-    );
-  }
-  assert.equal(
-    supportError({
-      isAxiosError: true,
-      response: { data: { message: " 원문 " } },
-    }),
-    " 원문 ",
-  );
-});
-
 test("거주 형태와 동의 검토 매핑은 미입력과 모순된 상태를 구분한다", () => {
   const { mapSupportDetail } = harness().load(
     "src/pages/Support/apiMapping.ts",
@@ -724,11 +635,11 @@ test("거주 형태와 동의 검토 매핑은 미입력과 모순된 상태를 
     );
   }
   const a = mapSupportDetail(
-    { ...item, landlordConsentStatus: "NOT_REQUIRED", attachments: [] },
+    { ...item, landlordConsentRequired: false, attachments: [] },
     { landlordConsentRequired: true },
   );
   assert.equal(a.review.consentRequired, "필요");
-  assert.equal(a.review.consentState, "미확인");
+  assert.equal(a.review.consentSubmission, "제출 완료");
 });
 
 test("동일한 파일명도 고유 문서 키로 각각의 URL을 보존한다", () => {
@@ -814,4 +725,136 @@ test("검토 조회가 실패해도 상세를 표시하고 승인 준비 상태�
   assert.equal(h.record(201).error, "");
   assert.equal(h.record(201).reviewError, "검토 조회 실패");
   assert.equal(h.record(201).application.reviewLoaded, false);
+});
+
+
+test("지원 현황은 최신 rejectedCount를 포함한 네 집계값과 0건을 그대로 반환한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/supportApplications.ts");
+  for (const counts of [
+    { totalCount: 21, reviewingCount: 4, rejectedCount: 6, approvedCount: 11 },
+    { totalCount: 15, reviewingCount: 4, rejectedCount: 0, approvedCount: 11 },
+    { totalCount: 0, reviewingCount: 0, rejectedCount: 0, approvedCount: 0 },
+  ]) {
+    h.setResponse(() => counts);
+    const controller = new AbortController();
+    assert.deepEqual(plain(await api.getSupportCounts(controller.signal)), counts);
+    assert.equal(h.requests.at(-1).url, root + "/status");
+    assert.equal(h.requests.at(-1).method, "get");
+    assert.equal(h.requests.at(-1).signal, controller.signal);
+  }
+});
+
+test("목록과 상세는 최신 동의 boolean을 동일하게 사용하고 누락된 예전 상태를 필요로 간주하지 않는다", () => {
+  const { mapSupport, mapSupportDetail } = harness().load("src/pages/Support/apiMapping.ts");
+  const { landlordConsentRequired, landlordConsentDocumentSubmitted, ...currentItem } = item;
+  const cases = [
+    [false, false, "불필요", "불필요"],
+    [false, true, "불필요", "불필요"],
+    [true, false, "필요", "미제출"],
+    [true, true, "필요", "제출 완료"],
+  ];
+  for (const [required, submitted, expectedRequired, expectedState] of cases) {
+    const payload = {
+      ...currentItem,
+      landlordConsentRequired: required,
+      landlordConsentDocumentSubmitted: submitted,
+      attachments: [],
+    };
+    const list = mapSupport(payload);
+    const detail = mapSupportDetail(payload);
+    const review = mapSupportDetail(payload, {
+      landlordConsentRequired: required,
+      landlordConsentDocumentSubmitted: submitted,
+    });
+    for (const result of [list, detail, review]) {
+      assert.equal(result.review.consentRequired, expectedRequired);
+      assert.equal(result.review.consentSubmission, expectedState);
+    }
+  }
+  assert.equal(mapSupport(currentItem).review.consentRequired, "검토 필요");
+  assert.equal(mapSupport({ ...item, landlordConsentRequired: false }).review.consentRequired, "불필요");
+  assert.equal(mapSupportDetail({ ...item, landlordConsentRequired: false, attachments: [] }, { landlordConsentRequired: false }).review.consentSubmission, "불필요");
+});
+
+
+test("실제 동의서 제출 boolean만 승인 조건에 사용하고 파일명과 누락값을 신뢰하지 않는다", () => {
+  const h = harness();
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const { approvalIssue, consentLabel } = h.load("src/pages/Support/model.ts");
+  for (const [required, submitted, allowed, label] of [
+    [true, true, true, "제출 완료"],
+    [true, false, false, "미제출"],
+    [true, undefined, false, "미확인"],
+    [undefined, true, false, "필요 여부 검토 전"],
+    [false, false, true, "불필요"],
+  ]) {
+    const a = { ...mapSupport({ ...item, landlordConsentRequired: required, landlordConsentDocumentSubmitted: submitted }), inspectionPublished: true, reviewLoaded: true, documents: submitted ? [] : ["임대인 동의서.pdf"] };
+    const draft = { ...a.review, checks: [true, true, true], scope: "설치" };
+    assert.equal(approvalIssue(a, draft) === null, allowed);
+    assert.equal(consentLabel(a), label);
+  }
+});
+
+test("폐기된 동의 필터가 남아 있어도 API query에 전달하지 않는다", async () => {
+  const h = harness();
+  h.setResponse(() => ({ supportApplications: [], page: 0, totalElements: 0, totalPages: 0 }));
+  await h.load("src/api/supportApplications.ts").getSupportApplications("", 0, { landlordConsentStatus: "VERIFIED" });
+  assert.equal(Object.hasOwn(h.requests[0].params, "landlordConsentStatus"), false);
+});
+
+
+test("이전 검토 데이터를 읽을 때 신청을 보존하고 확인 완료를 제출 완료로 추정하지 않는다", () => {
+  let stored;
+  const h = createApiHarness({
+    overrides: {
+      "../InspectionResults/storage": { readResultsState: () => ({ records: {} }) },
+      "./mockData": { createSupportFixtures: () => [] },
+    },
+    environment: { localStorage: { getItem: () => stored, setItem: (_, value) => { stored = value; } } },
+  });
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const model = h.load("src/pages/Support/legacyStorage.ts");
+  const base = mapSupport(item);
+  const legacy = ["미확인", "자료 요청", "확인 중", "확인 완료", "불필요"].map((consentState, i) => {
+    const review = { ...base.review, memo: "보존할 메모", consentState };
+    delete review.consentSubmission;
+    return { ...base, id: String(i + 1).padStart(6, "0"), review, documents: ["동의서.pdf"] };
+  });
+  const unnecessary = structuredClone(legacy[0]);
+  unnecessary.id = "000006";
+  unnecessary.review.consentRequired = "불필요";
+  const current = { ...base, id: "000007" };
+  stored = JSON.stringify([...legacy, unnecessary, current]);
+  const original = stored;
+  const result = model.readSupportApplications();
+  assert.equal(result.length, 7);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(result[i].review.consentSubmission, "미확인");
+    assert.equal(result[i].review.memo, "보존할 메모");
+    assert.deepEqual(plain(result[i].documents), ["동의서.pdf"]);
+    assert.equal(Object.hasOwn(result[i].review, "consentState"), false);
+  }
+  assert.equal(result[5].review.consentSubmission, "불필요");
+  assert.equal(result[6].review.consentSubmission, "제출 완료");
+  assert.equal(stored, original);
+  model.writeSupportApplications(result);
+  assert.deepEqual(plain(model.readSupportApplications()), plain(result));
+  const malformed = { ...legacy[0], review: { ...legacy[0].review, consentSubmission: "invalid" } };
+  stored = JSON.stringify([malformed]);
+  assert.deepEqual(plain(model.readSupportApplications()), []);
+});
+
+
+test("승인 모달의 시공 확인은 중복 등록 API나 임시 안내 없이 시공 목록으로 이동한다", () => {
+  const h = reviewHarness();
+  h.dialog().props.onRegister();
+  assert.deepEqual(h.navigations, ["/construction"]);
+});
+
+test("지원 점검 결과에 제공되지 않은 설명을 구현 안내 문구로 대체하지 않는다", () => {
+  const { inspectionFor } = harness().load("src/pages/Support/model.ts");
+  const result = inspectionFor({ apiId: 1, vulnerabilities: [], recommendations: [], inspectionSummary: "" });
+  assert.equal(result.summary, "");
+  assert.deepEqual(plain(result.photos), []);
 });

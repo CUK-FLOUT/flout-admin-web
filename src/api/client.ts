@@ -66,6 +66,7 @@ apiClient.interceptors.response.use(
     if (isAuthenticationRequest(config.url)) throw error;
     const session = getSession();
 
+    // 이전 로그인에서 보낸 늦은 401 응답이 현재 로그인까지 해제하지 않도록 세션을 확인한다.
     if (
       !session ||
       config.sessionUserId !== session.userId ||

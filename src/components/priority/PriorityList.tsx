@@ -1,4 +1,5 @@
-import type { PriorityApplication } from "../../pages/Priority/mockData";
+import Pagination from "../common/Pagination";
+import type { PriorityApplication } from "../../pages/Priority/types";
 import highDot from "../../assets/priority/risk-high.svg";
 import warningDot from "../../assets/priority/risk-warning.svg";
 import lowDot from "../../assets/priority/risk-low.svg";
@@ -21,6 +22,10 @@ type Props = {
   totalPages?: number;
   onPage?: (page: number) => void;
   selectedId?: string;
+  checkedIds?: number[];
+  onToggle?: (id: number) => void;
+  onBulkDesignate?: () => void;
+  busy?: boolean;
   ordering: boolean;
   searchEmpty: boolean;
   onSelect: (application: PriorityApplication) => void;
@@ -40,6 +45,10 @@ export default function PriorityList({
   totalPages = 1,
   onPage,
   selectedId,
+  checkedIds = [],
+  onToggle,
+  onBulkDesignate,
+  busy = false,
   ordering,
   searchEmpty,
   onSelect,
@@ -59,14 +68,29 @@ export default function PriorityList({
         <h2 className="text-base font-bold leading-[23px]">
           점검 전 신청 비교
         </h2>
-        <p className="text-xs leading-[18px]">총 {total}건</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs leading-[18px]">
+            총 {total}건
+            {checkedIds.length > 0 && ` · ${checkedIds.length}건 선택`}
+          </p>
+          {checkedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={onBulkDesignate}
+              disabled={busy || loading}
+              className="h-8 rounded-md bg-[#234f73] px-3 text-xs font-bold text-white disabled:opacity-50"
+            >
+              선택 대상 지정
+            </button>
+          )}
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[780px] table-fixed border-collapse text-center text-[13px] leading-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <table className="w-full min-w-[640px] table-fixed border-collapse text-center text-[13px] leading-5">
           <caption className="sr-only">우선점검 신청 비교 목록</caption>
           <colgroup>
             {[59, 100, 88, 116, 190, 88, 139].map((width, i) => (
-              <col key={i} style={{ width }} />
+              <col key={i} style={{ width: `${(width / 780) * 100}%` }} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-white text-xs font-normal leading-[18px]">
@@ -129,8 +153,20 @@ export default function PriorityList({
                     <input
                       type="checkbox"
                       aria-label={`${a.id} 신청 선택`}
-                      checked={selectedId === a.id}
-                      onChange={() => onSelect(a)}
+                      checked={
+                        a.applicationId !== undefined &&
+                        checkedIds.includes(a.applicationId)
+                      }
+                      disabled={
+                        busy ||
+                        loading ||
+                        a.designated ||
+                        a.applicationId === undefined
+                      }
+                      onChange={() => {
+                        if (a.applicationId !== undefined)
+                          onToggle?.(a.applicationId);
+                      }}
                       onClick={(e) => e.stopPropagation()}
                       className="h-[17px] w-[17px] cursor-pointer rounded border-[#234f73] accent-[#234f73]"
                     />
@@ -157,7 +193,9 @@ export default function PriorityList({
                   </span>
                 </td>
                 <td>{a.floodExperience}</td>
-                <td className="font-normal">{a.reason}</td>
+                <td className="break-words font-normal [overflow-wrap:anywhere]">
+                  {a.reason}
+                </td>
                 <td className="font-normal">{a.nearby}건</td>
                 <td className="pr-[15px]">
                   <span
@@ -201,45 +239,14 @@ export default function PriorityList({
         )}
       </div>
       {!!filtered.length && (
-        <nav
-          aria-label="페이지 선택"
-          className="flex h-[65px] shrink-0 items-center justify-center gap-2 border-t border-[#c8d0d7]"
-        >
-          <button
-            type="button"
-            disabled={loading || page <= 0}
-            onClick={() => onPage?.(page - 1)}
-            aria-label="이전 페이지"
-            className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
-          >
-            ‹
-          </button>
-          {Array.from(
-            { length: Math.min(5, totalPages) },
-            (_, i) => Math.max(0, Math.min(page - 2, totalPages - 5)) + i + 1,
-          ).map((n) => (
-            <button
-              key={n}
-              type="button"
-              disabled={loading}
-              onClick={() => onPage?.(n - 1)}
-              aria-current={n === page + 1 ? "page" : undefined}
-              aria-label={`${n}페이지`}
-              className={`h-[34px] w-[34px] rounded-md border text-sm ${n === page + 1 ? "border-[#234f73] bg-[#234f73] font-bold text-white" : "border-[#cbd5e1] bg-white text-[#64748b]"}`}
-            >
-              {n}
-            </button>
-          ))}
-          <button
-            type="button"
-            disabled={loading || page + 1 >= totalPages}
-            onClick={() => onPage?.(page + 1)}
-            aria-label="다음 페이지"
-            className="h-[34px] w-[34px] rounded-md border border-[#cbd5e1]"
-          >
-            ›
-          </button>
-        </nav>
+        <Pagination
+          label="우선점검 목록 페이지"
+          page={page + 1}
+          totalPages={totalPages}
+          disabled={loading || busy || !onPage}
+          onPageChange={(next) => onPage?.(next - 1)}
+          className="h-[65px] border-t border-[#c8d0d7]"
+        />
       )}
     </section>
   );

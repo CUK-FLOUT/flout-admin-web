@@ -1,75 +1,12 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
-import vm from "node:vm";
-import ts from "typescript";
 import axios from "axios";
-import { randomUUID } from "node:crypto";
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 function harness(overrides = {}, environment = {}) {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let response = () => ({ isSuccess: true, result: {} });
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: await response(config),
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(/\.tsx?$/.test(path) ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        jsx: ts.JsxEmit.ReactJSX,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    vm.runInNewContext(source, {
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      URLSearchParams,
-      URL,
-      crypto: { randomUUID },
-      ...environment,
-      require(name) {
-        if (name in overrides) return overrides[name];
-        if (name === "axios") return axios;
-        if (name === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), name));
-      },
-    });
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    respond(fn) {
-      response = fn;
-    },
-  };
+  return createApiHarness({ overrides, environment, wrapResult: false });
 }
 function hooks() {
   const slots = [],
@@ -154,7 +91,6 @@ const page = {
 const counts = {
   registeredCount: 12,
   pendingOrUnderReviewCount: 6,
-  actionInProgressCount: 4,
   completedCount: 2,
 };
 const detail = {
@@ -213,8 +149,9 @@ const images = {
     },
   ],
 };
+completed.images = images.images;
+
 function response(config) {
-  if (config.url.endsWith("/images")) return images;
   if (config.url.endsWith("/actions")) return completed;
   if (config.url.endsWith("/review"))
     return {
@@ -258,7 +195,7 @@ function apiHarness() {
   return { ...h, api: h.load("src/api/publicIssues.ts") };
 }
 
-test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files", async () => {
+test("7 APIs use actual Swagger methods, exact filters/IDs and multipart files", async () => {
   const h = apiHarness(),
     api = h.api;
   await api.getPublicIssues(filters, 2);
@@ -273,9 +210,8 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
     reviewReason: "기존 사유",
   };
   await api.savePublicIssueReview(9, body);
-  const action = await api.completePublicIssueAction(9, "  정비 완료  ");
   const file = new File(["image"], "photo.jpg", { type: "image/jpeg" });
-  await api.uploadPublicIssueImages(9, action.actionId, [file, file]);
+  await api.completePublicIssueAction(9, "  정비 완료  ", [file, file]);
   assert.deepEqual(
     h.requests.map((r) => [r.method, r.url]),
     [
@@ -286,7 +222,6 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
       ["get", `${root}/9/resident-applications`],
       ["post", `${root}/9/review`],
       ["post", `${root}/9/actions`],
-      ["post", `${root}/9/actions/71/images`],
     ],
   );
   assert.deepEqual(plain(h.requests[0].params), {
@@ -299,15 +234,13 @@ test("8 APIs use actual Swagger methods, exact filters/IDs and multipart files",
   assert.equal(h.requests[2].params.page, undefined);
   assert.equal(h.requests[2].params.status, "UNDER_REVIEW");
   assert.deepEqual(JSON.parse(h.requests[5].data), body);
-  assert.deepEqual(JSON.parse(h.requests[6].data), {
-    actionDescription: "정비 완료",
-  });
-  assert.equal(h.requests[7].data instanceof FormData, true);
-  assert.deepEqual([...h.requests[7].data.keys()], ["files", "files"]);
-  assert.notEqual(
-    h.requests[7].headers.get("Content-Type"),
-    "application/json",
-  );
+  const multipart = h.requests[6].data;
+  assert.equal(multipart instanceof FormData, true);
+  assert.deepEqual([...multipart.keys()], ["request", "files", "files"]);
+  assert.equal(multipart.get("request").type, "application/json");
+  assert.deepEqual(JSON.parse(await multipart.get("request").text()), { actionDescription: "정비 완료" });
+  assert.equal(multipart.getAll("files").length, 2);
+  assert.notEqual(h.requests[6].headers.get("Content-Type"), "application/json");
 });
 
 test("invalid queries, IDs, required fields, review states and photos are blocked before API calls", async () => {
@@ -334,14 +267,14 @@ test("invalid queries, IDs, required fields, review states and photos are blocke
       reviewStatus: "COMPLETED",
     }),
   );
-  await assert.rejects(api.completePublicIssueAction(9, " "));
+  await assert.rejects(api.completePublicIssueAction(9, " ", []));
   for (const files of [
     [],
     [new File([], "empty.jpg", { type: "image/jpeg" })],
     [{ size: 10 * 1024 ** 2 + 1, name: "large.jpg", type: "image/jpeg" }],
     [new File(["svg"], "image.svg", { type: "image/svg+xml" })],
   ])
-    await assert.rejects(api.uploadPublicIssueImages(9, 71, files));
+    await assert.rejects(api.completePublicIssueAction(9, "완료", files));
   assert.equal(h.requests.length, 0);
 });
 
@@ -378,7 +311,7 @@ test("server errors stay errors, sensitive 500 details are hidden and unknown re
     isSuccess: true,
     result: { ...completed, publicIssueId: 99 },
   }));
-  await assert.rejects(api.completePublicIssueAction(9, "완료"), /응답/);
+  await assert.rejects(api.completePublicIssueAction(9, "완료", [new File(["image"], "a.jpg", { type: "image/jpeg" })]), /응답/);
 });
 
 test("mapping uses server counts/statuses and actual coordinates, never demo locations or invented residents", () => {
@@ -516,7 +449,7 @@ test("related request failures do not erase the detail, and successful completio
   h.unmount();
 });
 
-function reviewWorkspace(apiOverrides = {}, original = detail) {
+function reviewWorkspace(apiOverrides = {}, original = detail, environment = {}) {
   const hook = hooks();
   const react = hook.react;
   const mapping = harness().load("src/pages/Infrastructure/apiMapping.ts");
@@ -559,6 +492,7 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
           ...data.issue.action,
           result: saved.actionDescription,
           verified: true,
+          photos: saved.images.map(image => ({ id: String(image.imageId), name: "조치 사진", src: image.imageUrl })),
         },
       };
     },
@@ -579,13 +513,9 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
         publicIssueStatus: "UNDER_REVIEW",
       };
     },
-    completePublicIssueAction: async (id, result) => {
-      requests.push(["complete", id, result]);
+    completePublicIssueAction: async (id, result, files) => {
+      requests.push(["complete", id, result, files]);
       return completed;
-    },
-    uploadPublicIssueImages: async (...args) => {
-      requests.push(["images", ...args]);
-      return images;
     },
     ...apiOverrides,
   };
@@ -621,7 +551,7 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
       RelatedApplications: "Related",
     },
   };
-  const Component = harness(overrides).load(
+  const Component = harness(overrides, environment).load(
     "src/pages/Infrastructure/InfrastructureReview.tsx",
   ).default;
   const rootNode = Component();
@@ -648,7 +578,6 @@ function reviewWorkspace(apiOverrides = {}, original = detail) {
 
 function prepareAction(w) {
   w.panel().onUpdate("result", "정비 완료");
-  w.panel().onUpdate("verified", true);
   w.panel().onComplete();
 }
 
@@ -666,8 +595,8 @@ test("review requests block duplicates, preserve input/photos on failure and nev
     .panel()
     .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   const panel = w.panel();
-  panel.onSave(true);
-  panel.onSave(true);
+  panel.onSave();
+  panel.onSave();
   assert.equal(calls, 1);
   assert.equal(w.panel().busy, true);
   pending.reject(new Error("저장 실패"));
@@ -680,39 +609,20 @@ test("review requests block duplicates, preserve input/photos on failure and nev
   w.unmount();
 });
 
-test("completion precedes photo upload and a photo-only retry never completes the action twice", async () => {
-  let uploads = 0;
-  const w = reviewWorkspace({
-    uploadPublicIssueImages: async (...args) => {
-      w.requests.push(["images", ...args]);
-      if (++uploads === 1) throw new Error("업로드 실패");
-      return images;
-    },
-  });
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("사진과 조치 결과를 단일 요청으로 완료하고 중복 클릭을 차단한다", async () => {
+  const w = reviewWorkspace();
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   assert.equal(w.requests.length, 0);
   prepareAction(w);
   const confirm = w.dialog();
   confirm.onConfirm();
   confirm.onConfirm();
   await tick();
-  assert.deepEqual(
-    w.requests.map((r) => r[0]),
-    ["complete", "images"],
-  );
-  assert.equal(w.requests[1][2], 71);
+  assert.deepEqual(w.requests.map(r => r[0]), ["complete"]);
+  assert.equal(w.requests[0][3][0].name, "a.jpg");
   assert.equal(w.data.issue.status, "조치 완료");
-  assert.match(w.data.error, /조치 완료는 처리되었습니다/);
-  assert.equal(w.panel().draft.photos[0].file.name, "a.jpg");
-  w.dialog().onConfirm();
-  await tick();
-  assert.deepEqual(
-    w.requests.map((r) => r[0]),
-    ["complete", "images", "images"],
-  );
   assert.equal(w.panel().draft.photos[0].id, "31");
+  assert.equal(w.panel().draft.photos.some(p => p.file), false);
   assert.equal(w.dialog(), undefined);
   w.unmount();
 });
@@ -744,7 +654,7 @@ test("missing review or failed completion never uploads photos or marks an issue
 test("late mutation success never changes an inactive workspace or navigates away from another page", async () => {
   const pending = deferred();
   const w = reviewWorkspace({ savePublicIssueReview: () => pending.promise });
-  w.panel().onSave(true);
+  w.panel().onSave();
   w.unmount();
   pending.resolve({
     publicIssueId: 9,
@@ -869,6 +779,7 @@ test("an existing unfinished action still sends the entered completion result", 
       ],
     },
   );
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   prepareAction(w);
   w.dialog().onConfirm();
   await tick();
@@ -878,49 +789,19 @@ test("an existing unfinished action still sends the entered completion result", 
   w.unmount();
 });
 
-test("completed photos preserve verification and use the latest server action ID without duplicate image IDs", async () => {
-  const w = reviewWorkspace(
-    {},
-    {
-      ...detail,
-      status: "COMPLETED",
-      actions: [
-        {
-          actionId: 50,
-          status: "COMPLETED",
-          actionDescription: "완료",
-          images: [],
-        },
-      ],
-    },
-  );
-  w.panel();
-  w.data.issue = {
-    ...w.data.issue,
-    actionId: 72,
-    action: {
-      ...w.data.issue.action,
-      photos: [{ id: "31", src: "https://example.com/old.jpg", name: "사진" }],
-    },
-  };
-  w.panel();
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
-  assert.equal(w.panel().draft.verified, true);
-  w.panel().onUpdate(
-    "photos",
-    w.panel().draft.photos.filter((p) => !p.file),
-  );
-  assert.equal(w.panel().draft.verified, true);
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("완료된 문제는 사진 추가·삭제와 완료 재요청을 차단한다", async () => {
+  const w = reviewWorkspace({}, {
+    ...detail, status: "COMPLETED",
+    actions: [{ actionId: 71, status: "COMPLETED", actionDescription: "완료", images: images.images }],
+  });
+  const before = plain(w.panel().draft.photos);
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  w.panel().onUpdate("photos", []);
   w.panel().onComplete();
   await tick();
-  assert.equal(w.requests[0][0], "images");
-  assert.equal(w.requests[0][2], 72);
-  assert.equal(w.panel().draft.photos.filter((p) => p.id === "31").length, 1);
+  assert.deepEqual(plain(w.panel().draft.photos), before);
+  assert.equal(w.panel().draft.verified, true);
+  assert.equal(w.requests.length, 0);
   w.unmount();
 });
 
@@ -943,12 +824,13 @@ test("uncertain completion never resends until server state is confirmed", async
             actionId: 71,
             status: "COMPLETED",
             actionDescription: "서버 완료 결과",
-            images: [],
+            images: images.images,
           },
         ],
       };
     },
   });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   prepareAction(w);
   w.dialog().onConfirm();
   await tick();
@@ -958,10 +840,12 @@ test("uncertain completion never resends until server state is confirmed", async
   await tick();
   assert.equal(completions, 1);
   assert.equal(lookups, 2);
-  assert.match(w.data.error, /서버의 조치 완료/);
+  assert.match(w.data.error, /서버의 사진 저장 및 조치 완료/);
   assert.equal(w.panel().readOnly, true);
   assert.equal(w.data.issue.action.result, "서버 완료 결과");
-  w.dialog().onConfirm();
+  assert.equal(w.dialog(), undefined);
+  assert.equal(w.panel().draft.photos.some(photo => photo.file), false);
+  w.panel().onComplete();
   await tick();
   assert.equal(completions, 1);
   w.unmount();
@@ -1018,29 +902,359 @@ test("reconciled completion detail survives a failed refresh and ignores other i
   h.unmount();
 });
 
-test("completed issue without an action ID only reconciles and never posts completion", async () => {
-  let lookups = 0;
-  const w = reviewWorkspace(
-    {
-      getPublicIssue: async () => {
-        lookups++;
-        return { ...detail, status: "COMPLETED", actions: [] };
-      },
-    },
-    { ...detail, status: "COMPLETED", actions: [] },
-  );
-  await w
-    .panel()
-    .onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+test("완료된 문제는 조치 ID가 없어도 새 완료 요청을 보내지 않는다", async () => {
+  const w = reviewWorkspace({}, { ...detail, status: "COMPLETED", actions: [] });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
   w.panel().onComplete();
   await tick();
-  assert.equal(lookups, 1);
   assert.equal(w.requests.length, 0);
   assert.equal(w.panel().readOnly, true);
-  assert.match(w.data.error, /조치 ID를 확인하지/);
-  w.panel().onComplete();
-  await tick();
-  assert.equal(lookups, 2);
-  assert.equal(w.requests.length, 0);
+  assert.equal(w.panel().draft.photos.length, 0);
   w.unmount();
+});
+
+test("review content save preserves server review status and sends edited content", async () => {
+  for (const reviewStatus of ["PENDING", "UNDER_REVIEW"]) {
+    const w = reviewWorkspace({}, { ...detail, review: { ...detail.review, reviewStatus } });
+    w.panel().onUpdate("target", "수정한 대상");
+    w.panel().onUpdate("requirements", "확인할 점검 내용");
+    await w.panel().onSave();
+    assert.equal(w.requests.length, 1);
+    assert.equal(w.requests[0][0], "review");
+    assert.equal(w.requests[0][2].reviewStatus, reviewStatus);
+    assert.equal(w.requests[0][2].reviewTarget, "수정한 대상");
+    assert.equal(w.requests[0][2].inspectionNotes, "확인할 점검 내용");
+    assert.equal(w.dialog().kind, "status-saved");
+    w.unmount();
+  }
+});
+
+test("통합 완료는 사진을 필수로 확인하고 실패 시 결과와 선택 파일을 보존한 뒤 재시도한다", async () => {
+  let attempts = 0;
+  const w = reviewWorkspace({
+    completePublicIssueAction: async (...args) => {
+      w.requests.push(["complete", ...args]);
+      if (++attempts === 1) throw new Error("통합 저장 실패");
+      return completed;
+    },
+  });
+  prepareAction(w);
+  assert.equal(w.dialog(), undefined);
+  assert.match(w.data.error, /사진/);
+  await w.panel().onUpload([new File(["image"], "retry.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(w.panel().readOnly, false);
+  assert.equal(w.panel().draft.result, "정비 완료");
+  assert.equal(w.panel().draft.photos[0].file.name, "retry.jpg");
+  assert.match(w.data.error, /통합 저장 실패/);
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(attempts, 2);
+  assert.equal(w.panel().readOnly, true);
+  assert.equal(w.panel().draft.photos[0].id, "31");
+  assert.equal(w.dialog(), undefined);
+  w.unmount();
+});
+
+test("완료 응답에 사진이 없으면 성공으로 처리하지 않는다", async () => {
+  const h = apiHarness();
+  h.respond(() => ({ isSuccess: true, result: { ...completed, images: [] } }));
+  await assert.rejects(h.api.completePublicIssueAction(9, "완료", [new File(["image"], "a.jpg", { type: "image/jpeg" })]), /사진 응답/);
+});
+
+test("통합 완료 요청 중 화면을 떠나면 후속 갱신·모달 이동을 하지 않는다", async () => {
+  const pending = deferred();
+  const w = reviewWorkspace({ completePublicIssueAction: () => pending.promise });
+  await w.panel().onUpload([new File(["image"], "a.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  w.dialog().onConfirm();
+  w.unmount();
+  pending.resolve(completed);
+  await tick();
+  assert.equal(w.data.completions, 0);
+  assert.equal(w.data.refreshes, 0);
+});
+
+test("완료 재조회에 사진이 없으면 선택 파일과 확인 창을 유지하고 완료 상태만 반영한다", async () => {
+  for (const actions of [[], [{ actionId: 71, status: "COMPLETED", actionDescription: "서버 완료 결과", images: [] }]]) {
+    let submissions = 0;
+    const w = reviewWorkspace({
+      completePublicIssueAction: async () => {
+        submissions++;
+        throw new Error("완료 응답 유실");
+      },
+      getPublicIssue: async () => ({ ...detail, status: "COMPLETED", actions }),
+    });
+    const file = new File(["image"], "preserved.jpg", { type: "image/jpeg" });
+    await w.panel().onUpload([file]);
+    prepareAction(w);
+    const selected = w.panel().draft.photos.find(photo => photo.file);
+    w.dialog().onConfirm();
+    await tick();
+    const panel = w.panel();
+    assert.equal(panel.readOnly, true);
+    assert.equal(w.data.issue.status, "조치 완료");
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.file, file);
+    assert.equal(panel.draft.photos.find(photo => photo.file)?.src, selected.src);
+    assert.match(w.data.error, /저장된 사진을 확인하지 못했습니다/);
+    assert.doesNotMatch(w.data.error, /사진 저장 및 조치 완료를 확인했습니다/);
+    assert.ok(w.dialog());
+    assert.equal(w.data.refreshes, 0);
+    w.dialog().onConfirm();
+    await tick();
+    assert.equal(submissions, 1);
+    w.unmount();
+  }
+});
+
+test("확인 체크박스 없이 조치 결과와 사진을 입력하면 통합 완료할 수 있다", async () => {
+  const w = reviewWorkspace();
+  await w.panel().onUpload([new File(["image"], "unchecked.jpg", { type: "image/jpeg" })]);
+  assert.equal(w.panel().draft.verified, false);
+  w.panel().onUpdate("result", "현장 조치 완료");
+  w.panel().onComplete();
+  assert.ok(w.dialog());
+  w.dialog().onConfirm();
+  await tick();
+  assert.equal(w.requests[0][0], "complete");
+  assert.equal(w.requests[0][2], "현장 조치 완료");
+  assert.equal(w.panel().readOnly, true);
+  w.unmount();
+});
+
+test("현황은 최신 3개 필드만 검증하며 실제 응답과 0건을 정상 처리한다", async () => {
+  const h = apiHarness();
+  for (const payload of [
+    { registeredCount: 8, pendingOrUnderReviewCount: 5, completedCount: 3 },
+    { registeredCount: 0, pendingOrUnderReviewCount: 0, completedCount: 0 },
+  ]) {
+    h.respond(() => ({ isSuccess: true, result: payload }));
+    assert.deepEqual(plain(await h.api.getPublicIssueCounts({ keyword: "" })), payload);
+  }
+  for (const payload of [
+    { registeredCount: 8, pendingOrUnderReviewCount: 5 },
+    { registeredCount: -1, pendingOrUnderReviewCount: 0, completedCount: 0 },
+    { registeredCount: 8, pendingOrUnderReviewCount: "5", completedCount: 3 },
+  ]) {
+    h.respond(() => ({ isSuccess: true, result: payload }));
+    await assert.rejects(h.api.getPublicIssueCounts({ keyword: "" }), /현황 응답/);
+  }
+});
+
+
+test("공공인프라는 최신 3개 상태만 표시하고 오래된 URL 필터 상태를 요청에 넣지 않는다", () => {
+  const h = harness();
+  const mapping = h.load("src/pages/Infrastructure/apiMapping.ts");
+  const base = { district: "", query: "", kind: "", status: "" };
+  for (const [status, expected] of [["RECEIVED", "검토 대기"], ["UNDER_REVIEW", "검토 중"], ["COMPLETED", "조치 완료"]]) {
+    assert.equal(mapping.publicIssueRecord({ publicIssueId: 1, status }).status, expected);
+    assert.equal(mapping.infrastructureApiFilters({ ...base, status: expected }).status, status);
+  }
+  for (const status of ["점검 필요", "조치 진행", "INSPECTION_REQUIRED", "ACTION_IN_PROGRESS"])
+    assert.equal(mapping.infrastructureApiFilters({ ...base, status }).status, undefined);
+});
+
+test("제거된 목록·지도 필터와 완료 상태의 검토 저장은 HTTP 요청 전에 차단한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/publicIssues.ts");
+  for (const status of ["INSPECTION_REQUIRED", "ACTION_IN_PROGRESS"]) {
+    await assert.rejects(api.getPublicIssues({ keyword: "", status }, 0), /상태/);
+    await assert.rejects(api.getPublicIssueMap({ keyword: "", status }), /상태/);
+  }
+  for (const reviewStatus of ["INSPECTION_REQUIRED", "ACTION_IN_PROGRESS", "COMPLETED"]) {
+    await assert.rejects(api.savePublicIssueReview(1, { reviewTarget: "시설", inspectionNotes: "검토", reviewStatus }), /검토 상태/);
+  }
+  assert.equal(h.requests.length, 0);
+});
+
+test("검토 저장의 공유 잠금은 기존 렌더의 조치 요청·사진 추가·입력 변경도 차단한다", async () => {
+  const pending = deferred();
+  let saves = 0;
+  const w = reviewWorkspace({ savePublicIssueReview: () => { saves++; return pending.promise; } });
+  await w.panel().onUpload([new File(["image"], "kept.jpg", { type: "image/jpeg" })]);
+  const panel = w.panel();
+  const original = panel.draft.result;
+  const saving = panel.onSave();
+  panel.onSave();
+  panel.onComplete();
+  panel.onUpdate("result", "저장 중 변경 금지");
+  await panel.onUpload([new File(["image"], "blocked.jpg", { type: "image/jpeg" })]);
+  assert.equal(saves, 1);
+  assert.equal(w.panel().draft.result, original);
+  assert.equal(w.panel().draft.photos.length, 1);
+  assert.equal(w.dialog(), undefined);
+  assert.equal(w.panel().busy, true);
+  pending.reject(new Error("저장 거절"));
+  await saving;
+  assert.equal(w.panel().busy, false);
+  w.panel().onUpdate("result", "실패 후 다시 작성");
+  assert.equal(w.panel().draft.result, "실패 후 다시 작성");
+  w.unmount();
+});
+
+test("조치 완료의 공유 잠금은 검토 저장·사진 추가·입력 변경을 차단하고 성공 후 읽기 전용을 유지한다", async () => {
+  const pending = deferred();
+  let saves = 0;
+  const w = reviewWorkspace({
+    savePublicIssueReview: async () => { saves++; throw new Error("호출되면 안 됨"); },
+    completePublicIssueAction: () => pending.promise,
+  });
+  await w.panel().onUpload([new File(["image"], "complete.jpg", { type: "image/jpeg" })]);
+  prepareAction(w);
+  const panel = w.panel();
+  w.dialog().onConfirm();
+  await panel.onSave();
+  await panel.onUpload([new File(["image"], "blocked.jpg", { type: "image/jpeg" })]);
+  panel.onUpdate("result", "완료 중 변경 금지");
+  assert.equal(saves, 0);
+  assert.equal(w.panel().draft.result, "정비 완료");
+  assert.equal(w.panel().draft.photos.length, 1);
+  pending.resolve(completed);
+  await tick();
+  assert.equal(w.panel().readOnly, true);
+  assert.equal(w.panel().busy, false);
+  await w.panel().onSave();
+  assert.equal(saves, 0);
+  w.unmount();
+});
+
+test("초안은 서버 갱신 중 편집값과 선택 사진을 보존하고 삭제·언마운트에서 URL을 한 번씩 해제한다", async () => {
+  const created = [], revoked = [];
+  const w = reviewWorkspace({}, detail, { URL: {
+    createObjectURL() { const url = `blob:qa-${created.length}`; created.push(url); return url; },
+    revokeObjectURL(url) { revoked.push(url); },
+  } });
+  w.panel().onUpdate("target", "작성 중인 대상");
+  w.panel().onUpdate("requirements", "작성 중인 검토 내용");
+  w.panel().onUpdate("result", "작성 중인 조치 결과");
+  await w.panel().onUpload([new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.jpg", { type: "image/jpeg" })]);
+  const photos = w.panel().draft.photos;
+  const removed = photos.find(photo => photo.file?.name === "a.jpg");
+  w.panel().onUpdate("photos", photos.filter(photo => photo.id !== removed.id));
+  assert.deepEqual(revoked, [removed.src]);
+  w.data.issue = { ...w.data.issue, target: "서버 대상", requirements: "서버 검토", action: { ...w.data.issue.action, photos: [{ id: "remote-1", name: "서버 사진", src: "https://example.com/remote.jpg" }] } };
+  let draft = w.panel().draft;
+  draft = w.panel().draft;
+  assert.equal(draft.target, "작성 중인 대상");
+  assert.equal(draft.requirements, "작성 중인 검토 내용");
+  assert.equal(draft.result, "작성 중인 조치 결과");
+  assert.ok(draft.photos.some(photo => photo.file?.name === "b.jpg"));
+  assert.ok(draft.photos.some(photo => photo.id === "remote-1"));
+  w.unmount();
+  assert.deepEqual([...revoked].sort(), [...created].sort());
+  assert.equal(new Set(revoked).size, revoked.length);
+});
+
+function listWorkspace(search = "") {
+  const hook = hooks();
+  const navigations = [];
+  let params = new URLSearchParams(search);
+  const navigate = (to, options) => navigations.push({ to, options });
+  const data = {
+    records: [{ id: "8" }, { id: "9" }],
+    totalPages: 3,
+    loading: false,
+    listError: undefined,
+    refreshes: 0,
+    error: "이전 오류",
+    refresh() { data.refreshes++; },
+    setError(value) { data.error = value; },
+  };
+  const { useInfrastructureList } = harness({
+    react: hook.react,
+    "react-router-dom": {
+      useSearchParams: () => [params],
+      useNavigate: () => navigate,
+    },
+  }).load("src/pages/Infrastructure/useInfrastructureList.ts");
+  return {
+    data, navigations,
+    render: () => hook.render(() => useInfrastructureList(data)),
+    setParams(value) { params = new URLSearchParams(value); },
+  };
+}
+
+test("공공인프라 목록 검색은 초안과 적용 조건을 구분하고 같은 첫 페이지 검색을 재조회한다", () => {
+  const w = listWorkspace("district=원미구&status=검토 중&q=배수&dialog=view&selected=9&dataset=old&keep=1");
+  let list = w.render();
+  list.search();
+  assert.equal(w.data.refreshes, 1);
+  let query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("keep"), "1");
+  for (const key of ["page", "selected", "dialog", "dataset"]) assert.equal(query.has(key), false);
+  list.setFilters(values => ({ ...values, query: "  새 검색  ", status: "조치 완료" }));
+  list = w.render();
+  assert.equal(list.applied.query, "배수");
+  list.search();
+  assert.equal(w.data.refreshes, 1);
+  query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("q"), "새 검색");
+  assert.equal(query.get("status"), "조치 완료");
+});
+
+test("공공인프라 선택·상세·페이지 이동은 필터를 유지하고 기존 히스토리 정책을 따른다", () => {
+  const w = listWorkspace("district=소사구&page=2&selected=9&dialog=view");
+  const list = w.render();
+  assert.equal(list.selected.id, "9");
+  list.select("8");
+  assert.equal(w.navigations.at(-1).options.replace, true);
+  assert.equal(new URLSearchParams(w.navigations.at(-1).to.search).get("selected"), "8");
+  list.openDetail("9");
+  assert.equal(w.navigations.at(-1).to.pathname, "/infrastructure/9/review");
+  list.changePage(3);
+  const query = new URLSearchParams(w.navigations.at(-1).to.search);
+  assert.equal(query.get("district"), "소사구");
+  assert.equal(query.get("page"), "3");
+  assert.equal(query.has("selected"), false);
+  assert.equal(query.has("dialog"), false);
+  assert.equal(w.navigations.at(-1).options.replace, false);
+  w.setParams("selected=missing");
+  assert.equal(w.render().selected.id, "8");
+  w.data.records = [];
+  assert.equal(w.render().selected, undefined);
+});
+
+test("공공인프라 페이지 보정은 조회 성공 후에만 실행하고 검색·선택 파라미터를 보존한다", () => {
+  const w = listWorkspace("page=5&selected=9&q=배수");
+  w.data.loading = true;
+  w.render();
+  assert.equal(w.navigations.length, 0);
+  w.data.loading = false;
+  w.data.listError = "조회 실패";
+  w.render();
+  assert.equal(w.navigations.length, 0);
+  w.data.listError = undefined;
+  w.render();
+  const { to, options } = w.navigations.at(-1);
+  const query = new URLSearchParams(to.search);
+  assert.equal(query.get("page"), "3");
+  assert.equal(query.get("q"), "배수");
+  assert.equal(query.get("selected"), "9");
+  assert.equal(options.replace, true);
+});
+
+test("공공인프라 초기화는 초안·오류·URL을 초기화하고 목록을 재조회한다", () => {
+  const w = listWorkspace("district=원미구&q=배수&page=2");
+  w.render().reset();
+  const list = w.render();
+  assert.deepEqual(plain(list.filters), {
+    district: "지역 전체", status: "검토 상태 전체", kind: "문제 유형 전체", query: "",
+  });
+  assert.equal(w.data.error, "");
+  assert.equal(w.data.refreshes, 1);
+  assert.equal(w.navigations.at(-1).to.search, "");
+});
+
+test("공공인프라 URL 필터는 제거된 상태와 알 수 없는 지역·유형을 기본값으로 처리한다", () => {
+  const w = listWorkspace("district=invalid&status=ACTION_IN_PROGRESS&kind=invalid&page=-4&q=검색");
+  const list = w.render();
+  assert.equal(list.page, 1);
+  assert.deepEqual(plain(list.applied), {
+    district: "지역 전체", status: "검토 상태 전체", kind: "문제 유형 전체", query: "검색",
+  });
+  list.search();
+  const query = new URLSearchParams(w.navigations.at(-1).to.search);
+  for (const key of ["district", "status", "kind"]) assert.equal(query.has(key), false);
 });

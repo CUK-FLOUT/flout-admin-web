@@ -47,8 +47,6 @@ export type ResultsState = {
 export const resultsDialogKinds = [
   "actions",
   "region",
-  "address",
-  "address-results",
   "published",
   "republished",
   "draft-saved",

@@ -1,6 +1,11 @@
 import axios from "axios";
 import { authClient } from "./authTransport";
-import { getSession, parseSession, setSession } from "../auth/session";
+import {
+  getSession,
+  getSessionGeneration,
+  parseSession,
+  setSession,
+} from "../auth/session";
 import type { AdminSession } from "../auth/session";
 import { requestGoogleIdToken } from "../auth/google";
 
@@ -123,6 +128,11 @@ let refreshFlight: {
 export function refreshSession(): Promise<AdminSession> {
   const previous = getSession();
 
+  if (logoutFlight?.generation === getSessionGeneration())
+    return Promise.reject(
+      new AuthenticationError("로그아웃 처리 중입니다.", 409),
+    );
+
   if (!previous || Date.parse(previous.refreshExpiresAt) <= Date.now()) {
     setSession(null);
 
@@ -131,6 +141,7 @@ export function refreshSession(): Promise<AdminSession> {
     );
   }
 
+  // 같은 세션의 동시 요청은 한 번의 재발급을 공유해 Refresh Token 중복 사용을 막는다.
   if (refreshFlight?.session === previous) return refreshFlight.promise;
   const promise = requestAuthentication("/api/auth/refresh", {
     refreshToken: previous.refreshToken,
@@ -147,6 +158,7 @@ export function refreshSession(): Promise<AdminSession> {
       return next;
     })
     .catch((error: unknown) => {
+      // 일시적인 통신·권한·서버 오류로 세션을 지우지 않아 재시도할 수 있게 한다.
       const invalidSession =
         !(error instanceof AuthenticationError) ||
         error.status === 401 ||
@@ -160,6 +172,46 @@ export function refreshSession(): Promise<AdminSession> {
     });
 
   refreshFlight = { session: previous, promise };
+
+  return promise;
+}
+
+let logoutFlight: { generation: number; promise: Promise<void> } | null = null;
+
+export function logoutAdmin(): Promise<void> {
+  const previous = getSession();
+  const generation = getSessionGeneration();
+
+  if (!previous) return Promise.resolve();
+  if (logoutFlight?.generation === generation) return logoutFlight.promise;
+  const pendingRefresh =
+    refreshFlight?.session === previous ? refreshFlight.promise : undefined;
+  const promise = Promise.resolve()
+    .then(async () => {
+      // 재발급 중이었다면 폐기된 이전 토큰 대신 새 Refresh Token으로 로그아웃한다.
+      if (pendingRefresh) await pendingRefresh;
+      if (getSessionGeneration() !== generation) return;
+      const current = getSession();
+
+      if (!current) return;
+      const response = await authClient.post<void>("/api/auth/logout", {
+        refreshToken: current.refreshToken,
+      });
+
+      if (response.status !== 204)
+        throw new AuthenticationError(
+          "로그아웃 응답을 확인하지 못했습니다. 다시 시도해 주세요.",
+        );
+      if (getSessionGeneration() === generation) setSession(null);
+    })
+    .catch((error: unknown) => {
+      throw authenticationError(error);
+    })
+    .finally(() => {
+      if (logoutFlight?.promise === promise) logoutFlight = null;
+    });
+
+  logoutFlight = { generation, promise };
 
   return promise;
 }

@@ -91,6 +91,7 @@ export function useConstructionData({
           record: {
             ...constructionDetailRecord(data),
             consent: "동의 정보 조회 중",
+            address: "주소 조회 중",
           },
         });
         void getSupportDetail(data.supportApplicationId, controller.signal)
@@ -98,6 +99,16 @@ export function useConstructionData({
             if (controller.signal.aborted) return;
             if (support.supportApplicationId !== data.supportApplicationId)
               throw new Error("지원 신청의 동의 정보가 일치하지 않습니다.");
+            const address =
+              [support.address, support.detailAddress]
+                .filter((part) => typeof part === "string" && part.trim())
+                .join(" ") || "미입력";
+
+            setDetail((current) =>
+              current.key === detailKey && current.record
+                ? { ...current, record: { ...current.record, address } }
+                : current,
+            );
             const consent = constructionConsentLabel(
               support.landlordConsentRequired,
               support.landlordConsentDocumentSubmitted,
@@ -122,6 +133,10 @@ export function useConstructionData({
                     record: {
                       ...current.record,
                       consent: "동의 정보 조회 실패",
+                      address:
+                        current.record.address === "주소 조회 중"
+                          ? "주소 조회 실패"
+                          : current.record.address,
                     },
                     consentError:
                       "임대인 동의 정보를 조회하지 못했습니다. " +

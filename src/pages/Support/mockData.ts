@@ -36,7 +36,7 @@ function application(
     review: {
       checks: complete ? [true, true, true] : [true, true, false],
       consentRequired: required ? "필요" : "불필요",
-      consentState: required ? (complete ? "확인 완료" : "확인 중") : "불필요",
+      consentSubmission: required ? "제출 완료" : "불필요",
       scope: complete ? "출입구 물막이판 설치" : "",
       memo: "",
       notify: false,
@@ -74,14 +74,13 @@ export function createSupportFixtures(): SupportApplication[] {
   owner.preferred = "2026.10.21 · 상관없음";
   owner.review = {
     checks: [false, false, false],
-    consentRequired: "검토 필요",
-    consentState: "미확인",
+    consentRequired: "불필요",
+    consentSubmission: "불필요",
     scope: "",
     memo: "",
     notify: true,
   };
   first.push(owner);
-  // 관할 전체 통계(42/16/8/21)를 재현하는 Mock 신청. 첫 5행은 Figma와 동일합니다.
   for (let i = 0; i < 36; i++) {
     const status: SupportStatus =
       i < 13 ? "검토 중" : i < 32 ? "승인" : "미승인";

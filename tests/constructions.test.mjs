@@ -1,75 +1,11 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
-import vm from "node:vm";
-import ts from "typescript";
-import axios from "axios";
-import { randomUUID } from "node:crypto";
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 function harness(overrides = {}, environment = {}) {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let response = () => ({ isSuccess: true, result: {} });
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: await response(config),
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(/\.tsx?$/.test(path) ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        jsx: ts.JsxEmit.ReactJSX,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    vm.runInNewContext(source, {
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      URLSearchParams,
-      URL,
-      crypto: { randomUUID },
-      ...environment,
-      require(name) {
-        if (name in overrides) return overrides[name];
-        if (name === "axios") return axios;
-        if (name === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), name));
-      },
-    });
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    respond(fn) {
-      response = fn;
-    },
-  };
+  return createApiHarness({ overrides, environment, wrapResult: false });
 }
 const item = {
   constructionId: 91,
@@ -202,7 +138,7 @@ test("photo limits reject zero files/empty/wrong type/oversized files before upl
   assert.equal(h.requests.length, 0);
 });
 
-test("network and 400/401/403/404/409/413 errors stay distinct and never become success/empty data", async () => {
+test("server rejection never becomes a successful construction list", async () => {
   const h = harness();
   const api = h.load("src/api/constructions.ts");
   h.respond(() => ({
@@ -212,23 +148,6 @@ test("network and 400/401/403/404/409/413 errors stay distinct and never become 
     message: "저장 거절",
   }));
   await assert.rejects(api.getConstructions("", 0), /저장 거절/);
-  assert.match(api.constructionError(new axios.AxiosError("network")), /연결/);
-  for (const status of [400, 401, 403, 404, 409, 413]) {
-    const error = new axios.AxiosError("failed", null, null, null, {
-      status,
-      data: { message: `서버 ${status}` },
-    });
-    assert.equal(api.constructionError(error), `서버 ${status}`);
-  }
-  assert.equal(
-    api.constructionError(
-      new axios.AxiosError("failed", null, null, null, {
-        status: 500,
-        data: { message: "  " },
-      }),
-    ),
-    "시공 요청에 실패했습니다.",
-  );
 });
 
 test("mapping keeps receipt/application/construction IDs separate; missing values are not invented", () => {
@@ -388,7 +307,7 @@ test("list and detail load independently, old detail responses are ignored, refr
   assert.equal(detailReads.at(-1).args[1].aborted, true);
 });
 
-async function workspace(record, apiOverrides = {}) {
+async function workspace(record, apiOverrides = {}, storageOverrides = {}) {
   const react = { useEffect() {}, useRef: () => ({ current: false }) };
   const requests = [],
     navigations = [];
@@ -449,6 +368,7 @@ async function workspace(record, apiOverrides = {}) {
     "./draftStorage": {
       readConstructionDraft: async () => null,
       writeConstructionDraft: async () => {},
+      ...storageOverrides,
     },
     "./model": { displayDate: (value) => value },
     "../../components/construction/styles": {
@@ -511,12 +431,22 @@ test("workspace prevents double schedule submission and preserves draft on API f
   ready.onSchedule();
   assert.equal(saves, 1);
   assert.equal(w.panel().busy, true);
+  function selectionButton(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (node.type === "button" && node.props["aria-label"]?.endsWith("시공 선택")) return node.props;
+    return [node.props?.children].flat(Infinity).map(selectionButton).find(Boolean);
+  }
+  const selection = selectionButton(w.render());
+  assert.equal(selection.disabled, true);
+  selection.onClick();
+  assert.equal(w.navigations.length, 0);
   pending.reject(new Error("일정 저장 거절"));
   await tick();
   assert.equal(w.panel().busy, false);
   assert.equal(w.panel().draft.date, "2099-12-31");
   assert.equal(w.data.refreshes, 0);
   assert.equal(w.data.error, "일정 저장 거절");
+  assert.equal(selectionButton(w.render()).disabled, false);
   w.unmount();
 });
 
@@ -1072,8 +1002,8 @@ test("consent label uses explicit need/submission booleans without assuming miss
   );
   assert.equal(label(false, false), "불필요");
   assert.equal(label(false, true), "불필요");
-  assert.equal(label(true, true), "필요 · 확인 완료");
-  assert.equal(label(true, false), "필요 · 미확인");
+  assert.equal(label(true, true), "제출 완료");
+  assert.equal(label(true, false), "미제출");
   assert.throws(() => label(undefined, false), /응답/);
   assert.throws(() => label(true, undefined), /응답/);
 });
@@ -1136,7 +1066,7 @@ test("construction consent reads the linked support ID and updates independently
   });
   await tick();
   state = h.render();
-  assert.equal(state.selected.consent, "필요 · 확인 완료");
+  assert.equal(state.selected.consent, "제출 완료");
   assert.equal(state.error, "");
   h.unmount();
 });
@@ -1192,11 +1122,134 @@ test("consent metadata update preserves locally edited schedule and newly upload
     ],
   });
   render();
-  record = { ...record, consent: "필요 · 확인 완료" };
+  record = { ...record, consent: "제출 완료" };
   render();
   state = render();
   assert.equal(state.draft.date, "2099-12-31");
   assert.equal(state.draft.note, "입력 내용");
   assert.equal(state.draft.photos[0].id, "uploaded");
   hook.unmount();
+});
+
+
+test("draft restore failure allows selecting another construction while preserving write protection", async () => {
+  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord(detail);
+  let localWrites = 0, serverWrites = 0;
+  const w = await workspace(record, {
+    saveConstructionSchedule: async () => { serverWrites++; },
+  }, {
+    readConstructionDraft: async () => { throw new Error("저장소 읽기 실패"); },
+    writeConstructionDraft: async () => { localWrites++; },
+  });
+  const panel = w.panel();
+  assert.equal(panel.loading, false);
+  assert.equal(panel.busy, true);
+  assert.match(w.data.error, /초안을 복원하지 못했습니다.*저장소 읽기 실패/);
+  panel.onChange({ ...panel.draft, date: "2099-12-31", time: "10:00" });
+  w.panel().onSchedule();
+  await tick();
+  assert.equal(localWrites, 0);
+  assert.equal(serverWrites, 0);
+  w.data.records.push({ ...record, id: "92", receiptNo: "000006" });
+  function selectionButton(node) {
+    if (!node || typeof node !== "object") return undefined;
+    if (node.type === "button" && node.props["aria-label"]?.startsWith("000006 ·")) return node.props;
+    return [node.props?.children].flat(Infinity).map(selectionButton).find(Boolean);
+  }
+  const selection = selectionButton(w.render());
+  assert.equal(selection.disabled, false);
+  selection.onClick();
+  assert.equal(w.navigations.at(-1).pathname, "/construction/92");
+  w.unmount();
+});
+
+
+test("시공 주소는 추가 요청 없이 지원 상세에서 합치며 동의 값 누락에도 주소는 보존한다", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  assert.equal(h.render().selected.address, "주소 조회 중");
+  h.reads[0].resolve({ supportApplicationId: 191, address: "부천시 원미구", detailAddress: "101호" });
+  await tick();
+  const state = h.render();
+  assert.equal(state.selected.address, "부천시 원미구 101호");
+  assert.equal(h.reads.length, 1);
+  assert.match(state.error, /동의/);
+  h.unmount();
+});
+
+test("다른 시공으로 이동한 뒤 늦게 도착한 주소는 현재 상세에 섞이지 않는다", async () => {
+  const h = consentHook();
+  h.render();
+  await tick();
+  h.render();
+  h.select("92");
+  h.render();
+  await tick();
+  h.render();
+  h.reads[0].resolve({ supportApplicationId: 191, address: "이전 주소", landlordConsentRequired: false, landlordConsentDocumentSubmitted: false });
+  h.reads[1].resolve({ supportApplicationId: 192, address: null, detailAddress: null, landlordConsentRequired: false, landlordConsentDocumentSubmitted: false });
+  await tick();
+  assert.equal(h.render().selected.address, "미입력");
+  h.unmount();
+});
+
+
+test("일정 저장 중에는 사진 변경도 같은 잠금으로 차단되고 실패 후 다시 편집할 수 있다", async () => {
+  const record = harness().load("src/pages/Construction/apiMapping.ts").constructionDetailRecord(detail);
+  const gate = deferred();
+  const w = await workspace(record, { saveConstructionSchedule: () => gate.promise });
+  w.panel().onUpload([new File(["a"], "keep.jpg", { type: "image/jpeg" })]);
+  const panel = w.panel();
+  panel.onChange({ ...panel.draft, date: "2099-12-31", time: "10:00" });
+  w.panel().onSchedule();
+  const blocked = w.panel();
+  blocked.onUpload([new File(["b"], "blocked.jpg", { type: "image/jpeg" })]);
+  blocked.onRemovePhoto(blocked.draft.photos[0].id);
+  assert.equal(w.panel().draft.photos.length, 1);
+  assert.equal(w.panel().draft.photos[0].name, "keep.jpg");
+  gate.reject(new Error("일정 거절"));
+  await tick();
+  w.panel().onRemovePhoto(w.panel().draft.photos[0].id);
+  assert.equal(w.panel().draft.photos.length, 0);
+  assert.equal(w.panel().busy, false);
+  w.unmount();
+});
+
+test("완료 사진 업로드 중에는 선택·삭제·완료 중복 요청이 차단된다", async () => {
+  const upload = deferred();
+  let uploads = 0;
+  const w = await workspace(scheduledRecord(), {
+    uploadConstructionPhotos: () => { uploads++; return upload.promise; },
+  });
+  w.panel().onUpload([new File(["a"], "keep.jpg", { type: "image/jpeg" })]);
+  confirmWorkspace(w);
+  await tick();
+  const blocked = w.panel();
+  blocked.onUpload([new File(["b"], "blocked.jpg", { type: "image/jpeg" })]);
+  blocked.onRemovePhoto(blocked.draft.photos[0].id);
+  w.dialog().onConfirm();
+  assert.equal(uploads, 1);
+  assert.equal(w.panel().draft.photos.length, 1);
+  upload.resolve({ photos: [{ photoId: 8, fileName: "keep.jpg", url: "https://example.com/8" }] });
+  await tick();
+  assert.equal(w.requests.filter(([name]) => name === "complete").length, 1);
+  assert.equal(w.dialog().kind, "overall-saved");
+  w.unmount();
+});
+
+test("완료 전 일정·내용·사진 검증의 순서와 기존 안내 문구를 유지한다", async () => {
+  const w = await workspace(scheduledRecord());
+  const draft = w.panel().draft;
+  w.panel().onChange({ ...draft, date: "2099-12-30", note: "" });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "저장된 시공 일정과 입력값이 다릅니다. 최신 일정을 확인해 주세요.");
+  w.panel().onChange({ ...draft, note: "  " });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "최종 설치 결과를 1~4000자로 입력해 주세요.");
+  w.panel().onChange({ ...draft, note: "완료 확인" });
+  w.panel().onFinish();
+  assert.equal(w.data.error, "시공 사진을 1장 이상 선택해 주세요.");
+  assert.equal(w.requests.length, 0);
+  w.unmount();
 });

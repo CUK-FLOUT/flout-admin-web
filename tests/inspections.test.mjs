@@ -1,69 +1,13 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import axios from "axios";
 
-function harness() {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let respond = () => ({});
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: { isSuccess: true, result: respond(config), message: "성공" },
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(path.endsWith(".ts") ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    const context = vm.createContext({
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      require(specifier) {
-        if (specifier === "axios") return axios;
-        if (specifier === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), specifier));
-      },
-    });
-    vm.runInContext(source, context);
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    setResponse(fn) {
-      respond = fn;
-    },
-  };
-}
+const harness = createApiHarness;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test("nine API methods use inspection ID and exact request fields", async () => {
@@ -203,6 +147,25 @@ test("list/detail distinguish application ID, receipt and inspection ID and null
   );
   assert.equal(detail.status, "완료");
   assert.equal(detail.address, "부천");
+});
+
+test("detail uses persisted assignment independently of resident preferences and list state", () => {
+  const { inspectionRow, inspectionDetail } = harness().load("src/pages/Inspection/apiModel.ts");
+  for (const [status, label] of [["SCHEDULED", "예정"], ["IN_PROGRESS", "진행"], ["COMPLETED", "완료"]]) {
+    const row = inspectionRow({ inspectionId: 91, applicationId: 5, receiptNo: "000005", address: "부천", designated: false, preferredVisitDate: "2026-11-20", preferredTimeSlot: "MORNING", inspectorUserId: 7, inspectorName: "담당자", status });
+    const response = { inspectionId: 91, applicationId: 5, receiptNo: "000005", applicantName: "주민", address: "부천", detailAddress: null, contact: "010", preferredVisitDate: "2026-11-20", preferredTimeSlot: "MORNING", inspectorId: 7, inspectorName: "담당자", visitDate: "2026-11-21", visitTime: "15:30", preVisitNotice: "저장된 방문 안내" };
+    const detail = inspectionDetail(response, row);
+    assert.equal(detail.status, label);
+    assert.equal(detail.assignee, "담당자");
+    assert.equal(detail.requestedDate, "2026-11-20");
+    assert.equal(detail.visitDate, "2026-11-21");
+    assert.equal(detail.visitTime, "15:30");
+    assert.equal(detail.notice, "저장된 방문 안내");
+    const empty = inspectionDetail({ ...response, visitDate: null, visitTime: null, preVisitNotice: null }, detail);
+    assert.equal(empty.visitDate, "");
+    assert.equal(empty.visitTime, "");
+    assert.equal(empty.notice, "");
+  }
 });
 
 test("assignment accepts received or scheduled state, future Korean time and one-time assignment", () => {
@@ -360,52 +323,6 @@ test("requests carry cancellation signal and no mock fallback on HTTP failure", 
   await assert.rejects(api.getInspection(91), /server unavailable/);
 });
 
-test("inspection errors distinguish network failure from HTTP failure without a usable message", () => {
-  const { inspectionError } = harness().load("src/api/inspections.ts");
-  const network = new axios.AxiosError("Network Error", "ERR_NETWORK");
-  assert.equal(
-    inspectionError(network),
-    "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-  );
-  for (const body of [
-    undefined,
-    null,
-    "server error",
-    {},
-    { message: "" },
-    { message: "  " },
-    { message: 123 },
-  ]) {
-    const http = new axios.AxiosError(
-      "Request failed",
-      "ERR_BAD_RESPONSE",
-      undefined,
-      null,
-      { status: 500, data: body },
-    );
-    assert.equal(
-      inspectionError(http),
-      "현장점검 요청에 실패했습니다. 다시 시도해 주세요.",
-    );
-  }
-  const forbidden = new axios.AxiosError(
-    "Forbidden",
-    "ERR_BAD_REQUEST",
-    undefined,
-    null,
-    {
-      status: 403,
-      data: { message: "본인 관할 지역의 점검만 조회할 수 있습니다." },
-    },
-  );
-  assert.equal(
-    inspectionError(forbidden),
-    "본인 관할 지역의 점검만 조회할 수 있습니다.",
-  );
-  assert.equal(inspectionError(new Error("입력 오류")), "입력 오류");
-  assert.equal(inspectionError(null), "요청을 처리하지 못했습니다.");
-});
-
 test("결과가 없는 정상 응답은 null이고 조회 실패는 빈 초안으로 대체하지 않는다", async () => {
   const h = harness();
   const api = h.load("src/api/inspections.ts");
@@ -536,7 +453,8 @@ test("지역 문제의 한글 유형과 점검 ID를 실제 요청으로 변환�
 function editorHarness(overrides = {}) {
   const slots = [],
     effects = [],
-    calls = [];
+    calls = [],
+    setters = [];
   let index = 0,
     generation = 1,
     params = new URLSearchParams();
@@ -544,6 +462,7 @@ function editorHarness(overrides = {}) {
     getInspectionResult: async () => savedResult,
     saveInspectionDraft: async () => ({ resultStatus: "DRAFT" }),
     publishInspectionResult: async () => ({ inspectionStatus: "COMPLETED" }),
+    validateRecommendedFacilities: async () => ({ hasFacilities: true, facilities: ["물막이판"] }),
     uploadInspectionPhotos: async () => ({
       photos: [
         { photoId: 18, fileName: "추가.png", url: "https://example.com/18" },
@@ -562,6 +481,7 @@ function editorHarness(overrides = {}) {
       return fn(...args);
     };
   }
+  const childModules = new Map();
   const module = { exports: {} };
   const source = ts.transpileModule(
     readFileSync(
@@ -582,7 +502,15 @@ function editorHarness(overrides = {}) {
     structuredClone,
     URLSearchParams,
     Error,
-    require(name) {
+    require: function require(name) {
+      if (["./useInspectionResultPublish", "./useInspectionResultDraft", "./useInspectionResultPhotos", "./useInspectionRegionRegistration"].includes(name)) {
+        if (childModules.has(name)) return childModules.get(name).exports;
+        const child = { exports: {} };
+        childModules.set(name, child);
+        const code = ts.transpileModule(readFileSync(`src/pages/InspectionResults/${name.slice(2)}.ts`, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText;
+        vm.runInNewContext(code, { module: child, exports: child.exports, require, AbortController, structuredClone, Error });
+        return child.exports;
+      }
       if (name === "react")
         return {
           useState(initial) {
@@ -591,7 +519,7 @@ function editorHarness(overrides = {}) {
               slots[i] = typeof initial === "function" ? initial() : initial;
             return [
               slots[i],
-              (v) => {
+              setters[i] ??= (v) => {
                 slots[i] = typeof v === "function" ? v(slots[i]) : v;
               },
             ];
@@ -638,6 +566,7 @@ function editorHarness(overrides = {}) {
     remount: () => {
       for (const value of slots) value?.cleanup?.();
       slots.length = 0;
+      setters.length = 0;
       effects.length = 0;
     },
     changeSession: () => {
@@ -768,6 +697,7 @@ test("화면 이탈 후 공개 응답은 완료 모달을 열지 않는다", asy
   h.render();
   await settle();
   const pending = h.render().persist(true);
+  await settle();
   h.unmount();
   resolve({ inspectionStatus: "COMPLETED" });
   await pending;
@@ -840,4 +770,426 @@ test("같은 유형의 두 취약지점 편집이 다른 항목을 덮어쓰지 
   assert.equal(request.vulnerabilities.length, 2);
   assert.equal(request.vulnerabilities[0].title, savedResult.vulnerabilities[0].title);
   assert.equal(request.vulnerabilities[1].title, "두번째 수정");
+});
+
+test("known inspection row avoids a failing list search when opening detail", async () => {
+  const h = harness();
+  h.setResponse((config) => {
+    if (!config.url.endsWith("/91")) throw new Error("list search unavailable");
+    return {
+      inspectionId: 91, applicationId: 5, receiptNo: "000005",
+      applicantName: "주민", address: "부천시", inspectorId: null,
+    };
+  });
+  const { loadInspection } = h.load("src/pages/Inspection/loadInspection.ts");
+  const result = await loadInspection(91, undefined, {
+    inspectionId: 91, applicationId: 5, receiptNo: "000005",
+    status: "IN_PROGRESS", inspectorName: null,
+  });
+  assert.equal(result.status, "진행");
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests[0].url, "/api/admin/inspections/91");
+});
+
+
+test("result navigation round-trip preserves applied filters, page and selected inspection", () => {
+  const { inspectionResultPath, inspectionManagementPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const original = new URLSearchParams({
+    stage: "진행", district: "원미구", assignee: "23", visit: "2026-11-13",
+    q: "부천 & 101호", page: "2", selected: "91", dialog: "assignment-saved", target: "예정",
+  });
+  const result = new URL(inspectionResultPath(91, original), "https://example.com");
+  assert.equal(result.pathname, "/inspection/91/results");
+  result.searchParams.set("dialog", "actions");
+  result.searchParams.set("addressQuery", "다른 주소");
+  result.searchParams.set("mode", "edit");
+  const back = new URL(inspectionManagementPath("91", result.searchParams), result.origin);
+  assert.equal(back.pathname, "/inspection/91");
+  for (const key of ["stage", "district", "assignee", "visit", "q", "page"])
+    assert.equal(back.searchParams.get(key), original.get(key));
+  for (const key of ["dialog", "target", "selected", "addressQuery", "mode"])
+    assert.equal(back.searchParams.has(key), false);
+  assert.equal(original.get("dialog"), "assignment-saved");
+});
+
+test("direct result entry returns to its inspection without relying on browser history", () => {
+  const { inspectionManagementPath, inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  assert.equal(inspectionManagementPath("91", new URLSearchParams()), "/inspection/91");
+  assert.equal(inspectionResultPath(91, new URLSearchParams()), "/inspection/91/results");
+});
+
+test("invalid inspection IDs and editor-only parameters safely fall back to the inspection list", () => {
+  const { inspectionManagementPath, inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const params = new URLSearchParams({ page: "2", returnTo: "https://evil.example", dialog: "published" });
+  for (const id of [undefined, "https://evil.example", "//evil.example", "-1", "0", "NaN", "9007199254740992"])
+    assert.equal(inspectionManagementPath(id, params), "/inspection?page=2");
+  assert.equal(inspectionResultPath(undefined, params), "/inspection?page=2");
+});
+
+test("navigation blocks mutations but stays available during result loading and after failure", async () => {
+  let reject;
+  const h = editorHarness({ saveInspectionDraft: () => new Promise((_, no) => { reject = no; }) });
+  assert.equal(h.render().saving, false);
+  await settle();
+  const pending = h.render().persist(false);
+  assert.equal(h.render().saving, true);
+  reject(new Error("저장 실패"));
+  await pending;
+  assert.equal(h.render().saving, false);
+  assert.equal(h.render().error, "저장 실패");
+});
+
+test("시설 사전 검증은 기존 예방조치 원문만 전달하고 잘못된 입력·응답을 거부한다", async () => {
+  const h = harness();
+  const api = h.load("src/api/inspections.ts");
+  const descriptions = ["출입구에 물막이판 설치를 권장합니다.", "배수구 주변을 정리해 주세요."];
+  h.setResponse(() => ({ hasFacilities: true, facilities: ["출입구 물막이판"] }));
+  assert.equal((await api.validateRecommendedFacilities(descriptions)).hasFacilities, true);
+  assert.equal(h.requests[0].url, "/api/admin/inspections/recommended-facilities/validate");
+  assert.equal(h.requests[0].method, "post");
+  assert.deepEqual(JSON.parse(h.requests[0].data), { descriptions });
+  for (const values of [[], [" "], ["x".repeat(4001)], Array(21).fill("내용")])
+    await assert.rejects(api.validateRecommendedFacilities(values));
+  assert.equal(h.requests.length, 1);
+  h.setResponse(() => ({ hasFacilities: false, facilities: [] }));
+  assert.equal((await api.validateRecommendedFacilities(descriptions)).hasFacilities, false);
+  h.setResponse(() => ({ hasFacilities: true, facilities: [] }));
+  await assert.rejects(api.validateRecommendedFacilities(descriptions), /검증 응답/);
+});
+
+test("시설이 없으면 공개를 멈추고 명시적으로 그대로 공개를 선택한 경우만 공개한다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: false, facilities: [] }) });
+  h.render();
+  await settle();
+  const descriptions = [...h.render().draft.actions];
+  await h.render().persist(true);
+  assert.equal(h.render().facilityWarning, true);
+  assert.equal(h.render().readOnly, false);
+  assert.deepEqual(plain(h.calls.find(c => c.name === "validateRecommendedFacilities").args), [descriptions]);
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+  await h.render().confirmFacilityPublish();
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.render().readOnly, true);
+  assert.equal(h.calls.filter(c => c.name === "publishInspectionResult").length, 1);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 1);
+});
+
+test("시설명 수정 후 공개할 때 재검증하며 경고 취소만으로 공개하지 않는다", async () => {
+  let found = false;
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: found, facilities: found ? ["물막이판"] : [] }) });
+  h.render();
+  await settle();
+  await h.render().persist(true);
+  h.render().editFacilityActions();
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.params().get("dialog"), "actions");
+  h.render().update("actions", ["출입구에 물막이판 설치"]);
+  found = true;
+  await h.render().persist(true);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 2);
+  assert.equal(h.calls.filter(c => c.name === "publishInspectionResult").length, 1);
+});
+
+test("검증 실패는 미추출 경고로 바꾸지 않으며 임시 저장은 검증하지 않는다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => { throw new Error("검증 서버 연결 실패"); } });
+  h.render();
+  await settle();
+  await h.render().persist(false);
+  assert.equal(h.calls.some(c => c.name === "validateRecommendedFacilities"), false);
+  await h.render().persist(true);
+  assert.equal(h.render().facilityWarning, false);
+  assert.match(h.render().error, /검증 서버 연결 실패/);
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+});
+
+test("검증 중 중복 요청과 화면 이탈 후 공개를 차단한다", async () => {
+  let resolve;
+  const h = editorHarness({ validateRecommendedFacilities: () => new Promise(r => { resolve = r; }) });
+  h.render();
+  await settle();
+  const pending = h.render().persist(true);
+  await h.render().persist(true);
+  assert.equal(h.calls.filter(c => c.name === "validateRecommendedFacilities").length, 1);
+  h.unmount();
+  resolve({ hasFacilities: true, facilities: ["물막이판"] });
+  await pending;
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+});
+
+test("경고 이후 입력이 바뀌면 이전 검증 결과로 공개하지 않는다", async () => {
+  const h = editorHarness({ validateRecommendedFacilities: async () => ({ hasFacilities: false, facilities: [] }) });
+  h.render();
+  await settle();
+  await h.render().persist(true);
+  h.render().update("actions", ["변경된 예방조치"]);
+  await h.render().confirmFacilityPublish();
+  assert.equal(h.calls.some(c => c.name === "publishInspectionResult"), false);
+  assert.match(h.render().error, /다시 검증/);
+});
+
+test("시설 검증 중에는 같은 렌더의 임시 저장·사진 변경·공공 문제 등록도 요청하지 않는다", async () => {
+  let resolve;
+  const h = editorHarness({ validateRecommendedFacilities: () => new Promise(yes => { resolve = yes; }) });
+  h.render();
+  await settle();
+  const editor = h.render();
+  const pending = editor.persist(true);
+  await editor.persist(false);
+  await editor.upload({ target: { files: [{ name: "photo.png" }], value: "photo.png" } });
+  await editor.removePhoto("17");
+  assert.equal(await editor.registerRegion({ location: "부천시", kind: "반복 침수", description: "침수", findings: "확인" }), false);
+  for (const name of ["saveInspectionDraft", "uploadInspectionPhotos", "deleteInspectionPhoto", "createPublicIssue"])
+    assert.equal(h.calls.some(call => call.name === name), false);
+  resolve({ hasFacilities: true, facilities: ["물막이판"] });
+  await pending;
+  assert.equal(h.calls.filter(call => call.name === "publishInspectionResult").length, 1);
+});
+
+test("공개 실패 후 편집 초안을 재진입해 복원하고 재검증 후 다시 공개할 수 있다", async () => {
+  let attempts = 0;
+  const h = editorHarness({ publishInspectionResult: async () => { if (++attempts === 1) throw new Error("공개 실패"); return {}; } });
+  h.render();
+  await settle();
+  h.render().update("actions", ["물막이판 설치 권장"]);
+  await h.render().persist(true);
+  assert.equal(h.render().readOnly, false);
+  assert.equal(h.render().saving, false);
+  assert.equal(h.render().facilityWarning, false);
+  assert.equal(h.render().error, "공개 실패");
+  assert.equal(h.params().get("dialog"), null);
+  h.remount();
+  h.render();
+  await settle();
+  assert.deepEqual(plain(h.render().draft.actions), ["물막이판 설치 권장"]);
+  await h.render().persist(true);
+  assert.equal(attempts, 2);
+  assert.equal(h.calls.filter(call => call.name === "validateRecommendedFacilities").length, 2);
+  assert.equal(h.render().readOnly, true);
+  assert.equal(h.params().get("dialog"), "published");
+});
+
+test("시설 검증 중 인증 세션이 변경되면 이전 검증의 공개·경고·오류 후처리를 건너뛴다", async () => {
+  for (const failure of [false, true]) {
+    let resolve, reject;
+    const h = editorHarness({ validateRecommendedFacilities: () => new Promise((yes, no) => { resolve = yes; reject = no; }) });
+    h.render();
+    await settle();
+    const pending = h.render().persist(true);
+    h.changeSession();
+    if (failure) reject(new Error("이전 세션 검증 실패"));
+    else resolve({ hasFacilities: false, facilities: [] });
+    await pending;
+    assert.equal(h.calls.some(call => call.name === "publishInspectionResult"), false);
+    const editor = h.render();
+    assert.equal(editor.facilityWarning, false);
+    assert.equal(editor.error, "");
+    assert.equal(h.params().get("dialog"), null);
+    h.unmount();
+  }
+});
+
+
+function managementHarness(api = {}) {
+  const slots = [], effects = [], navigations = [], errors = [], selections = [];
+  let index = 0, generation = 1, refreshes = 0;
+  const react = {
+    useState(initial) {
+      const i = index++;
+      if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
+      return [slots[i], (value) => { slots[i] = typeof value === "function" ? value(slots[i]) : value; }];
+    },
+    useRef(initial) { return slots[index++] ??= { current: initial }; },
+    useEffect(effect, deps) {
+      const i = index++, previous = slots[i];
+      if (!previous || deps.some((value, j) => value !== previous.deps[j])) effects.push(() => {
+        previous?.cleanup?.();
+        slots[i] = { deps, cleanup: effect() };
+      });
+    },
+    useEffectEvent(callback) {
+      const i = index++, slot = slots[i] ??= {};
+      slot.callback = callback;
+      return slot.event ??= (...args) => slot.callback(...args);
+    },
+  };
+  const polling = { data: undefined, loading: false };
+  const knownRows = [];
+  const h = harness({ overrides: {
+    react,
+    "../../auth/session": { getSessionGeneration: () => generation },
+    "../../api/inspections": { inspectionError: (e) => e.message, ...api },
+    "../../hooks/usePagePolling": { usePagePolling: () => polling },
+    "./loadInspection": { loadInspection: async (id, signal, known) => {
+      knownRows.push(known);
+      return api.loadInspection ? api.loadInspection(id, signal, known) : { inspectionId: id };
+    } },
+  } });
+  const options = {
+    params: new URLSearchParams("q=abc&page=2"), navigate: (...args) => navigations.push(args),
+    setParams: () => {}, savingRef: { current: false }, setBusy: () => {},
+    setStorageError: (message) => errors.push(message), setSelected: (value) => selections.push(value),
+    refresh: () => refreshes++, searchQuery: "{}", selectedId: "91", revision: 0, busy: false,
+  };
+  return {
+    options, polling, knownRows, navigations, errors, selections,
+    refreshes: () => refreshes,
+    changeSession: () => generation++,
+    render(name) {
+      index = 0;
+      const module = h.load(`src/pages/Inspection/${name}.ts`);
+      const result = module[name](options);
+      for (const effect of effects.splice(0)) effect();
+      return result;
+    },
+    unmount() { for (const slot of slots) slot?.cleanup?.(); },
+    remount() { this.unmount(); slots.length = 0; effects.length = 0; },
+  };
+}
+
+test("배정 저장은 중복 요청을 막고 서버 확정 값과 목록 갱신을 반영한다", async () => {
+  let resolveAssignment, requests = 0;
+  const h = managementHarness({ assignInspection: () => {
+    requests++;
+    return new Promise((resolve) => { resolveAssignment = resolve; });
+  } });
+  const action = h.render("useInspectionAssignment");
+  const application = { inspectionId: 91, visitDate: "2099-01-01", visitTime: "10:00", notice: "안내" };
+  const pending = action.save(application, "assignment-saved");
+  assert.equal(await action.save(application, "assignment-saved"), false);
+  resolveAssignment({ inspectorName: "김운영", inspectorId: 7, visitDate: "2099-01-01", visitTime: "10:00", preVisitNotice: "서버 안내" });
+  assert.equal(await pending, true);
+  assert.equal(requests, 1);
+  assert.equal(h.selections[0].notice, "서버 안내");
+  assert.equal(h.selections[0].status, "예정");
+  assert.equal(h.refreshes(), 1);
+  assert.equal(h.options.savingRef.current, false);
+  assert.equal(h.navigations[0][0], "/inspection/91?dialog=assignment-saved&target=%EC%98%88%EC%A0%95");
+});
+
+test("화면 이탈 뒤 배정 성공은 복귀 시 한 번 안내하고 다른 인증 세션에는 전달하지 않는다", async () => {
+  for (const changedSession of [false, true]) {
+    let resolveAssignment;
+    const h = managementHarness({ assignInspection: () => new Promise((resolve) => { resolveAssignment = resolve; }) });
+    const pending = h.render("useInspectionAssignment").save({ inspectionId: 91 }, "assignment-saved");
+    h.unmount();
+    if (changedSession) h.changeSession();
+    resolveAssignment({});
+    assert.equal(await pending, false);
+    assert.equal(h.selections.length, 0);
+    h.remount();
+    h.render("useInspectionAssignment");
+    assert.equal(h.navigations.length, changedSession ? 0 : 1);
+    h.remount();
+    h.render("useInspectionAssignment");
+    assert.equal(h.navigations.length, changedSession ? 0 : 1);
+  }
+});
+
+test("배정 실패는 선택 데이터를 바꾸지 않고 오류와 재시도 가능 상태를 유지한다", async () => {
+  const h = managementHarness({ assignInspection: async () => { throw new Error("저장 실패"); } });
+  assert.equal(await h.render("useInspectionAssignment").save({ inspectionId: 91 }, "assignment-saved"), false);
+  assert.equal(h.errors.at(-1), "저장 실패");
+  assert.equal(h.selections.length, 0);
+  assert.equal(h.refreshes(), 0);
+  assert.equal(h.options.savingRef.current, false);
+});
+
+test("목록 갱신은 상세를 다시 조회하지 않고 선택 변경 시 최신 보유 행을 전달한다", async () => {
+  const calls = [];
+  const h = managementHarness({ getInspections: async (query) => {
+    calls.push(query.page);
+    return { inspections: [{ inspectorUserId: 7, inspectorName: "김운영" }], totalPages: 2 };
+  } });
+  const row = { inspectionId: 91 };
+  h.polling.data = { inspections: [row] };
+  h.render("useInspectionData");
+  await settle();
+  assert.equal(h.render("useInspectionData").selected.inspectionId, 91);
+  assert.equal(h.knownRows[0], row);
+  h.polling.data = { inspections: [{ inspectionId: 92 }] };
+  h.render("useInspectionData");
+  assert.equal(h.knownRows.length, 1);
+  h.options.selectedId = "92";
+  h.render("useInspectionData");
+  await settle();
+  const result = h.render("useInspectionData");
+  assert.equal(h.knownRows[1].inspectionId, 92);
+  assert.equal(result.selected.inspectionId, 92);
+  assert.deepEqual(calls, [0, 1]);
+  assert.deepEqual(plain(result.inspectors), [{ id: 7, name: "김운영" }]);
+});
+
+test("늦은 상세 응답은 변경된 선택을 덮어쓰지 않는다", async () => {
+  const pending = new Map();
+  const h = managementHarness({
+    getInspections: async () => ({ inspections: [], totalPages: 0 }),
+    loadInspection: (id) => new Promise((resolve) => pending.set(id, resolve)),
+  });
+  h.render("useInspectionData");
+  h.options.selectedId = "92";
+  h.render("useInspectionData");
+  pending.get(92)({ inspectionId: 92 });
+  await settle();
+  pending.get(91)({ inspectionId: 91 });
+  await settle();
+  assert.equal(h.render("useInspectionData").selected.inspectionId, 92);
+});
+
+
+test("지원관리 결과 연결은 점검 ID를 사용하며 검색·선택 위치로 안전하게 복귀한다", () => {
+  const { supportInspectionResultPath, inspectionResultReturn } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  const back = "/support/201?page=3&district=%EC%9B%90%EB%AF%B8%EA%B5%AC&q=abc";
+  const path = new URL(supportInspectionResultPath(91, back), "https://example.com");
+  assert.equal(path.pathname, "/inspection/91/results");
+  assert.equal(path.searchParams.get("view"), "readonly");
+  assert.equal(path.searchParams.get("supportReturnTo"), back);
+  const result = inspectionResultReturn("91", path.searchParams);
+  assert.equal(result.to, back);
+  assert.equal(result.label, "지원 관리로 돌아가기");
+  for (const id of [undefined, null, 0, -1, NaN, 9007199254740992])
+    assert.equal(supportInspectionResultPath(id, back), null);
+  for (const to of ["https://evil.example", "//evil.example", "/support/../login", "/support/201#fragment"])
+    assert.equal(supportInspectionResultPath(91, to), null);
+  const invalid = inspectionResultReturn("91", new URLSearchParams({ supportReturnTo: "https://evil.example", page: "2" }));
+  assert.equal(invalid.to, "/inspection/91?page=2");
+});
+
+test("조회 전용 결과는 서버 내용을 표시하고 편집 초안과 모든 저장 요청을 보호한다", async () => {
+  const h = editorHarness();
+  h.render();
+  await settle();
+  h.render().update("summary", "저장하지 않은 편집 초안");
+  h.remount();
+  h.params().set("view", "readonly");
+  assert.equal(h.render().readOnly, true);
+  await settle();
+  const view = h.render();
+  assert.equal(view.content.summary, savedResult.summary);
+  view.update("summary", "조회 화면 변경 시도");
+  await view.persist(false);
+  await view.persist(true);
+  await view.removePhoto("17");
+  assert.equal(h.calls.filter(({ name }) => ["saveInspectionDraft", "publishInspectionResult", "deleteInspectionPhoto", "validateRecommendedFacilities"].includes(name)).length, 0);
+  h.remount();
+  h.params().delete("view");
+  h.render();
+  await settle();
+  assert.equal(h.render().content.summary, "저장하지 않은 편집 초안");
+});
+
+
+test("조회 전용 결과 링크는 빈 검색 조건과 기존 필터를 보존하며 원본 파라미터를 변경하지 않는다", () => {
+  const { inspectionResultPath } = harness().load("src/pages/Inspection/resultNavigation.ts");
+  assert.equal(inspectionResultPath(91, new URLSearchParams(), true), "/inspection/91/results?view=readonly");
+  const params = new URLSearchParams("page=2&q=주소&dialog=assignment-saved&view=readonly");
+  const original = params.toString();
+  const readonly = new URL(inspectionResultPath(91, params, true), "https://example.com");
+  assert.equal(readonly.searchParams.get("page"), "2");
+  assert.equal(readonly.searchParams.get("q"), "주소");
+  assert.equal(readonly.searchParams.get("view"), "readonly");
+  assert.equal(readonly.searchParams.has("dialog"), false);
+  const editable = new URL(inspectionResultPath(91, params), readonly.origin);
+  assert.equal(editable.searchParams.has("view"), false);
+  assert.equal(inspectionResultPath(undefined, params, true), "/inspection?q=%EC%A3%BC%EC%86%8C&page=2");
+  assert.equal(params.toString(), original);
 });

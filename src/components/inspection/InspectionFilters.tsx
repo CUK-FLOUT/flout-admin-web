@@ -1,3 +1,5 @@
+import { searchInputText } from "../common/searchStyles";
+import FormFilterSelect from "../common/FormFilterSelect";
 import type { FormEventHandler } from "react";
 
 const control =
@@ -8,7 +10,7 @@ type Props = {
   params: URLSearchParams;
   inspectors: { id: number; name: string }[];
   onSearch: FormEventHandler<HTMLFormElement>;
-  onReset: () => void;
+  onReset: () => boolean;
 };
 
 export default function InspectionFilters({
@@ -25,39 +27,41 @@ export default function InspectionFilters({
       className="flex h-[46px] shrink-0 items-center gap-[10px] max-[1400px]:h-auto max-[1400px]:flex-wrap max-[1400px]:[&>*]:grow"
       aria-label="현장점검 검색 조건"
     >
-      <select
+      <FormFilterSelect
         name="district"
-        aria-label="지역"
+        label="지역"
         defaultValue={params.get("district") || ""}
-        className={`${control} w-[176px]`}
-      >
-        <option value="">지역 전체</option>
-        {["원미구", "소사구", "오정구"].map((value) => (
-          <option key={value}>{value}</option>
-        ))}
-      </select>
-      <select
-        key={`${filterKey}:${inspectors.map(({ id, name }) => `${id}:${name}`).join("|")}`}
+        className="w-[176px]"
+        options={[
+          { value: "", label: "지역 전체" },
+          ...["원미구", "소사구", "오정구"].map((value) => ({
+            value,
+            label: value,
+          })),
+        ]}
+      />
+      <FormFilterSelect
         name="assignee"
-        aria-label="담당자 필터"
+        label="담당자 필터"
         defaultValue={params.get("assignee") || ""}
-        className={`${control} w-[166px]`}
-      >
-        <option value="">전체 담당자</option>
-        {params.get("assignee") &&
-          !inspectors.some(
-            ({ id }) => String(id) === params.get("assignee"),
-          ) && (
-            <option value={params.get("assignee")!}>
-              담당자 ID: {params.get("assignee")}
-            </option>
-          )}
-        {inspectors.map(({ id, name }) => (
-          <option key={id} value={id}>
-            {name}
-          </option>
-        ))}
-      </select>
+        className="w-[166px]"
+        options={[
+          { value: "", label: "전체 담당자" },
+          ...(params.get("assignee") &&
+          !inspectors.some(({ id }) => String(id) === params.get("assignee"))
+            ? [
+                {
+                  value: params.get("assignee")!,
+                  label: `담당자 ID: ${params.get("assignee")}`,
+                },
+              ]
+            : []),
+          ...inspectors.map(({ id, name }) => ({
+            value: String(id),
+            label: name,
+          })),
+        ]}
+      />
       <input
         type="date"
         name="visit"
@@ -80,7 +84,7 @@ export default function InspectionFilters({
           aria-label="주소·접수번호 검색"
           defaultValue={params.get("q") || ""}
           placeholder="주소·접수번호 검색"
-          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#202b36]"
+          className={`min-w-0 flex-1 bg-transparent outline-none ${searchInputText}`}
         />
       </label>
       <button
@@ -91,7 +95,9 @@ export default function InspectionFilters({
       </button>
       <button
         type="button"
-        onClick={onReset}
+        onClick={(event) => {
+          if (onReset()) event.currentTarget.form?.reset();
+        }}
         className={`${control} w-[118px] text-sm font-bold`}
       >
         초기화

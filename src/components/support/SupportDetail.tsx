@@ -35,12 +35,14 @@ export function DetailRow({
 type Props = {
   application?: SupportApplication;
   onReview: () => void;
+  onInspection?: () => void;
   onDialog: (kind: SupportDialogKind, document?: string) => void;
   className: string;
 };
 export default function SupportDetail({
   application: a,
   onReview,
+  onInspection,
   onDialog,
   className,
 }: Props) {
@@ -106,9 +108,7 @@ export default function SupportDetail({
           </div>
           <dl className="shrink-0 text-[13px]">
             <DetailRow label="임대인 동의">
-              {consentLabel(a) === "필요 · 확인 중"
-                ? "필요 · 제출 자료 확인 중"
-                : consentLabel(a)}
+              {consentLabel(a)}
             </DetailRow>
           </dl>
           <div className="grid shrink-0 grid-cols-2 gap-2">
@@ -119,7 +119,8 @@ export default function SupportDetail({
             </button>
             <button
               type="button"
-              onClick={() => onDialog("inspection")}
+              onClick={onInspection}
+              disabled={!onInspection}
               className={supportSecondary}
             >
               점검 결과 보기

@@ -20,6 +20,12 @@ export function useApplicationMap({
   onSelect,
 }: ApplicationMapOptions) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const centeredSelection = useRef<{
+    runtime: MapRuntime;
+    id: string;
+    latitude: number;
+    longitude: number;
+  } | undefined>(undefined);
   const lastIntentionalCenter = useRef<LatLng | null>(null);
   const [runtime, setRuntime] = useState<MapRuntime>();
   const [error, setError] = useState("");
@@ -97,7 +103,20 @@ export function useApplicationMap({
   }, [attempt]);
 
   useEffect(() => {
+    if (!selectedId) {
+      centeredSelection.current = undefined;
+
+      return;
+    }
+
     if (!runtime || latitude === undefined || longitude === undefined) return;
+    if (
+      centeredSelection.current?.runtime === runtime &&
+      centeredSelection.current.id === selectedId &&
+      centeredSelection.current.latitude === latitude &&
+      centeredSelection.current.longitude === longitude
+    ) return;
+    centeredSelection.current = { runtime, id: selectedId, latitude, longitude };
     lastIntentionalCenter.current = new runtime.maps.LatLng(
       latitude,
       longitude,

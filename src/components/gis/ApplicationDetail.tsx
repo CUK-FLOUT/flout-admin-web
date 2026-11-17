@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useRef, useState } from "react";
 import type { Application } from "../../pages/GIS/types";
 
 import back from "../../assets/gis/imgIconBack.svg";
-import basic from "../../assets/gis/imgIconBasicInfo.svg";
-import resident from "../../assets/gis/imgIconResident.svg";
-import attachment from "../../assets/gis/imgIconAttachment.svg";
 import memoIcon from "../../assets/gis/imgIconMemo.svg";
 import type { GisRecord } from "../../pages/GIS/useGisApi";
-import { gisError } from "../../api/gisApplications";
-import { getSessionGeneration } from "../../auth/session";
+import { useGisMemo } from "../../pages/GIS/useGisMemo";
+
+import ApplicationInfoTab from "./detail/ApplicationInfoTab";
+import ApplicationHistoryTab from "./detail/ApplicationHistoryTab";
+import ApplicationSupportTab from "./detail/ApplicationSupportTab";
+import ApplicationConstructionTab from "./detail/ApplicationConstructionTab";
 
 type Props = {
   application: Application;
@@ -20,30 +20,6 @@ type Props = {
 
 const tabs = ["신청 정보", "처리 이력", "지원 정보", "시공 정보"] as const;
 
-function SectionTitle({
-  icon,
-  children,
-}: {
-  icon: string;
-  children: ReactNode;
-}) {
-  return (
-    <h3 className="mb-[9px] flex items-center gap-2 text-[15px] font-bold leading-5">
-      <img src={icon} alt="" width={16} height={16} />
-      {children}
-    </h3>
-  );
-}
-
-function InfoRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3 text-[13px] leading-[19px]">
-      <dt>{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-    </div>
-  );
-}
-
 export default function ApplicationDetail({
   application: a,
   onClose,
@@ -51,15 +27,12 @@ export default function ApplicationDetail({
   record,
 }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("신청 정보");
-  const [memoSource, setMemoSource] = useState(record.internalMemo);
-  const [memo, setMemo] = useState(record.internalMemo ?? "");
-
-  if (memoSource !== record.internalMemo) {
-    setMemoSource(record.internalMemo);
-    setMemo(record.internalMemo ?? "");
-  }
-
-  const memoReady = record.internalMemo !== undefined && !record.errors.internalMemo;
+  const { memo, setMemo, memoReady, saving, saveError, saveMessage, saveMemo } = useGisMemo({
+    applicationId: a.id,
+    sourceMemo: record.internalMemo,
+    loadError: record.errors.internalMemo,
+    onSave: onAccept,
+  });
   const [photo, setPhoto] = useState<{
     src: string;
     title: string;
@@ -67,54 +40,6 @@ export default function ApplicationDetail({
 
   const dialog = useRef<HTMLDialogElement>(null);
 
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
-  const inFlight = useRef(false);
-  const active = useRef(true);
-  const generation = getSessionGeneration();
-
-  useEffect(() => {
-    active.current = true;
-
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  async function saveMemo() {
-    if (inFlight.current || !memoReady) return;
-    inFlight.current = true;
-    setSaving(true);
-    setSaveError("");
-    setSaveMessage("");
-    try {
-      const saved = await onAccept(a.id, memo);
-
-      if (active.current && generation === getSessionGeneration()) {
-        setMemo(saved);
-        setSaveMessage("내부 메모를 저장했습니다.");
-      }
-    } catch (error) {
-      if (active.current && generation === getSessionGeneration())
-        setSaveError(gisError(error));
-    } finally {
-      inFlight.current = false;
-      if (active.current) setSaving(false);
-    }
-  }
-
-  const support = record.support;
-  const construction = record.construction;
-  const statuses: Record<string, string> = {
-    SUBMITTED: "검토 중",
-    APPROVED: "승인",
-    REJECTED: "미승인",
-    PENDING: "일정 미등록",
-    SCHEDULED: "예정",
-    IN_PROGRESS: "진행",
-    COMPLETED: "완료",
-  };
-  const display = (value: string | null | undefined) => value || "미입력";
   const tabError =
     tab === "신청 정보"
       ? record.errors.attachments
@@ -184,204 +109,22 @@ export default function ApplicationDetail({
           </p>
         )}
         {tab === "신청 정보" && (
-          <>
-            <section className="pb-2">
-              <SectionTitle icon={basic}>기본 정보</SectionTitle>
-
-              <dl className="space-y-[5px]">
-                <InfoRow label="신청자 / 연락처">
-                  {a.resident} / {a.phone}
-                </InfoRow>
-
-                <InfoRow label="주택 / 거주 형태">
-                  {a.address} · {a.houseType} / {a.tenure}
-                </InfoRow>
-
-                <InfoRow label="AI 취약도 / 이력">
-                  {a.risk} / {a.floodHistory}
-                </InfoRow>
-              </dl>
-            </section>
-
-            <section className="border-t border-[#f4f5f6] pt-[9px] pb-[6px]">
-              <SectionTitle icon={resident}>주민 입력정보</SectionTitle>
-
-              <dl className="space-y-[5px]">
-                <InfoRow label="유입 위치 / 시설">
-                  {a.inflow} / {a.facilities}
-                </InfoRow>
-
-                <InfoRow label="방문 희망일">{a.visitDate}</InfoRow>
-
-                <InfoRow label="점검 요청 사유">{a.reason}</InfoRow>
-
-                <InfoRow label="방문 가능시간">
-                  <div className="grid grid-cols-3 gap-[6px]">
-                    {["오전 9~12시", "오후 13~18시", "상관없음"].map((t) => (
-                      <span
-                        key={t}
-                        className={`flex h-7 min-w-0 items-center justify-center rounded-md border bg-[#f4f5f6] px-2 py-1 text-[11px] ${
-                          t === a.visitTime
-                            ? "border-[#234f73] font-bold"
-                            : "border-[#c8d0d7] text-[#43515e]"
-                        }`}
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </InfoRow>
-              </dl>
-            </section>
-
-            <section className="border-t border-[#f4f5f6] pt-[7px] pb-0 [&>h3]:mb-1">
-              <SectionTitle icon={attachment}>첨부 자료</SectionTitle>
-
-              <div className="flex flex-wrap items-start gap-2">
-                {(record.attachments ?? []).map((item) => (
-                  <button
-                    key={item.attachmentId}
-                    onClick={() =>
-                      openPhoto(item.imageUrl, item.originalFilename)
-                    }
-                    className="w-32 cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-[#234f73]"
-                  >
-                    <img
-                      src={item.imageUrl}
-                      alt={item.originalFilename}
-                      className="h-[68px] w-32 rounded-[7px] border border-[#c8d0d7] object-cover"
-                    />
-                    <span className="mt-0 block text-xs">
-                      {item.originalFilename}
-                    </span>
-                  </button>
-                ))}
-                {!record.errors.attachments && (
-                  <span className="ml-1 pt-[3px] text-xs">
-                    {record.attachments
-                      ? `첨부사진 ${record.attachments.length}개`
-                      : "첨부사진을 불러오는 중입니다."}
-                  </span>
-                )}
-              </div>
-            </section>
-          </>
+          <ApplicationInfoTab
+            application={a}
+            attachments={record.attachments}
+            error={record.errors.attachments}
+            onOpenPhoto={openPhoto}
+          />
         )}
-
         {tab === "처리 이력" && (
-          <ol className="space-y-4 text-sm leading-6">
-            {(record.histories?.histories ?? []).map((item) => (
-              <li
-                key={item.eventId}
-                className="border-l-2 border-[#234f73] pl-3"
-              >
-                <p>
-                  {item.title} · {item.statusLabel}
-                </p>
-                {item.description && <p>{item.description}</p>}
-                <p>
-                  {item.occurredAt
-                    ? new Date(item.occurredAt).toLocaleString("ko-KR", {
-                        timeZone: "Asia/Seoul",
-                      })
-                    : "시각 미기록"}{" "}
-                  · {item.actorName || "처리자 미기록"}
-                </p>
-              </li>
-            ))}
-            {!record.errors.histories &&
-              (record.histories ? (
-                !record.histories.histories.length && (
-                  <li>등록된 처리 이력이 없습니다.</li>
-                )
-              ) : (
-                <li>처리 이력을 불러오는 중입니다.</li>
-              ))}
-          </ol>
+          <ApplicationHistoryTab histories={record.histories} error={record.errors.histories} />
         )}
-
-        {tab === "지원 정보" &&
-          !record.errors.support &&
-          (support === undefined ? (
-            <p>지원 정보를 불러오는 중입니다.</p>
-          ) : support === null ? (
-            <p className="py-4 text-sm leading-6 text-[#43515e]">
-              등록된 지원 정보가 없습니다.
-            </p>
-          ) : (
-            <dl className="space-y-[5px]">
-              <InfoRow label="지원사업">{display(support.programName)}</InfoRow>
-              <InfoRow label="지원 상태">
-                {statuses[support.status] ?? support.status}
-              </InfoRow>
-              <InfoRow label="신청 시설">
-                {display(support.requestedFacility)}
-              </InfoRow>
-              <InfoRow label="지원 범위">
-                {display(support.supportScope)}
-              </InfoRow>
-              <InfoRow label="임대인 동의">
-                {support.landlordConsentRequired ? "필요" : "불필요"}
-              </InfoRow>
-              <InfoRow label="동의서 제출">
-                {support.landlordConsentDocumentSubmitted ? "제출" : "미제출"}
-              </InfoRow>
-              <InfoRow label="시공 상태">
-                {support.constructionStatus
-                  ? statuses[support.constructionStatus]
-                  : "미연계"}
-              </InfoRow>
-              {support.rejectionReason && (
-                <InfoRow label="미승인 사유">{support.rejectionReason}</InfoRow>
-              )}
-            </dl>
-          ))}
-        {tab === "시공 정보" &&
-          !record.errors.construction &&
-          (construction === undefined ? (
-            <p>시공 정보를 불러오는 중입니다.</p>
-          ) : construction === null ? (
-            <p className="py-4 text-sm leading-6 text-[#43515e]">
-              등록된 시공 정보가 없습니다.
-            </p>
-          ) : (
-            <dl className="space-y-[5px]">
-              <InfoRow label="시공 상태">
-                {statuses[construction.status] ?? construction.status}
-              </InfoRow>
-              <InfoRow label="신청 시설">
-                {display(construction.requestedFacility)}
-              </InfoRow>
-              <InfoRow label="지원 범위">
-                {display(construction.supportScope)}
-              </InfoRow>
-              <InfoRow label="주민 희망일">
-                {display(construction.preferredConstructionDate)}
-              </InfoRow>
-              <InfoRow label="희망 시간대">
-                {construction.preferredTimeSlot
-                  ? { MORNING: "오전", AFTERNOON: "오후", ANY: "상관없음" }[
-                      construction.preferredTimeSlot
-                    ]
-                  : "미입력"}
-              </InfoRow>
-              <InfoRow label="확정 시공일">
-                {display(construction.constructionDate)}
-              </InfoRow>
-              <InfoRow label="확정 시간">
-                {display(construction.constructionTime)}
-              </InfoRow>
-              <InfoRow label="담당자">
-                {display(construction.managerName)}
-              </InfoRow>
-              <InfoRow label="완료 시각">
-                {display(construction.completedAt)}
-              </InfoRow>
-              <InfoRow label="최종 설치 결과">
-                {display(construction.finalInstallationResult)}
-              </InfoRow>
-            </dl>
-          ))}
+        {tab === "지원 정보" && !record.errors.support && (
+          <ApplicationSupportTab support={record.support} />
+        )}
+        {tab === "시공 정보" && !record.errors.construction && (
+          <ApplicationConstructionTab construction={record.construction} />
+        )}
       </div>
 
       <footer className="shrink-0 border-t border-[#f4f5f6] bg-white px-[15px] pt-[14px] pb-5">

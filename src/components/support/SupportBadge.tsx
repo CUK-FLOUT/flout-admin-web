@@ -2,7 +2,6 @@ import type { SupportStatus } from "../../pages/Support/types";
 
 const styles: Record<SupportStatus, string> = {
   접수: "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
-  "동의 확인 필요": "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
   "일정 조율 중": "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
   "검토 중": "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
   승인: "border-[#27654d] bg-[#edf5f0] text-[#27654d]",

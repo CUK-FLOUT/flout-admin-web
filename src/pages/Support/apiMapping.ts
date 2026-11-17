@@ -9,6 +9,7 @@ import type {
   SupportApplication,
   SupportFilters,
   SupportStatus,
+  ReviewDraft,
 } from "./types";
 
 const statuses: Record<SupportListItem["status"], SupportStatus> = {
@@ -25,12 +26,6 @@ const housingLabels: Record<HousingType, string> = {
 
 export const supportDistrictOptions = ["원미구", "소사구", "오정구"] as const;
 export const supportStatusOptions = ["검토 중", "승인", "미승인"] as const;
-export const supportConsentOptions = [
-  "불필요",
-  "필요 · 확인 중",
-  "필요 · 확인 완료",
-] as const;
-
 export function supportSearchFilters(
   filters: SupportFilters,
 ): SupportSearchFilters {
@@ -39,12 +34,6 @@ export function supportSearchFilters(
     승인: "APPROVED",
     미승인: "REJECTED",
   };
-  const consent: Record<string, SupportSearchFilters["landlordConsentStatus"]> =
-    {
-      불필요: "NOT_REQUIRED",
-      "필요 · 확인 중": "PENDING",
-      "필요 · 확인 완료": "VERIFIED",
-    };
 
   return {
     district: supportDistrictOptions.find(
@@ -52,9 +41,6 @@ export function supportSearchFilters(
     ),
     status: Object.hasOwn(status, filters.status)
       ? status[filters.status]
-      : undefined,
-    landlordConsentStatus: Object.hasOwn(consent, filters.consent)
-      ? consent[filters.consent]
       : undefined,
   };
 }
@@ -66,9 +52,29 @@ const vulnerabilityLabels: Record<string, string> = {
   OTHER_STRUCTURE: "기타 구조",
 };
 
-export function mapSupport(item: SupportListItem): SupportApplication {
-  const required = item.landlordConsentStatus !== "NOT_REQUIRED";
+function mapSupportConsent(
+  item: Pick<
+    SupportListItem,
+    "landlordConsentRequired" | "landlordConsentDocumentSubmitted"
+  >,
+): Pick<ReviewDraft, "consentRequired" | "consentSubmission"> {
+  if (item.landlordConsentRequired === false)
+    return { consentRequired: "불필요", consentSubmission: "불필요" };
+  if (item.landlordConsentRequired !== true)
+    return { consentRequired: "검토 필요", consentSubmission: "미확인" };
 
+  return {
+    consentRequired: "필요",
+    consentSubmission:
+      item.landlordConsentDocumentSubmitted === true
+        ? "제출 완료"
+        : item.landlordConsentDocumentSubmitted === false
+          ? "미제출"
+          : "미확인",
+  };
+}
+
+export function mapSupport(item: SupportListItem): SupportApplication {
   return {
     id: item.receiptNo,
     apiId: item.supportApplicationId,
@@ -91,12 +97,7 @@ export function mapSupport(item: SupportListItem): SupportApplication {
     status: statuses[item.status],
     review: {
       checks: [false, false, false],
-      consentRequired: required ? "필요" : "불필요",
-      consentState: !required
-        ? "불필요"
-        : item.landlordConsentStatus === "VERIFIED"
-          ? "확인 완료"
-          : "확인 중",
+      ...mapSupportConsent(item),
       scope: "",
       memo: "",
       notify: false,
@@ -157,20 +158,20 @@ export function mapSupportDetail(
     vulnerabilities: (review?.vulnerabilityTypes ?? []).map(
       (type) => vulnerabilityLabels[type] ?? type,
     ),
+    inspectionId: detail.inspectionId,
     inspectionPublished: detail.inspectionResultPublished,
     programName: review?.program?.name,
     programTarget: review?.program?.targetDescription,
     review: {
       ...a.review,
-      consentRequired: review
-        ? review.landlordConsentRequired
-          ? "필요"
-          : "불필요"
-        : a.review.consentRequired,
-      consentState:
-        review?.landlordConsentRequired && a.review.consentState === "불필요"
-          ? "미확인"
-          : a.review.consentState,
+      ...mapSupportConsent({
+        ...detail,
+        landlordConsentRequired:
+          review?.landlordConsentRequired ?? detail.landlordConsentRequired,
+        landlordConsentDocumentSubmitted:
+          review?.landlordConsentDocumentSubmitted ??
+          detail.landlordConsentDocumentSubmitted,
+      }),
       scope: review?.supportScope || "",
     },
   };

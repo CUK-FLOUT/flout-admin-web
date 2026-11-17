@@ -3,8 +3,6 @@ import type { ReviewStatus } from "../../pages/Infrastructure/types";
 const colors: Record<ReviewStatus, string> = {
   "검토 대기": "border-[#a53632] bg-[#faefed] text-[#a53632]",
   "검토 중": "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
-  "점검 필요": "border-[#865a16] bg-[#faf4e8] text-[#865a16]",
-  "조치 진행": "border-[#234f73] bg-[#eaf4fb] text-[#234f73]",
   "조치 완료": "border-[#27654d] bg-[#edf5f0] text-[#27654d]",
 };
 

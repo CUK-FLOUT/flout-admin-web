@@ -1,6 +1,9 @@
+import { useSupportNavigation } from "./useSupportNavigation";
+import { searchInputText } from "../../components/common/searchStyles";
+import Pagination from "../../components/common/Pagination";
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import SupportSelect from "../../components/support/SupportSelect";
 import SupportDetail from "../../components/support/SupportDetail";
 import SupportBadge from "../../components/support/SupportBadge";
@@ -17,7 +20,6 @@ import {
   supportSearchFilters,
   supportDistrictOptions,
   supportStatusOptions,
-  supportConsentOptions,
 } from "./apiMapping";
 import { useSupportList, useSupportRecord } from "./useSupportApi";
 
@@ -32,8 +34,6 @@ const initialFilters = (p: URLSearchParams): SupportFilters => ({
   district:
     supportDistrictOptions.find((value) => value === p.get("district")) || "",
   status: supportStatusOptions.find((value) => value === p.get("status")) || "",
-  consent:
-    supportConsentOptions.find((value) => value === p.get("consent")) || "",
   q: p.get("q") || "",
 });
 const panel =
@@ -51,7 +51,6 @@ export default function SupportManagement() {
 
 function SupportManagementScreen() {
   const { requestId } = useParams();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [filters, setFilters] = useState(() => initialFilters(params));
   const [revision, setRevision] = useState(0);
@@ -63,16 +62,32 @@ function SupportManagementScreen() {
     supportSearchFilters(initialFilters(params)),
   );
   const visible = response.page?.supportApplications.map(mapSupport) ?? [];
-  const pageCount = Math.max(1, response.page?.totalPages ?? 1);
   const selectedId = requestId || params.get("selected");
+  const selectionKey = JSON.stringify([initialFilters(params), page]);
+  const [automaticSelection, setAutomaticSelection] = useState<{
+    key: string;
+    id?: number;
+  }>({ key: "" });
+  const automaticId =
+    automaticSelection.key === selectionKey
+      ? (automaticSelection.id ?? visible[0]?.apiId)
+      : visible[0]?.apiId;
+
+  if (
+    automaticSelection.key !== selectionKey ||
+    automaticSelection.id !== automaticId
+  )
+    setAutomaticSelection({ key: selectionKey, id: automaticId });
+
   const selectedApiId =
     selectedId === "none"
       ? undefined
       : selectedId
         ? Number(selectedId)
-        : visible[0]?.apiId;
+        : automaticId;
   const record = useSupportRecord(selectedApiId, true);
   const selected = record.application;
+  const { navigate, returnQuery, change, showDialog, inspectionPath, review } = useSupportNavigation(params, selected);
   const error = response.error || record.error || record.reviewError;
   const total = response.page?.totalElements ?? 0;
   const stats = [
@@ -87,8 +102,8 @@ function SupportManagementScreen() {
       icon: reviewIcon,
     },
     {
-      label: "동의 확인 필요",
-      count: response.counts?.consentRequiredCount,
+      label: "미승인",
+      count: response.counts?.rejectedCount,
       icon: clockIcon,
     },
     { label: "승인", count: response.counts?.approvedCount, icon: userIcon },
@@ -96,26 +111,11 @@ function SupportManagementScreen() {
   const kind = params.get("dialog") as SupportDialogKind | null;
   const dialog =
     selected &&
-    ["inspection", "document", "approved-view", "rejected-view"].includes(
+    ["document", "approved-view", "rejected-view"].includes(
       kind || "",
     )
       ? kind
       : null;
-  const returnQuery = () => {
-    const p = new URLSearchParams(params);
-
-    p.delete("dialog");
-    p.delete("document");
-
-    return p;
-  };
-
-  function change(next: URLSearchParams, id?: string, replace = false) {
-    navigate(
-      { pathname: "/support" + (id ? "/" + id : ""), search: next.toString() },
-      { replace },
-    );
-  }
 
   function searchSubmit(e: FormEvent) {
     e.preventDefault();
@@ -133,46 +133,11 @@ function SupportManagementScreen() {
 
   function reset() {
     setRevision((value) => value + 1);
-    setFilters({ district: "", status: "", consent: "", q: "" });
+    setFilters({ district: "", status: "", q: "" });
     const p = new URLSearchParams();
 
     change(p);
   }
-
-  function showDialog(value: SupportDialogKind, document?: string) {
-    if (!selected) return;
-    const p = returnQuery();
-
-    p.set("dialog", value);
-    if (document) p.set("document", document);
-    change(p, String(selected.apiId));
-  }
-
-  function review() {
-    if (!selected) return;
-    if (selected.status === "승인" || selected.status === "미승인") {
-      showDialog(
-        selected.status === "승인" ? "approved-view" : "rejected-view",
-      );
-
-      return;
-    }
-
-    const p = returnQuery();
-
-    p.delete("selected");
-    p.set(
-      "returnTo",
-      "/support/" +
-        String(selected.apiId) +
-        (returnQuery().size ? "?" + returnQuery().toString() : ""),
-    );
-    navigate("/support/" + selected.apiId + "/review?" + p.toString());
-  }
-
-  const pageNumbers = [1, 2, 3].map(
-    (i) => Math.min(Math.max(1, page - 1), Math.max(1, pageCount - 2)) + i - 1,
-  );
 
   return (
     <div
@@ -188,7 +153,7 @@ function SupportManagementScreen() {
       <form
         onSubmit={searchSubmit}
         aria-label="지원 신청 검색"
-        className="mt-4 grid h-[46px] grid-cols-[166px_180px_184px_minmax(160px,1fr)_101px_119px] gap-[10px] max-[1101px]:h-auto max-[1101px]:grid-cols-2"
+        className="mt-4 grid h-[46px] grid-cols-[166px_180px_minmax(160px,1fr)_101px_119px] gap-[10px] max-[1101px]:h-auto max-[1101px]:grid-cols-2"
       >
         <SupportSelect
           label="지역"
@@ -209,17 +174,6 @@ function SupportManagementScreen() {
             }))
           }
         />
-        <SupportSelect
-          label="동의 확인"
-          value={filters.consent || "동의 확인 전체"}
-          options={["동의 확인 전체", ...supportConsentOptions]}
-          onChange={(v) =>
-            setFilters((f) => ({
-              ...f,
-              consent: v === "동의 확인 전체" ? "" : v,
-            }))
-          }
-        />
         <label className="flex h-12 min-w-0 items-center gap-[10px] rounded-md border border-[#c8d0d7] bg-white px-[14px]">
           <img src={search} alt="" width={18} height={18} />
           <input
@@ -227,7 +181,7 @@ function SupportManagementScreen() {
             value={filters.q}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
             placeholder="접수번호 · 신청자 검색"
-            className="min-w-0 flex-1 text-sm leading-5 outline-none placeholder:text-[#202b36]"
+            className={`min-w-0 flex-1 outline-none ${searchInputText}`}
           />
         </label>
         <button type="submit" className={supportPrimary + " h-12"}>
@@ -284,7 +238,7 @@ function SupportManagementScreen() {
             </h2>
             <span className="text-xs leading-[18px]">총 {total}건</span>
           </div>
-          {response.loading || response.listError ? (
+          {response.loading || (response.listError && !response.page) ? (
             <p role="status" className="mt-[19px] text-sm">
               {response.loading
                 ? "지원 신청을 불러오는 중입니다."
@@ -330,7 +284,7 @@ function SupportManagementScreen() {
                       role="row"
                       aria-selected={selected?.apiId === a.apiId}
                       className={
-                        "grid min-h-[62px] grid-cols-[minmax(181px,181fr)_minmax(194px,194fr)_minmax(190px,190fr)_95px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
+                        "relative grid min-h-[62px] grid-cols-[minmax(181px,181fr)_minmax(194px,194fr)_minmax(190px,190fr)_95px] items-center border-b border-[#f4f5f6] px-[14px] text-[13px] leading-5 " +
                         (selected?.apiId === a.apiId
                           ? "bg-[#f4f5f6]"
                           : "bg-white")
@@ -341,7 +295,7 @@ function SupportManagementScreen() {
                           type="button"
                           onClick={() => change(returnQuery(), String(a.apiId))}
                           aria-label={a.id + " · " + a.resident + " 신청 선택"}
-                          className="py-5 text-left after:absolute"
+                          className="py-5 text-left after:absolute after:inset-0 after:content-['']"
                         >
                           {a.id + " · " + a.resident}
                         </button>
@@ -350,7 +304,7 @@ function SupportManagementScreen() {
                       <div
                         role="cell"
                         className={
-                          a.review.consentState === "확인 완료"
+                          a.review.consentSubmission === "제출 완료"
                             ? "text-[#27654d]"
                             : ""
                         }
@@ -364,51 +318,26 @@ function SupportManagementScreen() {
                   ))}
                 </div>
               </div>
-              <nav
-                aria-label="지원 신청 페이지"
-                className="flex h-11 shrink-0 items-center justify-center gap-[6px]"
-              >
-                {[page - 1, ...pageNumbers, page + 1].map((number, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    aria-label={
-                      index === 0
-                        ? "이전 페이지"
-                        : index === 4
-                          ? "다음 페이지"
-                          : number + "페이지"
-                    }
-                    aria-current={
-                      index > 0 && index < 4 && number === page
-                        ? "page"
-                        : undefined
-                    }
-                    disabled={number < 1 || number > pageCount}
-                    onClick={() => {
-                      const p = returnQuery();
+              <Pagination
+                label="지원 신청 페이지"
+                page={page}
+                totalPages={response.page?.totalPages ?? 0}
+                disabled={response.loading}
+                onPageChange={(number) => {
+                  const p = returnQuery();
 
-                      p.set("page", String(number));
-                      p.delete("selected");
-                      change(p);
-                    }}
-                    className={
-                      "grid size-7 place-items-center rounded-md border text-[13px] disabled:cursor-default disabled:opacity-40 " +
-                      (index > 0 && index < 4 && number === page
-                        ? "border-[#234f73] bg-[#234f73] font-bold text-white"
-                        : "border-[#c8d0d7] bg-white")
-                    }
-                  >
-                    {index === 0 ? "‹" : index === 4 ? "›" : number}
-                  </button>
-                ))}
-              </nav>
+                  p.set("page", String(number));
+                  p.delete("selected");
+                  change(p);
+                }}
+              />
             </>
           )}
         </section>
         <SupportDetail
           application={selected}
           onReview={review}
+          onInspection={inspectionPath ? () => navigate(inspectionPath) : undefined}
           onDialog={showDialog}
           className={panel}
         />

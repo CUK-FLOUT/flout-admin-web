@@ -6,7 +6,8 @@ import {
   getSessionGeneration,
   subscribeSession,
 } from "../../auth/session";
-import profile from "../../assets/layout/profile.png";
+import ProfileMenu from "./ProfileMenu";
+import WorkClock from "./WorkClock";
 
 export default function Header() {
   const session = useSyncExternalStore(
@@ -54,15 +55,9 @@ export default function Header() {
       ? "확인 불가"
       : "확인 중";
 
-  const date =
-    currentAccount?.profile?.timeStamp ??
-    (currentAccount?.profile || currentAccount?.error
-      ? "확인 불가"
-      : "확인 중");
-
   return (
     <header className="flex min-h-[68px] shrink-0 flex-wrap items-center justify-end gap-3 border-b border-[#c8d0d7] bg-white px-6 py-3 text-[15px] leading-5">
-      <span className="max-sm:hidden">업무일자: {date}</span>
+      <WorkClock />
 
       <span
         aria-hidden="true"
@@ -73,12 +68,9 @@ export default function Header() {
 
       <span aria-hidden="true" className="h-4 w-px bg-[#f4f5f6]" />
 
-      <span className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f5f6]">
-          <img src={profile} alt="" width={24} height={24} />
-        </span>
-        {currentAccount?.profile?.name ?? session?.name ?? "운영자"}
-      </span>
+      <ProfileMenu
+        name={currentAccount?.profile?.name ?? session?.name ?? "운영자"}
+      />
     </header>
   );
 }

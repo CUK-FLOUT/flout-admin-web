@@ -41,27 +41,32 @@ export default function GisApplications() {
       search: query.get("q") || "",
     };
   }, [filterKey]);
+  const requestedSize = Number(params.get("size"));
+  const pageSize = Number.isSafeInteger(requestedSize) && requestedSize >= 1 && requestedSize <= 100
+    ? requestedSize : 5;
+  const handlePageSizeChange = useCallback((size: number) => {
+    if (size === pageSize) return;
+    const next = new URLSearchParams(filterKey);
+
+    next.set("size", String(size));
+    next.delete("page");
+    navigate({ pathname: "/gis", search: next.toString() }, { replace: true });
+  }, [filterKey, navigate, pageSize]);
   const pageNumber = Number(params.get("page") || 0);
   const query = JSON.stringify(
     gisSearch(
       filters,
       Number.isSafeInteger(pageNumber) && pageNumber >= 0 ? pageNumber : 0,
+      pageSize,
     ),
   );
   const data = useGisApi(query, requestId);
-  const filtered = (data.page?.applications ?? []).map((item) =>
-    gisApplication(
-      item,
-      gisMarkerNumber(item.applicationId, data.markers),
-    ),
-  );
-  const markers = (data.markers ?? []).map((marker, index) =>
-    gisMapApplication(
-      marker,
-      index,
-      filtered.find((item) => item.id === String(marker.applicationId)),
-    ),
-  );
+  const filtered = useMemo(() => (data.page?.applications ?? []).map((item) =>
+    gisApplication(item, gisMarkerNumber(item.applicationId, data.markers)),
+  ), [data.page, data.markers]);
+  const markers = useMemo(() => (data.markers ?? []).map((marker, index) =>
+    gisMapApplication(marker, index, filtered.find((item) => item.id === String(marker.applicationId))),
+  ), [data.markers, filtered]);
   const selected = data.record?.detail
     ? gisDetailApplication(
         data.record.detail,
@@ -89,7 +94,7 @@ export default function GisApplications() {
   }
 
   function handleSearch(filters: Filters) {
-    const nextParams = new URLSearchParams();
+    const nextParams = new URLSearchParams({ size: String(pageSize) });
 
     if (filters.district) {
       nextParams.set("district", filters.district);
@@ -120,7 +125,7 @@ export default function GisApplications() {
     navigate(
       {
         pathname: "/gis",
-        search: "",
+        search: `?size=${pageSize}`,
       },
       { replace: true },
     );
@@ -191,6 +196,7 @@ export default function GisApplications() {
         onSelect={handleSelectApplication}
         onToggleMarkers={setShowMarkers}
         page={data.page}
+        onPageSizeChange={handlePageSizeChange}
         onPage={(page) => {
           const next = new URLSearchParams(params);
 
@@ -221,7 +227,7 @@ export default function GisApplications() {
       </div>
 
       <GisFilters
-        filterKey={filterKey}
+        filterKey={JSON.stringify(filters)}
         initialFilters={filters}
         onSearch={handleSearch}
         onReset={handleReset}

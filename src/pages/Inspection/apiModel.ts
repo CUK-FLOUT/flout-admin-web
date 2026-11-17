@@ -3,7 +3,7 @@ import type {
   InspectionItem,
   InspectionSearch,
 } from "../../api/inspections";
-import type { InspectionApplication, InspectionStatus } from "./mockData";
+import type { InspectionApplication, InspectionStatus } from "./types";
 
 export const apiStatuses = {
   대기: "RECEIVED",
@@ -87,6 +87,9 @@ export function inspectionDetail(
     inspectionId: detail.inspectionId,
     applicationId: detail.applicationId,
     inspectorUserId: detail.inspectorId,
+    visitDate: detail.visitDate ?? "",
+    visitTime: detail.visitTime ?? "",
+    notice: detail.preVisitNotice ?? "",
     resident: detail.applicantName,
     address: [detail.address, detail.detailAddress].filter(Boolean).join(" "),
     phone: detail.contact,

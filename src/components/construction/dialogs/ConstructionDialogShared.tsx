@@ -3,7 +3,6 @@ import type {
   ConstructionCandidate,
   ConstructionDialogKind,
   ConstructionRecord,
-  EditableConstructionStatus,
   InstallationDraft,
 } from "../../../pages/Construction/types";
 
@@ -54,7 +53,6 @@ export type ConstructionDialogProps = {
   candidate?: ConstructionCandidate;
   candidates: ConstructionCandidate[];
   draft: InstallationDraft | null;
-  target: EditableConstructionStatus | "";
   checked: boolean;
   error: string;
   busy: boolean;

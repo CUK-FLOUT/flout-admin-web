@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { searchInputText } from "../../components/common/searchStyles";
+import Pagination from "../../components/common/Pagination";
+import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import InfrastructureSelect from "../../components/infrastructure/InfrastructureSelect";
 import InfrastructureMap from "../../components/infrastructure/InfrastructureMap";
 import InfrastructureBadge from "../../components/infrastructure/InfrastructureBadge";
@@ -11,33 +13,18 @@ import {
   infrastructureSecondary,
 } from "../../components/infrastructure/styles";
 import { infrastructureAssets as assets } from "./assets";
-import { emptyFilters } from "./model";
 import { registrationTypes, reviewStatuses } from "./types";
-import type { InfrastructureFilters, InfrastructureIssue } from "./types";
+import type { InfrastructureIssue } from "./types";
 import { useInfrastructureData } from "./useInfrastructureData";
 import { infrastructureApiFilters } from "./apiMapping";
+import { infrastructureFiltersFrom } from "./listQuery";
+import { useInfrastructureList } from "./useInfrastructureList";
 import type { PublicIssueCounts } from "../../api/publicIssues";
-
-function filtersFrom(params: URLSearchParams): InfrastructureFilters {
-  return {
-    district:
-      ["원미구", "소사구", "오정구"].find(
-        (value) => value === params.get("district"),
-      ) || emptyFilters.district,
-    status:
-      reviewStatuses.find((value) => value === params.get("status")) ||
-      emptyFilters.status,
-    kind:
-      registrationTypes.find((value) => value === params.get("kind")) ||
-      emptyFilters.kind,
-    query: params.get("q") || "",
-  };
-}
 
 export default function InfrastructureManagement() {
   const [params] = useSearchParams();
   const data = useInfrastructureData({
-    filters: infrastructureApiFilters(filtersFrom(params)),
+    filters: infrastructureApiFilters(infrastructureFiltersFrom(params)),
     page: Math.max(0, (Math.floor(Number(params.get("page"))) || 1) - 1),
   });
 
@@ -59,80 +46,11 @@ function InfrastructureList({
 }: {
   data: ReturnType<typeof useInfrastructureData>;
 }) {
-  const [params] = useSearchParams(),
-    navigate = useNavigate();
-  const applied = filtersFrom(params);
-  const [filters, setFilters] = useState(applied),
-    [showMarkers, setShowMarkers] = useState(true);
-  const pages = Math.max(1, data.totalPages);
-  const page = Math.max(1, Math.floor(Number(params.get("page"))) || 1);
-  const visible = data.records;
-  const selected =
-    visible.find((issue) => issue.id === params.get("selected")) || visible[0];
-
-  useEffect(() => {
-    if (data.loading || data.listError || page <= pages) return;
-    const next = new URLSearchParams(params);
-
-    next.set("page", String(pages));
-    navigate({ search: next.toString() }, { replace: true });
-  }, [data.loading, data.listError, page, pages, params, navigate]);
-
-  function clean() {
-    const p = new URLSearchParams(params);
-
-    p.delete("dialog");
-
-    return p;
-  }
-
-  function go(p: URLSearchParams, replace = false) {
-    navigate(
-      { pathname: "/infrastructure", search: p.toString() },
-      { replace },
-    );
-  }
-
-  function search() {
-    const p = clean();
-
-    ["district", "status", "kind", "q", "page", "selected", "dataset"].forEach(
-      (k) => p.delete(k),
-    );
-    if (filters.district !== emptyFilters.district)
-      p.set("district", filters.district);
-    if (filters.status !== emptyFilters.status) p.set("status", filters.status);
-    if (filters.kind !== emptyFilters.kind) p.set("kind", filters.kind);
-    if (filters.query.trim()) p.set("q", filters.query.trim());
-    if (
-      page === 1 &&
-      JSON.stringify(infrastructureApiFilters(filters)) ===
-        JSON.stringify(infrastructureApiFilters(applied))
-    )
-      data.refresh();
-    go(p);
-  }
-
-  function reset() {
-    data.setError("");
-    data.refresh();
-    setFilters({ ...emptyFilters });
-    go(new URLSearchParams());
-  }
-
-  function select(id: string) {
-    const p = clean();
-
-    p.set("selected", id);
-    go(p, true);
-  }
-
-  function openDetail(id: string) {
-    navigate({
-      pathname: "/infrastructure/" + id + "/review",
-      search: clean().toString(),
-    });
-  }
+  const [showMarkers, setShowMarkers] = useState(true);
+  const {
+    applied, filters, setFilters, page, visible, selected,
+    search, reset, select, openDetail, changePage,
+  } = useInfrastructureList(data);
 
   return (
     <div
@@ -146,16 +64,6 @@ function InfrastructureList({
         <h1 className="text-[30px] font-bold leading-9">
           지역·공공 인프라 관리
         </h1>
-        <button
-          onClick={() =>
-            data.setError(
-              "지역 문제는 현장점검 결과 등록 화면에서 원본 점검과 연결해 등록해 주세요.",
-            )
-          }
-          className={infrastructureSecondary + " h-10 px-4"}
-        >
-          지역 문제 등록
-        </button>
       </div>
       <form
         onSubmit={(e) => {
@@ -197,7 +105,7 @@ function InfrastructureList({
             onChange={(e) =>
               setFilters((f) => ({ ...f, query: e.target.value }))
             }
-            className="min-w-0 flex-1 text-sm leading-[normal] outline-none placeholder:text-[#202b36]"
+            className={`min-w-0 flex-1 outline-none ${searchInputText}`}
           />
         </label>
         <button
@@ -272,7 +180,7 @@ function InfrastructureList({
               />
             ) : null}
           </div>
-          <div className="flex h-10 shrink-0 items-center justify-between gap-1 px-[7px]">
+          <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-x-3 px-[7px]">
             <label className="flex items-center gap-2 text-[13px] leading-[18px] tracking-[-0.078px]">
               <input
                 type="checkbox"
@@ -294,44 +202,13 @@ function InfrastructureList({
               </span>
               마커와 상태를 표시
             </label>
-            {pages > 1 && (
-              <nav
-                aria-label="지역 문제 목록 페이지"
-                className="flex items-center gap-2 text-xs"
-              >
-                <button
-                  disabled={page === 1}
-                  aria-label="지역 문제 이전 페이지"
-                  onClick={() => {
-                    const p = clean();
-
-                    p.set("page", String(page - 1));
-                    p.delete("selected");
-                    go(p);
-                  }}
-                  className="px-1 disabled:opacity-40"
-                >
-                  ‹
-                </button>
-                <span>
-                  {page} / {pages}
-                </span>
-                <button
-                  disabled={page === pages}
-                  aria-label="지역 문제 다음 페이지"
-                  onClick={() => {
-                    const p = clean();
-
-                    p.set("page", String(page + 1));
-                    p.delete("selected");
-                    go(p);
-                  }}
-                  className="px-1 disabled:opacity-40"
-                >
-                  ›
-                </button>
-              </nav>
-            )}
+            <Pagination
+              label="지역 문제 목록 페이지"
+              page={page}
+              totalPages={data.totalPages}
+              disabled={data.loading}
+              onPageChange={changePage}
+            />
           </div>
         </section>
       </div>
@@ -352,11 +229,6 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
       count: counts?.pendingOrUnderReviewCount,
     },
     {
-      label: "조치 진행",
-      icon: assets.metricProgress,
-      count: counts?.actionInProgressCount,
-    },
-    {
       label: "조치 완료",
       icon: assets.metricCompleted,
       count: counts?.completedCount,
@@ -364,7 +236,7 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
   ];
 
   return (
-    <div className="mt-4 grid h-[90px] shrink-0 grid-cols-4 gap-4 max-[700px]:h-auto max-[700px]:grid-cols-2">
+    <div className="mt-4 grid h-[90px] shrink-0 grid-cols-3 gap-4 max-[700px]:h-auto max-[700px]:grid-cols-1">
       {metrics.map(({ label, icon, count }) => (
         <div
           key={label}
@@ -384,12 +256,12 @@ function InfrastructureMetrics({ counts }: { counts?: PublicIssueCounts }) {
             height={24}
             className="absolute top-[31.25px] left-[23.25px]"
           />
-          <p className="absolute top-[17.25px] left-[67.25px] text-xs leading-[18px]">
-            {label}
-          </p>
-          <p className="absolute top-[40.25px] left-[67.25px] text-2xl font-bold leading-9">
-            {count === undefined ? "—" : count + "건"}
-          </p>
+          <div className="absolute top-[17.25px] left-[67.25px] flex flex-col">
+            <p className="text-xs leading-[18px]">{label}</p>
+            <p className="text-2xl font-bold leading-7">
+              {count === undefined ? "—" : count + "건"}
+            </p>
+          </div>
         </div>
       ))}
     </div>

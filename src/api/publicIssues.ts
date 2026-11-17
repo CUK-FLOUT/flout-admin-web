@@ -1,11 +1,9 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export const publicIssueStatuses = [
   "RECEIVED",
   "UNDER_REVIEW",
-  "INSPECTION_REQUIRED",
-  "ACTION_IN_PROGRESS",
   "COMPLETED",
 ] as const;
 export type PublicIssueStatus = (typeof publicIssueStatuses)[number];
@@ -16,8 +14,7 @@ export const publicIssueTypes = [
   "BLOCKED_STORM_DRAIN",
 ] as const;
 export type PublicIssueType = (typeof publicIssueTypes)[number];
-export type FacilityReviewStatus =
-  "PENDING" | "UNDER_REVIEW" | "INSPECTION_REQUIRED";
+export type FacilityReviewStatus = "PENDING" | "UNDER_REVIEW";
 export type PublicIssueFilters = {
   district?: "원미구" | "소사구" | "오정구";
   status?: PublicIssueStatus;
@@ -41,7 +38,6 @@ export type PublicIssuePage = {
 export type PublicIssueCounts = {
   registeredCount: number;
   pendingOrUnderReviewCount: number;
-  actionInProgressCount: number;
   completedCount: number;
 };
 export type PublicIssueMarker = {
@@ -100,7 +96,7 @@ export type PublicIssueDetail = {
   review: {
     reviewId: number;
     reviewTarget: string;
-    reviewStatus: FacilityReviewStatus | "ACTION_IN_PROGRESS" | "COMPLETED";
+    reviewStatus: FacilityReviewStatus | "COMPLETED";
     inspectionNotes: string | null;
     reviewReason: string | null;
     reviewerUserId: number;
@@ -134,7 +130,11 @@ export type FacilityReviewRequest = {
   inspectionNotes: string;
   reviewReason?: string | null;
 };
-export type FacilityReviewResponse = FacilityReviewRequest & {
+export type FacilityReviewResponse = Omit<
+  FacilityReviewRequest,
+  "reviewStatus"
+> & {
+  reviewStatus: FacilityReviewStatus | "COMPLETED";
   reviewId: number;
   publicIssueId: number;
   publicIssueStatus: PublicIssueStatus;
@@ -142,6 +142,7 @@ export type FacilityReviewResponse = FacilityReviewRequest & {
   reviewedAt: string;
 };
 export type PublicIssueCompletion = {
+  images: ActionImage[];
   actionId: number;
   reviewId: number;
   publicIssueId: number;
@@ -272,7 +273,6 @@ export async function getPublicIssueCounts(
     ![
       counts.registeredCount,
       counts.pendingOrUnderReviewCount,
-      counts.actionInProgressCount,
       counts.completedCount,
     ].every((value) => Number.isSafeInteger(value) && value >= 0)
   )
@@ -347,9 +347,7 @@ export async function savePublicIssueReview(
     !body.inspectionNotes.trim() ||
     body.inspectionNotes.trim().length > 4000 ||
     (body.reviewReason?.trim().length || 0) > 4000 ||
-    !["PENDING", "UNDER_REVIEW", "INSPECTION_REQUIRED"].includes(
-      body.reviewStatus,
-    )
+    !["PENDING", "UNDER_REVIEW"].includes(body.reviewStatus)
   )
     throw new Error(
       "검토 대상(1~100자), 점검 필요사항(1~4000자), 검토 상태를 확인해 주세요.",
@@ -383,17 +381,29 @@ export async function savePublicIssueReview(
 export async function completePublicIssueAction(
   id: number,
   actionDescription: string,
+  files: File[],
 ) {
   const value = actionDescription.trim();
 
   if (!value || value.length > 4000)
     throw new Error("조치 결과를 1~4000자로 입력해 주세요.");
 
+  validatePublicIssueImages(files);
+  const body = new FormData();
+
+  body.append(
+    "request",
+    new Blob([JSON.stringify({ actionDescription: value })], {
+      type: "application/json",
+    }),
+  );
+  files.forEach((file) => body.append("files", file));
   const response = result(
     (
       await apiClient.post<Envelope<PublicIssueCompletion>>(
         `${path(id)}/actions`,
-        { actionDescription: value },
+        body,
+        { headers: { "Content-Type": undefined }, timeout: 120000 },
       )
     ).data,
   );
@@ -406,12 +416,21 @@ export async function completePublicIssueAction(
   )
     throw new Error("조치 완료 응답을 확인해 주세요.");
 
+  if (!Array.isArray(response.images) || !response.images.length)
+    throw new Error("조치 완료 사진 응답을 확인해 주세요.");
+  response.images.forEach((image) => {
+    validPublicId(image.imageId);
+    if (typeof image.imageUrl !== "string" || !image.imageUrl.trim())
+      throw new Error("조치 완료 사진 응답을 확인해 주세요.");
+  });
+
   return response;
 }
 
 export function validatePublicIssueImages(files: File[]) {
   if (
     !files.length ||
+    files.reduce((total, file) => total + file.size, 0) > 80 * 1024 ** 2 ||
     files.some(
       (file) =>
         !file.size ||
@@ -421,59 +440,13 @@ export function validatePublicIssueImages(files: File[]) {
     )
   )
     throw new Error(
-      "JPG·JPEG·PNG 사진을 파일당 0바이트 초과, 최대 10MiB로 선택해 주세요.",
+      "JPG·JPEG·PNG 사진을 1장 이상, 파일당 최대 10MiB·전체 80MiB 이하로 선택해 주세요.",
     );
 }
 
-export async function uploadPublicIssueImages(
-  id: number,
-  actionId: number,
-  files: File[],
-) {
-  const url = `${path(id)}/actions/${validPublicId(actionId)}/images`;
-
-  validatePublicIssueImages(files);
-  const body = new FormData();
-
-  files.forEach((file) => body.append("files", file));
-
-  const response = result(
-    (
-      await apiClient.post<
-        Envelope<{
-          publicIssueId: number;
-          actionId: number;
-          images: ActionImage[];
-        }>
-      >(url, body, { headers: { "Content-Type": undefined }, timeout: 120000 })
-    ).data,
-  );
-
-  if (
-    response.publicIssueId !== id ||
-    response.actionId !== actionId ||
-    !Array.isArray(response.images)
-  )
-    throw new Error("조치 사진 응답의 식별자를 확인해 주세요.");
-  response.images.forEach((image) => validPublicId(image.imageId));
-
-  return response;
-}
-
-export function publicIssueError(cause: unknown) {
-  if (axios.isAxiosError(cause)) {
-    if (!cause.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    if (cause.response.status >= 500)
-      return "공공인프라 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-    const message: unknown = cause.response.data?.message;
-
-    return typeof message === "string" && message.trim()
-      ? message
-      : "공공인프라 요청에 실패했습니다.";
-  }
-
-  return cause instanceof Error
-    ? cause.message
-    : "공공인프라 요청에 실패했습니다.";
+export function publicIssueError(cause: unknown): string {
+  return apiErrorMessage(cause, {
+    request: "공공인프라 요청에 실패했습니다.",
+    server: "공공인프라 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  });
 }

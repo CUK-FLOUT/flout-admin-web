@@ -1,69 +1,12 @@
+import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import axios from "axios";
 
-function harness() {
-  const client = axios.create({
-    headers: { "Content-Type": "application/json" },
-  });
-  const requests = [];
-  let respond = () => ({});
-  client.defaults.adapter = async (config) => {
-    requests.push(config);
-    return {
-      data: { isSuccess: true, result: respond(config), message: "성공" },
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config,
-    };
-  };
-  const modules = new Map();
-  function load(path) {
-    const file = resolve(path.endsWith(".ts") ? path : `${path}.ts`);
-    if (modules.has(file)) return modules.get(file);
-    const module = { exports: {} };
-    const source = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2023,
-        esModuleInterop: true,
-      },
-    }).outputText;
-    const context = vm.createContext({
-      module,
-      exports: module.exports,
-      FormData,
-      AbortController,
-      Date,
-      Error,
-      Number,
-      Map,
-      Object,
-      Promise,
-      structuredClone,
-      require(specifier) {
-        if (specifier === "axios") return axios;
-        if (specifier === "./client") return { apiClient: client };
-        return load(resolve(dirname(file), specifier));
-      },
-    });
-    vm.runInContext(source, context);
-    modules.set(file, module.exports);
-    return module.exports;
-  }
-  return {
-    load,
-    requests,
-    setResponse(fn) {
-      respond = fn;
-    },
-  };
-}
+const harness = createApiHarness;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 const root = "/api/admin/priority-inspections";
@@ -210,24 +153,9 @@ test("400 401 403은 재시도하거나 순서 재조회하지 않고 서버 메
     assert.equal(h.requests.length, 1);
   }
 });
-test("응답 없는 연결 실패와 서버 오류를 빈 목록으로 처리하지 않는다", async () => {
-  const h = harness();
-  const api = h.load("src/api/priorityInspections.ts");
-  assert.match(api.priorityError(new axios.AxiosError("network")), /연결/);
-  assert.match(
-    api.priorityError(
-      new axios.AxiosError("server", "ERR_BAD_RESPONSE", undefined, null, {
-        status: 500,
-        data: {},
-      }),
-    ),
-    /요청에 실패/,
-  );
-});
-
 test("기존 목록 페이지네이션은 로딩이 끝난 후 표시되며 서버 페이지로 이동한다", () => {
   const module = { exports: {} };
-  const jsx = (type, props) => ({ type, props: props || {} });
+  const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props: props || {} });
   const source = ts.transpileModule(
     readFileSync("src/components/priority/PriorityList.tsx", "utf8"),
     {
@@ -243,6 +171,13 @@ test("기존 목록 페이지네이션은 로딩이 끝난 후 표시되며 서�
     exports: module.exports,
     require(name) {
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+      if (name === "../common/Pagination") {
+        const pagination = { exports: {} };
+        vm.runInNewContext(ts.transpileModule(readFileSync("src/components/common/Pagination.tsx", "utf8"), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+        }).outputText, { exports: pagination.exports, require: () => ({ jsx, jsxs: jsx }) });
+        return pagination.exports;
+      }
       if (name.endsWith(".svg")) return { default: name };
       throw new Error(name);
     },

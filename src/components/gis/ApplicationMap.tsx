@@ -73,11 +73,15 @@ export default function ApplicationMap(props: ApplicationMapOptions) {
       </div>
       <div className="absolute bottom-[30px] left-4 z-10 flex w-[477px] max-w-[calc(100%_-_32px)] flex-wrap items-center gap-4 rounded-md border border-[#c8d0d7] bg-white px-3 py-2 text-sm">
         {[
-          [highDot, "높음"],
-          [mediumDot, "주의"],
-          [lowDot, "낮음"],
-        ].map(([src, label]) => (
-          <span key={label} className="flex items-center gap-1">
+          [highDot, "높음", "#dc2626"],
+          [mediumDot, "보통", "#d97706"],
+          [lowDot, "낮음", "#16a34a"],
+        ].map(([src, label, color]) => (
+          <span
+            key={label}
+            className="flex items-center gap-1"
+            style={{ color }}
+          >
             <img src={src} alt="" width={14} height={14} />
             {label}
           </span>
@@ -86,7 +90,7 @@ export default function ApplicationMap(props: ApplicationMapOptions) {
           <span className="grid h-[26px] w-[26px] place-items-center rounded-full border-2 border-[#234f73]">
             1
           </span>
-          번호 = 신청 위치
+          번호 = 신청 · 색 = 지역 취약도
         </span>
       </div>
     </div>

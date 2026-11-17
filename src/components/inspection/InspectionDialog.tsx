@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import type {
   EditableStatus,
   InspectionApplication,
-} from "../../pages/Inspection/mockData";
-import { formatDate } from "../../pages/Inspection/mockData";
+} from "../../pages/Inspection/types";
+import { formatDate } from "../../pages/Inspection/formatDate";
 import { inspectionFocus } from "./styles";
 
 export type InspectionDialogState =
@@ -113,7 +113,7 @@ export default function InspectionDialog({
             className="text-sm leading-[21px]"
           >
             {assignment
-              ? "점검 담당자와 확정 방문 일정이 저장되었습니다. 알림은 발송되지 않습니다."
+              ? "점검 담당자와 확정 방문 일정이 저장되었습니다."
               : targetStatus === "완료"
                 ? "현장점검이 끝났다면 점검상태를 등록해주세요"
                 : "주민 신청 상세에도 동일한 점검 상태를 표시합니다."}

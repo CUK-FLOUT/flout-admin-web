@@ -2,8 +2,6 @@ import type {
   ReviewDraft,
   SupportApplication,
 } from "../../pages/Support/types";
-import { consentRequirements, consentStates } from "../../pages/Support/types";
-import SupportSelect from "./SupportSelect";
 import { supportInput, supportPrimary, supportSecondary } from "./styles";
 import check from "../../assets/support/check.svg";
 
@@ -82,56 +80,26 @@ export default function AdministrativeReview({
           </label>
         ))}
         <div className="h-px bg-[#c8d0d7]" />
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold leading-[21px]">
+        <dl className="flex flex-col gap-2">
+          <dt className="text-sm font-bold leading-[21px]">
             임대인 동의 필요 여부
-          </label>
-          <SupportSelect
-            label="임대인 동의 필요 여부"
-            review
-            className="[&>button]:h-10 [&>button]:text-sm [&>button]:leading-[21px]"
-            value={draft.consentRequired}
-            options={[...consentRequirements]}
-            disabled={!!a.apiId || readOnly}
-            onChange={(value) =>
-              onChange({
-                ...draft,
-                consentRequired: value as ReviewDraft["consentRequired"],
-                consentState:
-                  value === "불필요"
-                    ? "불필요"
-                    : draft.consentState === "불필요"
-                      ? "미확인"
-                      : draft.consentState,
-              })
-            }
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold leading-[21px]">
-            임대인 동의 확인 상태
-          </label>
-          <SupportSelect
-            label="임대인 동의 확인 상태"
-            review
-            className="[&>button]:h-10 [&>button]:text-sm [&>button]:leading-[21px]"
-            value={draft.consentState}
-            options={[...consentStates]}
-            disabled={
-              !!a.apiId || readOnly || draft.consentRequired === "불필요"
-            }
-            onChange={(value) =>
-              onChange({
-                ...draft,
-                consentState: value as ReviewDraft["consentState"],
-              })
-            }
-          />
-        </div>
+          </dt>
+          <dd className={supportInput + " flex min-h-10 items-center py-2"}>
+            {draft.consentRequired}
+          </dd>
+        </dl>
+        <dl className="flex flex-col gap-2">
+          <dt className="text-sm font-bold leading-[21px]">
+            임대인 동의서 제출 여부
+          </dt>
+          <dd className={supportInput + " flex min-h-10 items-center py-2"}>
+            {draft.consentSubmission}
+          </dd>
+        </dl>
         <p className="text-xs leading-[18px] text-[#64748b]">
-          {a.documents.some((d) => d.includes("동의"))
-            ? "주민 제출 동의 자료를 확인해 주세요."
-            : "소유자 입력 · 동의 필요 여부 검토 전. 제출된 동의 자료는 없습니다."}
+          {draft.consentRequired === "불필요"
+            ? "임대인 동의서 제출 대상이 아닙니다."
+            : "동의서 제출 여부는 주민이 첨부한 자료를 기준으로 표시됩니다."}
         </p>
         <label className="flex flex-col gap-2 text-sm font-bold leading-[21px]">
           지원 범위
@@ -182,18 +150,8 @@ export default function AdministrativeReview({
           </button>
         </div>
         <p className="text-xs leading-[18px] text-[#64748b]">
-          자격·필요자료·필요 동의 확인 전에는 승인·시공 등록할 수 없습니다.
+          세입자는 임대인 동의서가 제출되어야 승인할 수 있습니다.
         </p>
-        <label className="flex min-h-[21px] items-center gap-2 text-sm leading-[21px]">
-          <input
-            type="checkbox"
-            disabled={!!a.apiId || readOnly}
-            checked={draft.notify}
-            onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
-            className="size-[18px] shrink-0 accent-[#234f73]"
-          />
-          승인·미승인 확정 시 주민에게 알림
-        </label>
         {!readOnly && (
           <>
             <button
@@ -258,55 +216,27 @@ export default function AdministrativeReview({
       </div>
       <div className="mt-[14px] h-px bg-[#f4f5f6]" />
       <div className="mt-4 flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold leading-[17px]">
+        <dl className="flex flex-col gap-2">
+          <dt className="text-sm font-bold leading-[17px]">
             임대인 동의 필요 여부
-          </label>
-          <SupportSelect
-            label="임대인 동의 필요 여부"
-            review
-            value={draft.consentRequired}
-            options={[...consentRequirements]}
-            disabled={!!a.apiId || readOnly}
-            onChange={(value) =>
-              onChange({
-                ...draft,
-                consentRequired: value as ReviewDraft["consentRequired"],
-                consentState:
-                  value === "불필요"
-                    ? "불필요"
-                    : draft.consentState === "불필요"
-                      ? "미확인"
-                      : draft.consentState,
-              })
-            }
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold leading-[17px]">
-            임대인 동의 확인 상태
-          </label>
-          <SupportSelect
-            label="임대인 동의 확인 상태"
-            review
-            value={draft.consentState}
-            options={[...consentStates]}
-            disabled={
-              !!a.apiId || readOnly || draft.consentRequired === "불필요"
-            }
-            onChange={(value) =>
-              onChange({
-                ...draft,
-                consentState: value as ReviewDraft["consentState"],
-              })
-            }
-          />
-        </div>
+          </dt>
+          <dd className={supportInput + " flex min-h-10 items-center py-2"}>
+            {draft.consentRequired}
+          </dd>
+        </dl>
+        <dl className="flex flex-col gap-2">
+          <dt className="text-sm font-bold leading-[17px]">
+            임대인 동의서 제출 여부
+          </dt>
+          <dd className={supportInput + " flex min-h-10 items-center py-2"}>
+            {draft.consentSubmission}
+          </dd>
+        </dl>
         {owner && (
           <p className="text-xs leading-[18px] text-[#64748b]">
-            {a.documents.some((d) => d.includes("동의"))
-              ? "주민 제출 동의 자료를 확인해 주세요."
-              : "소유자 입력 · 동의 필요 여부 검토 전. 제출된 동의 자료는 없습니다."}
+            {draft.consentRequired === "불필요"
+              ? "임대인 동의서 제출 대상이 아닙니다."
+              : "동의서 제출 여부는 주민이 첨부한 자료를 기준으로 표시됩니다."}
           </p>
         )}
         <label className="flex flex-col gap-2 text-sm font-bold leading-[17px]">
@@ -336,16 +266,6 @@ export default function AdministrativeReview({
           </label>
         )}
       </div>
-      <label className="mt-6 flex min-h-[21px] items-center gap-[10px] text-sm leading-[21px]">
-        <input
-          type="checkbox"
-          disabled={!!a.apiId || readOnly}
-          checked={draft.notify}
-          onChange={(e) => onChange({ ...draft, notify: e.target.checked })}
-          className="size-[18px] shrink-0 accent-[#234f73]"
-        />
-        승인·미승인 확정 시 주민에게 알림
-      </label>
       <div className="mt-[27px] grid grid-cols-2 gap-[7px] pl-[3px]">
         <button
           type="button"

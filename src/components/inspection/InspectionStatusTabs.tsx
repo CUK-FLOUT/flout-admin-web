@@ -1,4 +1,4 @@
-import { inspectionStatuses } from "../../pages/Inspection/mockData";
+import { inspectionStatuses } from "../../pages/Inspection/constants";
 
 type Props = {
   stage: string;

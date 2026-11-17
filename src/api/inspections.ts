@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiErrorMessage } from "./errorMessage";
 import { apiClient } from "./client";
 
 export type InspectionApiStatus =
@@ -28,6 +28,9 @@ export interface InspectionDetail {
   preferredTimeSlot: TimeSlot | null;
   inspectorId: number | null;
   inspectorName: string | null;
+  visitDate: string | null;
+  visitTime: string | null;
+  preVisitNotice: string | null;
 }
 export interface InspectionPage {
   inspections: InspectionItem[];
@@ -126,22 +129,10 @@ function result<T>(data: Envelope<T>): T {
 }
 
 export function inspectionError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (!error.response)
-      return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-
-    const data: unknown = error.response.data;
-    const body =
-      data && typeof data === "object"
-        ? (data as Record<string, unknown>)
-        : null;
-
-    return typeof body?.message === "string" && body.message.trim()
-      ? body.message
-      : "현장점검 요청에 실패했습니다. 다시 시도해 주세요.";
-  }
-
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+  return apiErrorMessage(error, {
+    request: "현장점검 요청에 실패했습니다. 다시 시도해 주세요.",
+    unknown: "요청을 처리하지 못했습니다.",
+  });
 }
 
 export async function getInspections(
@@ -234,6 +225,38 @@ export async function saveInspectionDraft(id: number, body: ResultRequest) {
   >(`${root}/${id}/result/draft`, body);
 
   return result(data);
+}
+
+export interface RecommendedFacilitiesValidation {
+  hasFacilities: boolean;
+  facilities: string[];
+}
+
+export async function validateRecommendedFacilities(
+  descriptions: string[],
+): Promise<RecommendedFacilitiesValidation> {
+  if (
+    !descriptions.length ||
+    descriptions.length > 20 ||
+    descriptions.some((text) => !text.trim() || text.length > 4000)
+  )
+    throw new Error(
+      "권장 예방조치를 1~20개 입력해 주세요. 각 문장은 4000자 이하여야 합니다.",
+    );
+  const { data } = await apiClient.post<
+    Envelope<RecommendedFacilitiesValidation>
+  >(`${root}/recommended-facilities/validate`, { descriptions });
+  const response = result(data);
+
+  if (
+    typeof response.hasFacilities !== "boolean" ||
+    !Array.isArray(response.facilities) ||
+    response.facilities.some((name) => typeof name !== "string" || !name.trim()) ||
+    response.hasFacilities !== (response.facilities.length > 0)
+  )
+    throw new Error("시설 검증 응답을 확인하지 못했습니다. 다시 시도해 주세요.");
+
+  return response;
 }
 
 export async function publishInspectionResult(id: number, body: ResultRequest) {
