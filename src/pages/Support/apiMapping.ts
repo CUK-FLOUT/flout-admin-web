@@ -102,7 +102,7 @@ export function mapSupport(item: SupportListItem): SupportApplication {
       memo: "",
       notify: false,
     },
-    rejectionReason: "상세 사유 조회 API 미제공",
+    rejectionReason: "",
     reviewedAt: "",
     constructionRegistered: false,
   };

@@ -77,6 +77,13 @@ export type PublicIssueDetail = {
     receiptNo: string;
     applicantName: string;
   } | null;
+  referencePhotos: {
+    photoId: number;
+    fileName: string;
+    imageUrl: string;
+    size: number;
+    contentType: string;
+  }[];
   referenceInformation: {
     relatedApplicationCount: number;
     floodHistoryCount: number;

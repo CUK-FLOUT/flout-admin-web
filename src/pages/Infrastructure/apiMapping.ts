@@ -110,6 +110,11 @@ export function publicIssueDetailRecord(
 
   return {
     ...base,
+    referencePhotos: (detail.referencePhotos ?? []).map((photo) => ({
+      id: String(photo.photoId),
+      name: photo.fileName,
+      src: photo.imageUrl,
+    })),
     location: detail.address,
     description: detail.description,
     findings: detail.fieldFindings,
