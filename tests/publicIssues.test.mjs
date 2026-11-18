@@ -1,3 +1,4 @@
+import { jsx, findJsxNodes } from "./helpers/jsxTree.mjs";
 import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
@@ -1257,4 +1258,72 @@ test("공공인프라 URL 필터는 제거된 상태와 알 수 없는 지역·�
   list.search();
   const query = new URLSearchParams(w.navigations.at(-1).to.search);
   for (const key of ["district", "status", "kind"]) assert.equal(query.has(key), false);
+});
+
+test("공공인프라 상세의 원본 현장사진은 ID·파일명·임시 URL을 그대로 표시한다", async () => {
+  const h = harness({
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    react: { useState: initial => [initial, () => {}] },
+    "./InfrastructureImage": "ReferenceImage",
+    "./InfrastructureDialog": "PhotoDialog",
+  });
+  const api = h.load("src/api/publicIssues.ts");
+  const { publicIssueDetailRecord } = h.load("src/pages/Infrastructure/apiMapping.ts");
+  const { FacilityReferenceInformation } = h.load("src/pages/Infrastructure/InfrastructureReferencePanels.tsx");
+  const nodes = (node, predicate) =>
+    findJsxNodes(node, predicate, { expandComponents: true });
+  for (const photos of [
+    [],
+    [
+      { photoId: 41, fileName: "현장.jpg", imageUrl: "https://example.com/private/41?signature=first", size: 1200, contentType: "image/jpeg" },
+      { photoId: 42, fileName: "현장.jpg", imageUrl: "https://example.com/private/42?signature=second", size: 1400, contentType: "image/jpeg" },
+    ],
+  ]) {
+    h.respond(() => ({ isSuccess: true, result: { ...detail, referencePhotos: photos } }));
+    const issue = publicIssueDetailRecord(await api.getPublicIssue(9));
+    assert.deepEqual(plain(issue.referencePhotos), photos.map(photo => ({
+      id: String(photo.photoId), name: photo.fileName, src: photo.imageUrl,
+    })));
+    const tree = FacilityReferenceInformation({ issue });
+    const images = nodes(tree, node => node.type === "ReferenceImage");
+    assert.deepEqual(images.map(node => [node.props.source, node.props.alt]), photos.map(photo => [photo.imageUrl, photo.fileName]));
+    assert.equal(nodes(tree, node => node.type === "p" && node.props.children === "등록된 현장 자료가 없습니다.").length, photos.length ? 0 : 1);
+  }
+});
+
+test("현장사진 썸네일 선택은 해당 원본을 열고 닫기와 공통 모달 닫힘을 처리한다", () => {
+  const hook = hooks();
+  const Gallery = harness({
+    react: hook.react,
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "Fragment" },
+    "./InfrastructureImage": "PreviewImage",
+    "./InfrastructureDialog": "PhotoDialog",
+  }).load("src/components/infrastructure/InfrastructureReferencePhotos.tsx").default;
+  let photos = [
+    { id: "41", name: "현장.jpg", src: "/41.jpg" },
+    { id: "42", name: "현장.jpg", src: "/42.jpg" },
+  ];
+  const render = () => hook.render(() => Gallery({ photos }));
+  const dialogs = () => findJsxNodes(render(), node => node.type === "PhotoDialog");
+  assert.equal(dialogs().length, 0);
+  const thumbnails = findJsxNodes(render(), node => node.type === "button");
+  assert.equal(thumbnails[1].props.type, "button");
+  assert.equal(thumbnails[1].props["aria-label"], "현장.jpg 크게 보기");
+  thumbnails[1].props.onClick();
+  let dialog = dialogs()[0];
+  let image = findJsxNodes(dialog, node => node.type === "PreviewImage")[0];
+  assert.equal(image.props.source, "/42.jpg");
+  assert.match(image.props.className, /object-contain/);
+  findJsxNodes(dialog, node => node.type === "button")[0].props.onClick();
+  assert.equal(dialogs().length, 0);
+  thumbnails[0].props.onClick();
+  assert.equal(findJsxNodes(dialogs()[0], node => node.type === "PreviewImage")[0].props.source, "/41.jpg");
+  dialogs()[0].props.onClose();
+  assert.equal(dialogs().length, 0);
+  thumbnails[0].props.onClick();
+  photos = [{ ...photos[0], src: "/41-renewed.jpg" }];
+  assert.equal(findJsxNodes(dialogs()[0], node => node.type === "PreviewImage")[0].props.source, "/41-renewed.jpg");
+  photos = [];
+  assert.equal(dialogs().length, 0);
+  assert.equal(findJsxNodes(render(), node => node.type === "button").length, 0);
 });
