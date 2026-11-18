@@ -13,6 +13,9 @@ export default function InfrastructureReferencePhotos({
   // 임시 URL이 갱신되면 새 주소를 사용하도록 사진 객체 대신 ID만 보관한다.
   const selected = photos.find((photo) => photo.id === selectedId);
 
+  // 제거된 사진이 나중에 다시 나타나도 이전 선택으로 미리보기가 열리지 않게 한다.
+  if (selectedId !== null && !selected) setSelectedId(null);
+
   function closePhoto() {
     setSelectedId(null);
   }
@@ -20,13 +23,13 @@ export default function InfrastructureReferencePhotos({
   return (
     <>
       <div className="mt-[18px] flex gap-4 overflow-x-auto">
-        {photos.map((photo) => (
+        {photos.map((photo, index) => (
           <button
             key={photo.id}
             type="button"
-            aria-label={photo.name + " 크게 보기"}
+            aria-label={`${photo.name} 크게 보기 (사진 ${index + 1}/${photos.length})`}
             onClick={() => setSelectedId(photo.id)}
-            className="min-w-[180px] flex-1 cursor-pointer overflow-hidden rounded-lg border border-[#c8d0d7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#234f73]"
+            className="min-w-[180px] flex-1 cursor-pointer overflow-hidden rounded-lg border border-[#c8d0d7] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#234f73]"
           >
             <InfrastructureImage
               source={photo.src}

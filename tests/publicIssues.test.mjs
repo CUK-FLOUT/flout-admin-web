@@ -1308,7 +1308,10 @@ test("현장사진 썸네일 선택은 해당 원본을 열고 닫기와 공통 
   assert.equal(dialogs().length, 0);
   const thumbnails = findJsxNodes(render(), node => node.type === "button");
   assert.equal(thumbnails[1].props.type, "button");
-  assert.equal(thumbnails[1].props["aria-label"], "현장.jpg 크게 보기");
+  assert.deepEqual(thumbnails.map(node => node.props["aria-label"]), [
+    "현장.jpg 크게 보기 (사진 1/2)",
+    "현장.jpg 크게 보기 (사진 2/2)",
+  ]);
   thumbnails[1].props.onClick();
   let dialog = dialogs()[0];
   let image = findJsxNodes(dialog, node => node.type === "PreviewImage")[0];
@@ -1326,4 +1329,8 @@ test("현장사진 썸네일 선택은 해당 원본을 열고 닫기와 공통 
   photos = [];
   assert.equal(dialogs().length, 0);
   assert.equal(findJsxNodes(render(), node => node.type === "button").length, 0);
+  photos = [{ id: "41", name: "현장.jpg", src: "/41-returned.jpg" }];
+  assert.equal(dialogs().length, 0);
+  findJsxNodes(render(), node => node.type === "button")[0].props.onClick();
+  assert.equal(findJsxNodes(dialogs()[0], node => node.type === "PreviewImage")[0].props.source, "/41-returned.jpg");
 });
