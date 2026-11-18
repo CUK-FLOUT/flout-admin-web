@@ -130,10 +130,6 @@ export default function SupportDecisionDialogs({
           <Row label="자격·서류">
             {draft.checks.every(Boolean) ? "☑ 검토 완료" : "확인 필요"}
           </Row>
-          <Row label="동의 출처">
-            {a.documents.find((d) => d.includes("동의")) ||
-              "제출된 동의 자료 없음"}
-          </Row>
           <Row label="동의 필요 여부 / 서류 제출 여부">
             {draft.consentRequired + " / " + draft.consentSubmission}
           </Row>

@@ -1,3 +1,4 @@
+import { jsx, findJsxNodes } from "./helpers/jsxTree.mjs";
 import { createApiHarness } from "./helpers/createApiHarness.mjs";
 import { loadPollingHook } from "./helpers/loadPollingHook.mjs";
 import assert from "node:assert/strict";
@@ -857,4 +858,40 @@ test("지원 점검 결과에 제공되지 않은 설명을 구현 안내 문구
   const result = inspectionFor({ apiId: 1, vulnerabilities: [], recommendations: [], inspectionSummary: "" });
   assert.equal(result.summary, "");
   assert.deepEqual(plain(result.photos), []);
+});
+
+test("지원 결과 모달은 안내가 없으면 항목을 숨기고 실제 사유와 승인 안내는 유지한다", () => {
+  const h = createApiHarness({ overrides: {
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "react-router-dom": { Link: "Link" },
+    "../SupportDialog": "Dialog",
+    "./SupportDialogRow": "Row",
+  } });
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const Outcome = h.load("src/components/support/dialogs/SupportOutcomeDialogs.tsx").default;
+  const application = mapSupport({ ...item, status: "REJECTED" });
+  assert.equal(application.rejectionReason, "");
+  for (const reason of ["", "   ", "지원 대상 조건에 해당하지 않습니다."]) {
+    const tree = Outcome({ kind: "rejected-view", application: { ...application, rejectionReason: reason }, onClose() {} });
+    assert.equal(findJsxNodes(tree, node => node.type === "Row" && node.props.label === "주민 안내 내용").length, reason.trim() ? 1 : 0);
+    assert.equal(findJsxNodes(tree, node => node.type === "p" && node.props.children === "검토 안내문은 행정 담당자가 입력한 내용입니다.").length, reason.trim() ? 1 : 0);
+  }
+  const approved = Outcome({ kind: "approved-view", application: { ...application, status: "승인" }, onClose() {} });
+  assert.equal(findJsxNodes(approved, node => node.type === "Link" && node.props.to === "/construction").length, 1);
+});
+
+test("검토 확인사항은 동의 출처를 숨기고 필요 여부·서류 제출 여부를 유지한다", () => {
+  const h = createApiHarness({ overrides: {
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "../SupportDialog": "Dialog",
+    "./SupportDialogRow": "Row",
+  } });
+  const { mapSupport } = h.load("src/pages/Support/apiMapping.ts");
+  const Decision = h.load("src/components/support/dialogs/SupportDecisionDialogs.tsx").default;
+  const a = mapSupport(item);
+  const tree = Decision({ kind: "review-check", application: a, onClose() {}, onConfirm() {}, onReason() {} });
+  const rows = tree.props.children[0].props.children;
+  assert.equal(rows.some(row => row.props.label === "동의 출처"), false);
+  const consent = rows.find(row => row.props.label === "동의 필요 여부 / 서류 제출 여부");
+  assert.equal(consent.props.children, a.review.consentRequired + " / " + a.review.consentSubmission);
 });

@@ -108,7 +108,10 @@ export default function SupportOutcomeDialogs({
         </button>
       </SupportDialog>
     );
-  if (kind === "approved-view" || kind === "rejected-view")
+  if (kind === "approved-view" || kind === "rejected-view") {
+    const approved = a.status === "승인";
+    const hasResidentNotice = !approved && a.rejectionReason.trim().length > 0;
+
     return (
       <SupportDialog
         title={a.id + " · " + a.resident + "님의 신청"}
@@ -131,10 +134,8 @@ export default function SupportOutcomeDialogs({
         </div>
         <dl className="flex flex-col gap-3">
           <Row label="주소">{a.address + " · " + a.housing}</Row>
-          <Row label={a.status === "승인" ? "지원 시설" : "요청 조치"}>
-            {a.request}
-          </Row>
-          {a.status === "승인" ? (
+          <Row label={approved ? "지원 시설" : "요청 조치"}>{a.request}</Row>
+          {approved ? (
             <>
               <Row label="지원 범위">{a.review.scope}</Row>
               <Row label="임대인 동의">{consentLabel(a)}</Row>
@@ -143,22 +144,27 @@ export default function SupportOutcomeDialogs({
           ) : (
             <>
               <Row label="검토 결과">미승인</Row>
-              <Row label="주민 안내 내용">{a.rejectionReason}</Row>
+              {hasResidentNotice && (
+                <Row label="주민 안내 내용">{a.rejectionReason}</Row>
+              )}
             </>
           )}
         </dl>
-        <p className="text-xs leading-[18px] text-[#64748b]">
-          {a.status === "승인"
-            ? "지원 결과와 동의서 제출 여부는 주민 화면에도 표시됩니다."
-            : "검토 안내문은 행정 담당자가 입력한 내용입니다."}
-        </p>
-        {a.status === "승인" && (
+        {(approved || hasResidentNotice) && (
+          <p className="text-xs leading-[18px] text-[#64748b]">
+            {approved
+              ? "지원 결과와 동의서 제출 여부는 주민 화면에도 표시됩니다."
+              : "검토 안내문은 행정 담당자가 입력한 내용입니다."}
+          </p>
+        )}
+        {approved && (
           <Link to="/construction" className={supportSecondary}>
             시공 관리에서 확인
           </Link>
         )}
       </SupportDialog>
     );
+  }
 
   return null;
 }

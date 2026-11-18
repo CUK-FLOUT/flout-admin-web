@@ -1,7 +1,7 @@
 import Pagination from "../../components/common/Pagination";
 import type { Dispatch, SetStateAction } from "react";
 
-import InfrastructureImage from "../../components/infrastructure/InfrastructureImage";
+import InfrastructureReferencePhotos from "../../components/infrastructure/InfrastructureReferencePhotos";
 import { infrastructureCard } from "../../components/infrastructure/styles";
 import type { InfrastructureIssue } from "./types";
 
@@ -51,25 +51,10 @@ export function FacilityReferenceInformation({
           ))}
         </dl>
       </div>
-      <div className="mt-[18px] flex gap-4 overflow-x-auto">
-        {issue.referencePhotos.map((photo) => (
-          <figure
-            key={photo.id}
-            className="min-w-[180px] flex-1 overflow-hidden rounded-lg border border-[#c8d0d7]"
-          >
-            <InfrastructureImage
-              source={photo.src}
-              alt={photo.name}
-              className="h-[105px] w-full object-cover"
-            />
-          </figure>
-        ))}
-        {!issue.referencePhotos.length && (
-          <p className="flex h-[140px] w-full items-center justify-center rounded-md bg-[#f4f5f6] text-sm text-[#596672]">
-            등록된 현장 자료가 없습니다.
-          </p>
-        )}
-      </div>
+      <InfrastructureReferencePhotos
+        key={issue.id}
+        photos={issue.referencePhotos}
+      />
     </section>
   );
 }
